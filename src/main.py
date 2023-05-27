@@ -18,9 +18,10 @@ import requests
 
 
 DATA_DIR = '/home/prichter/Documents/protex/data/'
+EMBEDDINGS_DIR = '/home/prichter/Documents/protex/data/embeddings/'
 CLUSTER_DIR = '/home/prichter/Documents/protex/data/clusters/'
 
-def clstr_to_df(read_from='sec_trunc_and_short.clstr'):
+def clstr_to_df(read_from='all.clstr'):
     '''
     Reads a clustr file (the output file from CD-hit) into a pandas DataFrame.
 
@@ -110,6 +111,22 @@ def fasta_to_df(read_from='sec_full.fasta'):
     return pd.DataFrame(df).astype({'id':'str'})
 
 
+def embedding_to_txt(embedding, write_to='sec_trunc.txt', mode='a'):
+    '''
+    Writes an embedding, which is given in the form of a tensor, to a text file in the 
+    embeddings directory. Note that this function appends to the file by default -- it does not overwrite,
+    as embeddings need to be generated in chunks. 
+
+    args:
+        : embedding (np.ndarray)
+    kwargs:
+        : write_to (str): The file to write to. 
+    '''
+    
+    with open(EMBEDDINGS_DIR + write_to, mode, encoding='utf8') as f: 
+        np.savetxt(f, embedding.detach().numpy(), delimiter=' ', newline='\n')
+
+
 def df_to_fasta(df, write_to='sec_full.fasta'):
     '''
     Write a DataFrame containing FASTA data to a FASTA file format.
@@ -163,8 +180,8 @@ def download_short_proteins(read_from='sec_trunc.fasta', write_to='short.fasta')
     lengths_kde = stats.gaussian_kde(lengths)
 
     # There are about 20,000 selenoproteins listed, so try to get an equivalent number of short proteins. 
-    n_lengths = 200 # The number of lengths to sample
-    size = 100 # Number of sequences to grab from the database at a time. 
+    n_lengths = 100 # The number of lengths to sample
+    size = 200 # Number of sequences to grab from the database at a time. 
 
     with open(DATA_DIR + write_to, 'w', encoding='utf8') as f:
         # NOTE: Not really sure why the sample isn't one-dimensional. 
@@ -182,6 +199,11 @@ def download_short_proteins(read_from='sec_trunc.fasta', write_to='short.fasta')
                 f.write(response.text)
             else:
                 raise RuntimeError(response.text)
+
+    # Remove duplicated, as this seems to be an issue. 
+    data = fasta_to_df(read_from=write_to)
+    data = data.drop_duplicates(subset=['id'])
+    df_to_fasta(data, write_to=write_to)
 
 
 def sum_clusters(clusters):
@@ -207,6 +229,10 @@ def train_test_split(data, test_size=0.25, train_size=0.75):
     '''
     if train_size + test_size != 1.0:
         raise ValueError('Test and train sizes must sum to one.')
+
+    # Seem to be having an issue with duplicate entries. Maybe I appended instead of overrwrote?
+    # I removed all duplicates from the short.fasta file using the terminal, which hopefully fixed this anyway. 
+    data = data.drop_duplicates(subset=['id']) 
 
     # Challenge here is to split up the clusters such that the train and test proportions make sense, but 
     # all sequence belonging to the same cluster are in the same data group. Finding an exact (or the best) solution
@@ -245,13 +271,12 @@ def train_test_split(data, test_size=0.25, train_size=0.75):
     train_clusters = [c[0] for c in train_clusters]
     test_clusters = [c[0] for c in test_clusters]
 
-    train_data = data.loc[data['cluster'].isin(train_clusters)]
-    test_data = data.loc[data['cluster'].isin(test_clusters)]
-
+    test_data = data[data['cluster'].isin(test_clusters)]
+    train_data = data[data['cluster'].isin(train_clusters)]
     return train_data, test_data # For now, just return the full DataFrames.
 
 
-def generate_train_and_test_data(fasta_file='sec_trunc_and_short.fasta', clstr_file='sec_trunc_and_short.clstr'):
+def generate_train_and_test_data(fasta_file='all.fasta', clstr_file='all.clstr'):
     '''
     Use the cluster information and the fasta data to split the sequence data into training and test sets.  
 
@@ -274,8 +299,29 @@ def generate_train_and_test_data(fasta_file='sec_trunc_and_short.fasta', clstr_f
     df_to_fasta(test_data, write_to='test.fasta')
 
 
+def generate_labels(read_from='train.fasta'):
+    '''
+    Get labels which map each sequence in a dataset to a value indicating it is short (0) or truncated (1). 
+
+    kwargs:
+        : read_from (str)
+    '''
+    # Read in the sec data. Assume every non-sec protein is short. 
+    sec_ids = set(fasta_to_df(read_from='sec_trunc.fasta')['id'])
+
+    # Read in the data for which to generate the labels. 
+    data = fasta_to_df(read_from=read_from)
+
+    labels = np.zeros(len(data))
+    for i in range(len(data)): # Should not be prohibitively long.
+        if data['id'].iloc[i] in sec_ids:
+            labels[i] = 1
+    return labels
+
+
 if __name__ == '__main__':
     # truncate_selenoproteins()
     # download_short_proteins()
-    generate_train_and_test_data()
+    # generate_train_and_test_data()
+    pass
 
