@@ -5,78 +5,119 @@ model (imported from HuggingFace)
 
 import transformers # Import the pretrained models from HuggingFace.
 from transformers import EsmForSequenceClassification, EsmModel, AutoTokenizer
-from main import fasta_to_df, embedding_to_txt, generate_labels
+from transformers.modeling_outputs import SequenceClassifierOutput
 import torch
+import tensorflow as tf
+import os
+from tqdm import tqdm
+import numpy as np
+import pandas as pd
+from transformers import AdamW
+from torch.utils.data import DataLoader
 
 # NOTE: ESM has a thing which, by default, adds a linear layer for classification. Might be worth 
 # training my own version of this layer in the future. 
 
-def ESM():
-    '''
-    Supports three approaches to classifying sequences using the ESM model: (1) the built-in EsmForSequenceClassification and
-    (2) using the entire embedding, not just the pool layer, to classify the sequences. 
-    '''
-    def __init__(self, labels):
-        '''
 
-        kwargs:
-            : labels (list): For now, only a single-label classification problem is being supported. 
+class ESMClassifier(torch.nn.Module):
+    
+    def __init__(self, use_pretrained=True, num_labels=1, name='facebook/esm2_t6_8M_UR50D', loss_func=torch.nn.CrossEntropyLoss):
         '''
-        self.name = 'facebook/esm2_t6_8M_UR50D'      
-        self.labels = torch.tensor(labels) # Convert specified labels to a tensor. 
+        Initializes an ESMClassifier object, as well as the torch.nn.Module superclass. 
+        
+        kwargs:
+            - use_pretrained (bool): Whether or not to use the pretrained ESM sequence classifier. 
+            - num_labels (int): Number of classes. This will be 1 for the forseeable future.
+            - name (str): Name of the pretrained ESM model to load.  
+            - loss_func (): The loss function to use for fine-tuning. 
+
+        '''
+        # Initialize the super class, torch.nn.Module. 
+        super(ESMClassifier, self).__init__()
+
+        self.num_labels = 1 # Currently only one class. 
+        self.pretrained = use_pretrained # Whether or not the pretrained model is being used. 
+        self.loss_func = loss_func
 
         # I think I need a better handle on what the tokenizer is doing... 
-        self.tokenizer = AutoTokenizer.from_pretrained(self.name)
+        self.tokenizer = AutoTokenizer.from_pretrained(name)
         
-        # This is a single-label classification problem -- a protein is either truncated or full-length. 
-        self.classification_model = EsmForSequenceClassification.from_pretrained(self.name, num_labels=len(labels))
-        # TODO: Possibly train my own, final layer on only microbial protein data, maybe. 
-        self.standard_model = EsmModel.from_pretrained(self.name)
+        # NOTE: Do I need to freeze ESM model weights when I do this?
+        if use_pretrained:
+            self.esm = EsmForSequenceClassification.from_pretrained(name)
+        else: # Need an additional classifier layer if we are going to be fine-tuning. 
+            self.esm = EsmModel.from_pretrained(name, num_labels=self.num_labels)
+            self.classifier = torch.nn.Linear(self.esm.config.hidden_size, self.num_labels)
+    
 
-
-    def classify(self, read_from='test.fasta'):
-        '''
-        '''
-        data = list(fasta_to_df(read_from=read_from)['seq'])
-        inputs = self.tokenizer(data)
-
-        self.pretrained_classification_model(**inputs, labels=self.labels)
-
-
-    def embed(self, read_from='sec_trunc.fasta', write_to='sec_trunc.txt'):
-        ''' 
-        Generate embeddings using a pretrained model. Writes all embeddings to a file. 
-        '''
-        # Get the sequence data from the DataFrame. Needs to be in the form of a python list
-        data = list(main.fasta_to_df(read_from=read_from)['seq'])
-
-        chunk_size = 10
-        n = len(seq_data) // chunk_size
-        
-        for i in tqdm(range(n), 'Processing chunks...'):
-            # Data should be a list of strings. 
-            chunk = data[chunk_size * i : chunk_size * i + chunk_size]
-
-            chunk = tokenizer(chunk, return_tensors='pt', padding=True, truncation=True, is_split_into_words=False, max_length=1024)
-            # NOTE: Should I be using the pooling layer here?
-            embedding = model(**chunk).last_hidden_state
-            # Had a shape of torch.Size([batch_size, sequence_length, embedding_size]). 
-            # For now, handle this output by taking the average over the embeddings for each amino acid position.
-            embedding = tf.mean(embedding, dim=1)
-            # Need to write to file as we go. 
-            embedding_to_txt(embedding)
-
-    # https://datascience.stackexchange.com/questions/66207/what-is-purpose-of-the-cls-token-and-why-is-its-encoding-output-important 
-    def classify(self, use_builtin=True):
+    def forward(self, input_ids=None, attention_mask=None, labels=None):
         '''
 
         kwargs:
-            : use_builtin (bool): True by default. Whether or not to use the built-in ESM classifier layer. 
+            - input_ids (torch.Tensor): Has a shape of (batch_size, sequence length). I think these are just the tokenized
+                equivalents of each sequence element. 
+            - attention_mask (torch.Tensor): A tensor of ones and zeros. 
+            - labels (torch.Tensor): Has a size of (batch_size,). Indicated whether or not a sequence is truncated (1)
+                or full-length (0).
+        
+        returns: transformers.modeling_outputs.SequenceClassifierOutput
         '''
+        output = self.esm(input_ids=input_ids, attention_mask=attention_mask)
 
-        pass
+        if self.pretrained:
+            return output # This is already the correct return type.  
+        # If the regular ESM model is used, output type is BaseModelOutputWithPoolingAndCrossAttentions
+        else:
+            output = output.pooler_output # Shape of (batch_size, hidden_size)
+            logits = self.classifier(output)
 
+            loss = None # Calculate the loss. 
+            if labels is not None:
+                loss = self.loss_func(logits, labels)
+
+            return SequenceClassifierOutput(loss=loss, logits=logits, atttentions=output.attentions, hidden_states=output.hidden_states)
+
+
+def esm_train(model, train_data, batch_size=1, shuffle=True, n_epochs=100):
+    '''
+    '''
+    losses = []
+    train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
+
+    optimizer = AdamW(model.parameters())
+
+    model.train() # Put the model in training mode. 
+
+    for epoch in tqdm(range(n_epochs)):
+
+        for batch in train_loader:
+
+            optimizer.zero_grad() # What does this do?
+            outputs = model(**batch)
+            loss = outputs.loss
+            print(loss)
+            loss.backward() # What does this do?
+
+            optimizer.step() # What does this do?
+            optimizer.zero_grad()
+
+
+
+def esm_test(model, test_data):
+
+        model.eval() # Put the model in evaluation mode. 
+
+        for batch in eval_dataloader:
+            batch = {k: v.to(device) for k, v in batch.items()}
+            with torch.no_grad():
+                outputs = model(**batch)
+
+            logits = outputs.logits
+            predictions = torch.argmax(logits, dim=-1)
+            metric.add_batch(predictions=predictions, references=batch["labels"])
+            progress_bar_eval.update(1)
+            
+        print(metric.compute())
 
 if __name__ == '__main__':
-    esm = ESM()
-
+    pass
