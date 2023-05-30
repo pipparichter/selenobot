@@ -21,7 +21,7 @@ from torch.utils.data import DataLoader
 
 class ESMClassifier(torch.nn.Module):
     
-    def __init__(self, use_pretrained=True, num_labels=1, name='facebook/esm2_t6_8M_UR50D', loss_func=torch.nn.CrossEntropyLoss):
+    def __init__(self, use_builtin=True, num_labels=1, name='facebook/esm2_t6_8M_UR50D'):
         '''
         Initializes an ESMClassifier object, as well as the torch.nn.Module superclass. 
         
@@ -29,25 +29,20 @@ class ESMClassifier(torch.nn.Module):
             - use_pretrained (bool): Whether or not to use the pretrained ESM sequence classifier. 
             - num_labels (int): Number of classes. This will be 1 for the forseeable future.
             - name (str): Name of the pretrained ESM model to load.  
-            - loss_func (): The loss function to use for fine-tuning. 
 
         '''
         # Initialize the super class, torch.nn.Module. 
         super(ESMClassifier, self).__init__()
 
-        self.num_labels = 1 # Currently only one class. 
-        self.pretrained = use_pretrained # Whether or not the pretrained model is being used. 
-        self.loss_func = loss_func
+        self.use_builtin = use_builtin # Whether or not the buil-in sequence classifier is used. . 
+        self.loss_func = torch.nn.CrossEntropyLoss()
 
-        # I think I need a better handle on what the tokenizer is doing... 
-        self.tokenizer = AutoTokenizer.from_pretrained(name)
-        
         # NOTE: Do I need to freeze ESM model weights when I do this?
-        if use_pretrained:
-            self.esm = EsmForSequenceClassification.from_pretrained(name)
+        if use_builtin:
+            self.esm = EsmForSequenceClassification.from_pretrained(name, num_labels=num_labels)
         else: # Need an additional classifier layer if we are going to be fine-tuning. 
-            self.esm = EsmModel.from_pretrained(name, num_labels=self.num_labels)
-            self.classifier = torch.nn.Linear(self.esm.config.hidden_size, self.num_labels)
+            self.esm = EsmModel.from_pretrained(name)
+            self.classifier = torch.nn.Linear(self.esm.config.hidden_size, num_labels)
     
 
     def forward(self, input_ids=None, attention_mask=None, labels=None):
@@ -62,62 +57,86 @@ class ESMClassifier(torch.nn.Module):
         
         returns: transformers.modeling_outputs.SequenceClassifierOutput
         '''
-        output = self.esm(input_ids=input_ids, attention_mask=attention_mask)
+        if self.use_builtin:
+            # NOTE: I think loss is already calculated here?
+            return self.esm(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
 
-        if self.pretrained:
-            return output # This is already the correct return type.  
         # If the regular ESM model is used, output type is BaseModelOutputWithPoolingAndCrossAttentions
         else:
-            output = output.pooler_output # Shape of (batch_size, hidden_size)
-            logits = self.classifier(output)
-
-            loss = None # Calculate the loss. 
+            # If the regular ESM moel is used, then it doesn't take labels as an input. 
+            esm_output = self.esm(input_ids=input_ids, attention_mask=attention_mask)
+            # Pooler output has a shape of (batch_size, hidden_size)
+            pooler_output = esm_output.pooler_output
+    
+            logits = self.classifier(pooler_output)
+            loss = None
             if labels is not None:
-                loss = self.loss_func(logits, labels)
+                loss = self.loss_func(torch.flatten(logits), torch.flatten(labels))
 
-            return SequenceClassifierOutput(loss=loss, logits=logits, atttentions=output.attentions, hidden_states=output.hidden_states)
+            # Should I be returning the hidden_states of the classifier layer here?
+            # return SequenceClassifierOutput(loss=loss, logits=logits, atttentions=esm_output.attentions, hidden_states=esm_output.hidden_states)
+            return SequenceClassifierOutput(loss=loss, logits=logits, attentions=esm_output.attentions, hidden_states=esm_output.hidden_states)
 
 
-def esm_train(model, train_data, batch_size=1, shuffle=True, n_epochs=100):
+def esm_train(model, train_data, batch_size=10, shuffle=True, n_epochs=100):
     '''
     '''
     losses = []
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
 
     optimizer = AdamW(model.parameters())
+    print(model.parameters())
 
     model.train() # Put the model in training mode. 
 
-    for epoch in tqdm(range(n_epochs)):
+    pbar = tqdm(total=n_epochs * batch_size, desc='Processing batches...')
 
+    for epoch in range(n_epochs):
+        
         for batch in train_loader:
+            pbar.update(1)
 
-            optimizer.zero_grad() # What does this do?
+            # optimizer.zero_grad() 
+            # print(batch['input_ids'], batch['input_ids'].size())
+            # print(batch['labels'], batch['labels'].size())
+
             outputs = model(**batch)
+
             loss = outputs.loss
-            print(loss)
-            loss.backward() # What does this do?
+            loss.backward() #
 
             optimizer.step() # What does this do?
             optimizer.zero_grad()
+        
+        losses.append(loss.item()) # Add losses to a history. 
 
+    pbar.close()
 
+    # Do I need to return the model here, or is everything adjusted inplace?
+    return losses
 
-def esm_test(model, test_data):
+# NOTE: What is all the stuff with cuda? It seeme like it's a way to mount things on a GPU,
+# although not sure if my machine has this. 
 
-        model.eval() # Put the model in evaluation mode. 
+def esm_test(model, test_data, shuffle=True, batch_size=10):
+    '''
+    '''
 
-        for batch in eval_dataloader:
-            batch = {k: v.to(device) for k, v in batch.items()}
-            with torch.no_grad():
-                outputs = model(**batch)
+    test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=True)
+    
+    model.eval() # Put the model in evaluation mode. 
 
-            logits = outputs.logits
-            predictions = torch.argmax(logits, dim=-1)
-            metric.add_batch(predictions=predictions, references=batch["labels"])
-            progress_bar_eval.update(1)
-            
-        print(metric.compute())
+    for batch in eval_dataloader:
+        # Does this just insure that the gradients are not being computed?
+        with torch.no_grad():
+            outputs = model(**batch)
+
+        logits = outputs.logits # Get the output of the classification layer. 
+        # The logits should be a one-dimensional vector
+        metric.add_batch(predictions=predictions, references=batch["labels"])
+        progress_bar_eval.update(1)
+        
+    print(metric.compute())
 
 if __name__ == '__main__':
     pass

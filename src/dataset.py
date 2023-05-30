@@ -22,12 +22,15 @@ def generate_labels(data):
     # Get the IDs for all selenoproteins from the sec_trunc.fasta file. 
     sec_ids = set(fasta_to_df('/home/prichter/Documents/protex/data/sec.fasta')['id'])
 
-    labels = np.zeros(len(data), dtype=np.int8) # Specify integer type. 
+    labels = np.zeros(len(data), dtype=np.single) # Specify integer type. 
     for i in range(len(data)): # Should not be prohibitively long.
         if data['id'].iloc[i] in sec_ids:
             labels[i] = 1
+
     # Should have shape (batch_size, )
-    return torch.from_numpy(labels) # Convert to tensor upon return. 
+    labels = torch.from_numpy(labels) # Convert to tensor.
+    labels = torch.unsqueeze(labels, 1) # Hopefully this fixes the dimension issue. 
+    return labels
 
 
 class SequenceDataset(torch.utils.data.Dataset):
