@@ -21,28 +21,36 @@ from torch.utils.data import DataLoader
 
 class ESMClassifier(torch.nn.Module):
     
-    def __init__(self, use_builtin=True, num_labels=1, name='facebook/esm2_t6_8M_UR50D'):
+    def __init__(self, use_builtin_classifier=True, freeze_pretrained=True, num_labels=1, name='facebook/esm2_t6_8M_UR50D'):
         '''
         Initializes an ESMClassifier object, as well as the torch.nn.Module superclass. 
         
         kwargs:
-            - use_pretrained (bool): Whether or not to use the pretrained ESM sequence classifier. 
-            - num_labels (int): Number of classes. This will be 1 for the forseeable future.
-            - name (str): Name of the pretrained ESM model to load.  
+
 
         '''
         # Initialize the super class, torch.nn.Module. 
         super(ESMClassifier, self).__init__()
 
-        self.use_builtin = use_builtin # Whether or not the buil-in sequence classifier is used. . 
+        self.use_builtin_classifier = use_builtin_classifier # Whether or not the buil-in sequence classifier is used. . 
         self.loss_func = torch.nn.CrossEntropyLoss()
 
         # NOTE: Do I need to freeze ESM model weights when I do this?
-        if use_builtin:
-            self.esm = EsmForSequenceClassification.from_pretrained(name, num_labels=num_labels)
+        if use_builtin_classifier:
+            self.esm_classifier = EsmForSequenceClassification.from_pretrained(name, num_labels=num_labels)
         else: # Need an additional classifier layer if we are going to be fine-tuning. 
             self.esm = EsmModel.from_pretrained(name)
+            # Eventually, make the classifier more complex?
             self.classifier = torch.nn.Linear(self.esm.config.hidden_size, num_labels)
+
+        if freeze_pretrained:
+            if use_builtin_classifier:
+                for param in self.esm_classifier.esm.parameters():
+                    param.requires_grad = False
+            else:
+                for param in self.esm.parameters():
+                    # Make it so that none of the pretrained weights can be updated. 
+                    param.requires_grad = False
     
 
     def forward(self, input_ids=None, attention_mask=None, labels=None):
@@ -57,9 +65,9 @@ class ESMClassifier(torch.nn.Module):
         
         returns: transformers.modeling_outputs.SequenceClassifierOutput
         '''
-        if self.use_builtin:
+        if self.use_builtin_classifier:
             # NOTE: I think loss is already calculated here?
-            return self.esm(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+            return self.esm_classifier(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
 
         # If the regular ESM model is used, output type is BaseModelOutputWithPoolingAndCrossAttentions
         else:
@@ -85,16 +93,15 @@ def esm_train(model, train_data, batch_size=10, shuffle=True, n_epochs=100):
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
 
     optimizer = AdamW(model.parameters())
-    print(model.parameters())
 
     model.train() # Put the model in training mode. 
 
-    pbar = tqdm(total=n_epochs * batch_size, desc='Processing batches...')
+    # pbar = tqdm(total=n_epochs * batch_size, desc='Processing batches...')
 
-    for epoch in range(n_epochs):
+    for epoch in tqdm(range(n_epochs), desc='Training classifier...'):
         
         for batch in train_loader:
-            pbar.update(1)
+            # pbar.update(1)
 
             # optimizer.zero_grad() 
             # print(batch['input_ids'], batch['input_ids'].size())
@@ -110,7 +117,7 @@ def esm_train(model, train_data, batch_size=10, shuffle=True, n_epochs=100):
         
         losses.append(loss.item()) # Add losses to a history. 
 
-    pbar.close()
+    # pbar.close()
 
     # Do I need to return the model here, or is everything adjusted inplace?
     return losses
