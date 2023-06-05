@@ -8,6 +8,7 @@ import seaborn as sns
 
 
 
+
 def plot_umap(data, filename='umap_plot.png'):
     '''
     Apply UMAP dimensionality reduction to embeddings, and plot in
