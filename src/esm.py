@@ -34,31 +34,11 @@ class ESMClassifier(torch.nn.Module):
         
         kwargs:
 
-
         '''
         # Initialize the super class, torch.nn.Module. 
         super(ESMClassifier, self).__init__()
 
-        model = EsmForSequenceClassification.from_pretrained(name, num_labels=1)
-        # Make sure model is on the GPU. 
-        self.model = model.to(device)
-
-
-        # target_modules, modules_to_save = [], []
-        # for name, mod in self.model.named_modules(): 
-        #     if 'classifier' not in name and type(mod) == torch.nn.modules.linear.Linear:
-        #             target_modules.append(name)
-
-        # Set config for the low-rank approximation of the pretrained model. 
-        # I've seen a few different values for r, lora_alpha, and lora_dropout... Not sure what's best, tbh. 
-        # Alpha and r values allow you to control the number of trainable parameters. 
-        # config = LoraConfig(r=16, peft_type='LORA', lora_alpha=16, target_modules=target_modules, lora_dropout=0.1, bias='none') #, modules_to_save=modules_to_save)
-
-        # self.use_builtin_classifier = use_builtin_classifier # Whether or not the built-in sequence classifier is used. . 
-
-        # if use_builtin_classifier:
-        
-        # self.lora_model = get_peft_model(model, config)
+        self.model = EsmForSequenceClassification.from_pretrained(name, num_labels=1)
 
         # Freeze all model weights which aren't related to the classifier. 
         for name, param in self.model.esm.named_parameters():
@@ -115,11 +95,17 @@ class ESMClassifier(torch.nn.Module):
 
 # TODO: This is code duplication. Probably should come up with a way to organize functions. 
 # Also kind of reluctant to put this in utils, because that's mostly file reading and writing.  
-def esm_train(model, train_data, test_data=None, batch_size=10, shuffle=True, n_epochs=300):
+def esm_train(model, train_loader, test_loader=None, n_epochs=300):
     '''
+
+    args:
+        - model (torch.nn.Module)
+        - train_loader (torch.utils.data.DataLoader)
     '''
-    losses = {'train':[], 'test':[], 'accuracy':[]}
-    train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
+    model = model.to(device) # Make sure everything is running on the GPU. 
+
+    # losses = {'train':[], 'test':[], 'accuracy':[]}
+    losses = {'train':[], 'test':[]}
 
     optimizer = Adam(model.parameters(), lr=0.01)
     # optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
@@ -133,34 +119,31 @@ def esm_train(model, train_data, test_data=None, batch_size=10, shuffle=True, n_
 
             logits, loss = model(**batch)
             loss.backward() #
-            # print(model.classifier.weight)
-
-            optimizer.step() # What does this do?
+            optimizer.step() 
             optimizer.zero_grad()
         
         losses['train'].append(loss.item()) # Add losses to a history. 
         
-        if test_data is not None:
-            test_loss, accuracy = logreg_test(model, test_data)
+        if test_loader is not None:
+            # test_loss, accuracy = esm_test(model, test_loader)
+            test_loss = esm_test(model, test_loader)
             losses['test'].append(test_loss.item())
-            losses['accuracy'].append(accuracy.item())
+            # losses['accuracy'].append(accuracy.item())
             # Make sure to put the model back in train mode. 
             model.train()
 
     return losses
 
 
-def esm_test(model, test_data):
+def esm_test(model, test_loader):
     '''
     Evaluate the model on the test data. 
     '''
-    # test_loader = DataLoader(test_data, batch_size=len(test_data.labels), shuffle=False)
-    test_loader = DataLoader(test_data, batch_size=1, shuffle=False)
+    model = model.to(device) # Make sure everything is running on the GPU. 
     
     model.eval() # Put the model in evaluation mode. 
 
-    loss = [] # Need to do this in batches of one. 
-    logits = []
+    logits, loss = [], [] # Need to do this in batches of one. 
     for batch in tqdm(test_loader, desc='Calculating batch loss...'): 
         batch = {k: v.to(device) for k, v in batch.items()} # Mount on the GPU. 
         
@@ -173,14 +156,9 @@ def esm_test(model, test_data):
     logits = torch.cat(logits)
     loss = torch.mean(torch.cat(loss))
 
-    # In addition to the loss, get the accuracy. 
-    prediction = torch.round(logits) # To zero or one.
-    accuracy = (prediction == test_data.labels).float().mean() # Should be able to do this if I don't shuffle. 
+    # In addition to the loss, get the accuracy.
+    prediction = torch.round(logits).to(device) # To zero or one.
+    # accuracy = (prediction == test_loader.labels.to(device)).float().mean() # Should be able to do this if I don't shuffle. 
 
-
-    return loss, accuracy
-
-
-
-if __name__ == '__main__':
-    pass
+    # return loss, accuracy
+    return loss

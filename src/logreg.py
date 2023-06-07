@@ -81,10 +81,8 @@ def logreg_train(model, train_data, test_data=None, batch_size=10, shuffle=True,
         for batch in train_loader:
 
             logits, loss = model(**batch)
-            loss.backward() #
-            # print(model.classifier.weight)
-
-            optimizer.step() # What does this do?
+            loss.backward()
+            optimizer.step() 
             optimizer.zero_grad()
         
         losses['train'].append(loss.item()) # Add losses to a history. 

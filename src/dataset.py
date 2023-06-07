@@ -10,6 +10,7 @@ from tqdm import tqdm
 import torch
 import time
 
+# device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 def get_id(metadata):
     '''
@@ -119,8 +120,7 @@ def clstr_to_df(clstr_file):
     return pd.DataFrame(df).astype({'cluster':'int64', 'id':'str'})
 
 
-
-def generate_labels(data):
+def generate_labels(data, sec_fasta_path='/home/prichter/Documents/protex/data/sec.fasta'):
     '''
     Get labels which map each sequence in a dataset to a value indicating it is short (0) or truncated (1). 
 
@@ -130,7 +130,7 @@ def generate_labels(data):
     returns: torch.Tensor
     '''
     # Get the IDs for all selenoproteins from the sec_trunc.fasta file. 
-    sec_ids = set(fasta_to_df('/home/prichter/Documents/protex/data/sec.fasta')['id'])
+    sec_ids = set(fasta_to_df(sec_fasta_path)['id'])
 
     labels = np.zeros(len(data), dtype=np.single) # Specify integer type. 
     for i in range(len(data)): # Should not be prohibitively long.
@@ -145,9 +145,11 @@ def generate_labels(data):
 
 class SequenceDataset(torch.utils.data.Dataset):
 
-    def __init__(self, data, name='facebook/esm2_t6_8M_UR50D'):
+    def __init__(self, data, name='facebook/esm2_t6_8M_UR50D', sec_fasta_path='/home/prichter/Documents/protex/data/sec.fasta'):
+        '''
+        '''
 
-        self.labels = generate_labels(data)
+        self.labels = generate_labels(data, sec_fasta_path=sec_fasta_path)
         tokenizer = AutoTokenizer.from_pretrained(name)
         # Tokenize the sequences so they align with the ESM model. This is a dictionary with keys 'input_ids' and 'attention_mask'
         # Each key maps to a two-dimensional tensor of size (batch_size, sequence length)
@@ -158,9 +160,9 @@ class SequenceDataset(torch.utils.data.Dataset):
         
     def __getitem__(self, idx):
         # NOTE: Why detach and then re-set requires_grad?
-        item = {key: val[idx].clone().detach() for key, val in self.encodings.items()}
+        item = {key: val[idx] for key, val in self.encodings.items()}
         if self.labels is not None:
-            item['labels'] = self.labels[idx].clone().detach()
+            item['labels'] = self.labels[idx]
 
         return item
 
