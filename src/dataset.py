@@ -12,6 +12,7 @@ import time
 
 # device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
+
 def get_id(metadata):
     '''
     Extract the unique identifier from a FASTA metadata string (the information on the line preceding
@@ -36,31 +37,35 @@ def fasta_to_df(fasta_file):
     a column for the sequence and a column for the unique identifier. 
 
     args:
-        - fasta_file (str)
-    
+        - fasta_file (str): Either a path to the FASTA file or the contents of the file. 
     returns: pd.DataFrame
     '''
     df = {'seq':[], 'id':[], 'metadata':[]}
 
-    # Open the FASTA file. Metadata is contained on a single line, with the sequence given on the subsequent lines.
+    try:
+    # Open the FASTA file, or read in the string.  
+        with open(fasta_file, 'r', encoding='utf8') as f:
+            lines = f.readlines()
+    except:
+        lines = fasta_file.split('\n')
+        lines = [line for line in lines if len(line) > 0]
+    
+    # Metadata is contained on a single line, with the sequence given on the subsequent lines.
     # The sequence is broken up across multiple lines, with each line containing 60 characters.
-    with open(fasta_file, 'r', encoding='utf8') as f:
-        lines = f.readlines()
+    i = 0 
+    while i < len(lines):
+        # Also extract the unique ID from the metadata line, and add to the DataFrame. 
+        df['metadata'].append(lines[i])
+        df['id'].append(get_id(lines[i]))
+        i += 1
 
-        i = 0 
-        while i < len(lines):
-            # Also extract the unique ID from the metadata line, and add to the DataFrame. 
-            df['metadata'].append(lines[i])
-            df['id'].append(get_id(lines[i]))
-            i += 1
-
-            seq = ''
-            # Read in the amino acid sequence. The next metadata line wih have a '>' in the front.
-            while (i < len(lines)) and (lines[i][0] != '>'):
-                # Remove whitespace from sequence.
-                seq += lines[i].strip()
-                i += 1        
-            df['seq'].append(seq)
+        seq = ''
+        # Read in the amino acid sequence. The next metadata line wih have a '>' in the front.
+        while (i < len(lines)) and (lines[i][0] != '>'):
+            # Remove whitespace from sequence.
+            seq += lines[i].strip()
+            i += 1        
+        df['seq'].append(seq)
 
     # Convert to a DataFrame and return. 
     return pd.DataFrame(df).astype({'id':'str'})
@@ -120,49 +125,36 @@ def clstr_to_df(clstr_file):
     return pd.DataFrame(df).astype({'cluster':'int64', 'id':'str'})
 
 
-def generate_labels(data, sec_fasta_path='/home/prichter/Documents/protex/data/sec.fasta'):
-    '''
-    Get labels which map each sequence in a dataset to a value indicating it is short (0) or truncated (1). 
-
-    args:
-        - data (pd.DataFrame): The sequence data, which must at least contain an 'id' column. 
-
-    returns: torch.Tensor
-    '''
-    # Get the IDs for all selenoproteins from the sec_trunc.fasta file. 
-    sec_ids = set(fasta_to_df(sec_fasta_path)['id'])
-
-    labels = np.zeros(len(data), dtype=np.single) # Specify integer type. 
-    for i in range(len(data)): # Should not be prohibitively long.
-        if data['id'].iloc[i] in sec_ids:
-            labels[i] = 1
-
-    # Should have shape (batch_size, )
-    labels = torch.from_numpy(labels) # Convert to tensor.
-    labels = torch.unsqueeze(labels, 1) # Hopefully this fixes the dimension issue. 
-    return labels # .long() # Make sure labels are integers. 
-
-
 class SequenceDataset(torch.utils.data.Dataset):
 
-    def __init__(self, data, name='facebook/esm2_t6_8M_UR50D', sec_fasta_path='/home/prichter/Documents/protex/data/sec.fasta'):
-        '''
+    def __init__(self, data, tokenizer=None, embeddings=None, **kwargs):
         '''
 
-        self.labels = generate_labels(data, sec_fasta_path=sec_fasta_path)
-        tokenizer = AutoTokenizer.from_pretrained(name)
-        # Tokenize the sequences so they align with the ESM model. This is a dictionary with keys 'input_ids' and 'attention_mask'
-        # Each key maps to a two-dimensional tensor of size (batch_size, sequence length)
-        self.encodings = tokenizer(list(data['seq']), padding=True, truncation=True, return_tensors='pt')
-        # self.seqs = data['seq'].to_numpy() # Also store the sequences.
-        
+        '''
+        self.encodings = tokenizer(list(data['seq']), **kwargs)
+        self.labels = data['label']
         self.length = len(data)
-        
+
+        self.embeddings = None
+        # Load in pre-generated embedding data, if available. Indices should align with dataset indices. 
+        if embeddings is not None:
+            indices = embeddings['index'].values
+            embeddings = embeddings.drop(columns=['index']).values
+            # Sort the embeddings according to the indices. Should already be no duplicates.  
+            embeddings = embeddings[np.argsort(indices)]
+            self.embeddings = torch.tensor(embeddings)
+
     def __getitem__(self, idx):
-        # NOTE: Why detach and then re-set requires_grad?
+        # Get an item from the dataset 
+
         item = {key: val[idx] for key, val in self.encodings.items()}
+
         if self.labels is not None:
             item['labels'] = self.labels[idx]
+        if self.embeddings is not None:
+            item['embeddings'] = self.embeddings[idx]
+
+        item['index'] = idx # Include the index so you can match with the original dataset. 
 
         return item
 
@@ -310,5 +302,48 @@ def train_test_split(data, test_size=0.25, train_size=0.75):
     train_data = data[data['cluster'].isin(train_clusters)]
     
     return train_data, test_data # For now, just return the full DataFrames.
+
+    
+# if __name__ == '__main__':
+#     # Want to add the labels to the CSV file to avoid extra steps. 
+# 
+#     # Read in the selenoprotein data. 
+#     # sec_data = fasta_to_df('./data/sec.fasta')
+#     
+#     # Add the labels to the files. 
+#     for csv_file in ['./data/train.csv', './data/test.csv']:
+#         # data = pd.read_csv(csv_file, usecols=['seq', 'id', 'cluster'])
+#         data = pd.read_csv(csv_file, usecols=['seq', 'id', 'cluster', 'label'])
+# 
+#         # labels = generate_labels(data, sec_data)
+#         # data['label'] = labels
+# 
+#         data.to_csv(csv_file) # Overwrite the existing file. 
+
+
+# def generate_labels(data, sec_data):
+#     '''
+#     Get labels which map each sequence in a dataset to a value indicating it is short (0) or truncated (1). 
+# 
+#     args:
+#         - data (pd.DataFrame): The sequence data, which must at least contain an 'id' column. 
+#         - sec_data (pd.DataFrame): The data containing truncated selenoprotein sequences. 
+# 
+#     returns: torch.Tensor
+#     '''
+#     # Get the IDs for all selenoproteins from the selenoprotein data.  
+#     sec_ids = list(sec_data['id'])
+# 
+#     labels = np.zeros(len(data), dtype=np.single) # Specify integer type. 
+#     for i in range(len(data)): # Should not be prohibitively long.
+#         if data['id'].iloc[i] in sec_ids:
+#             labels[i] = 1
+# 
+#     # Should have shape (batch_size, )
+#     labels = torch.from_numpy(labels) # Convert to tensor.
+#     labels = torch.unsqueeze(labels, 1) # Hopefully this fixes the dimension issue. 
+#     return labels # .long() # Make sure labels are integers. 
+
+
 
 

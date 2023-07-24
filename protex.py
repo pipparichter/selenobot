@@ -1,34 +1,39 @@
-'''
-A script to be run on the Google Cloud VM, for training the ESM classifier. 
-'''
+from prettytable import PrettyTable
+import pandas as pd 
+import numpy as np
 
-from src.dataset import SequenceDataset
-from src.esm import ESMClassifier, esm_train, esm_test
-# from logreg import LogisticRegressionClassifier, logreg_train, logreg_test
-import scipy.stats as stats
-import pandas as pd
-import torch
-import seaborn as sns
-import matplotlib.pyplot as plt
+def summary(model):
+    '''
+    Print out a summary of the model weights, and which parameters are trainable. 
+    '''
+    table = PrettyTable(['name', 'num_params', 'fixed'])
 
-from torch.utils.data import DataLoader
+    num_fixed = 0
+    num_total = 0
 
-# Apparently this frees up some memory. 
-# torch.cuda.empty_cache()
+    params = {}
 
-# train_data = SequenceDataset(pd.read_csv('./data/train.csv'), sec_fasta_path='./data/sec.fasta')
-# test_data = SequenceDataset(pd.read_csv('./data/test.csv'), sec_fasta_path='./data/sec.fasta')
+    for name, param in model.named_parameters():
+        num_params = param.numel()
+        fixed = str(not param.requires_grad)
+        table.add_row([name, num_params, fixed])
 
-# train_loader = DataLoader(train_data, shuffle=True, batch_size=32)
-# test_loader = DataLoader(train_data, shuffle=False, batch_size=32)
+        if not param.requires_grad:
+            num_fixed += num_params
+        
+        num_total += num_params
+    
+    print(table)
+    print('TOTAL:', num_total)
+    print('TRAINABLE:', num_total - num_fixed, f'({int(100 * (num_total - num_fixed)/num_total)}%)')
 
-# Instantiate the classifier. 
-model_esm = ESMClassifier()
-for module in ESMClassifier().modules():
-    print(type(module))
+if __name__ == '__main__':
+    # Probably should organize the embeddings and get rid of the duplicates. 
+    encodings = pd.read_csv('./data/test_embeddings.csv', header=None).values
+    indices = pd.read_csv('./data/test_indices.csv', header=None).values
 
-# losses_esm = esm_train(model_esm, train_loader, test_loader=test_loader, n_epochs=100)
-# torch.save(model_esm, 'model_esm.pickle')
+    data = pd.DataFrame(encodings, columns=[str(i) for i in range(encodings.shape[1])])
+    data['index'] = indices
+    data = data.drop_duplicates('index')
 
-# with open('./losses_esm.txt', 'w') as f:
-#     f.write(str(losses_esm))
+    data.to_csv('./data/test_embeddings_01.csv', index=False)
