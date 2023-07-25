@@ -9,7 +9,6 @@ import requests
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-import torch
 import time
 
 # device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -17,24 +16,28 @@ import time
 
 class SequenceDataset(torch.utils.data.Dataset):
 
-    def __init__(self, data, tokenizer=None, embeddings=None, **kwargs):
+    def __init__(self, data, labels=None, tokenizer=None, embeddings=None, **kwargs):
         '''
         Initialize the SequenceDataset oject. 
 
         args:
             - data (pd.DataFrame): The amino acid sequence data. Should have columns
-                'seq' at minimum. 
+                'seq' at minimum, unless the data is already tokenized. 
             - tokenizer (torch.Tokenizer): A tokenizer for converting the sequence data 
                 to numerical data. 
             - embeddings (pd.DataFrame): Pre-generated embeddings, if applicable. 
             - kwargs: Specs to be passed into the Tokenizer before it is called on the data. 
         '''
-        # Tokenizer should always return a dictionary. One of the keys
-        # should be input_ids, with a tensor as the value.  
-        self.data = tokenizer(list(data['seq']), **kwargs)
+        if tokenizer is not None:
+            # Tokenizer should always return a dictionary. One of the keys
+            # should be input_ids, with a tensor as the value.  
+            self.data = tokenizer(list(data['seq']), **kwargs)
+        else: # If no tokenizer is specified, probably passing in pre-embedded data. 
+            self.data = {'input_ids':torch.Tensor(data.drop(columns=['index']).values)}
 
         # Store as tensor for compatibility Pytorch stuff. 
-        self.labels = None
+        self.labels = labels if labels is None else torch.Tensor(labels)
+
         if 'label' in data.columns:
             self.labels = torch.tensor(data['label'])
 
@@ -81,3 +84,11 @@ class SequenceDataset(torch.utils.data.Dataset):
         else:
             return None
 
+    def get_embeddings(self):
+        '''
+        Return embeddings as a numpy array, if labels are provided. 
+        '''
+        if self.embeddings is not None:
+            return self.embeddings.numpy()
+        else:
+            return None

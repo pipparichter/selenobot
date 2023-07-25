@@ -76,8 +76,6 @@ class BenchmarkClassifier():
             - data (np.array)
             - labels (np.array)
         '''
-        # pca = PCA(n_components=self.n_components)
-        # pca_outputs = pca.fit_transform(input_ids)
         self.logreg.fit(data, labels) # Should modify the object. 
 
     def predict(self, data, labels=None):
@@ -91,55 +89,15 @@ class BenchmarkClassifier():
         '''
         # Pass the PCA outputs into the already-fitted logistic regression thing. 
         preds = self.logreg.predict(data)
-        probs = torch.DoubleTensor(self.logreg.predict_proba(labels)[:, 1])
         
         # Calculate loss if labels are specified. 
         loss = None
         # NOTE: For loss, maybe I should be outputting specific probabilities, not labels. 
         if labels is not None:
+            probs = torch.DoubleTensor(self.logreg.predict_proba(labels)[:, 1])
             # Might need to convert things to tensors for this to work.  
             loss = binary_cross_entropy(probs, torch.DoubleTensor(labels)).item()
         
         return preds, loss
-
-
-def bench_train(model, train_loader):
-    '''
-    Fits the underlying linear regression-based benchmark model to the data. This function is just 
-    intended to keep the API consistent with other models. 
-
-    args:
-        - model (BenchmarkClassifier)
-        - train_loader (DataLoader)
-    '''
-    # Both of these should return stuff as Numpy arrays. 
-    data =  train_loader.get_data()
-    labels = train_loader.get_labels()
-
-    # This should pass in both the labels and the input_ids.
-    model.fit(data, labels)
-    preds, loss = model.predict(data, labels=labels)
-
-    accuracy = np.mean(preds == labels)
-    return loss, accuracy
-
-
-def bench_test(model, test_loader):
-    '''
-    Evaluate the benchmark model on the test data. This function is just intended to keep the
-    API consistent with other models. 
-
-    args:
-        - model (BenchmarkClassifier)
-        - test_loader (DataLoader)
-    '''
-    # Both of these should return stuff as Numpy arrays. 
-    data = train_loader.get_data()
-    labels = train_loader.get_labels()
-
-    preds, loss = model(data, labels=labels)
-    accuracy = np.mean(preds == labels)
-
-    return loss, accuracy
 
 

@@ -25,7 +25,7 @@ class EsmClassifierV2(torch.nn.Module):
             - name (str): The name of the pretrained model to use. 
         '''
         # Initialize the super class, torch.nn.Module. 
-        super(ESMClassifierV2, self).__init__()
+        super(EsmClassifierV2, self).__init__()
 
         # I don't think there is a way to turn off the pooling layer when loading from pretrained. 
         # For now, just ignore it. 
@@ -92,7 +92,7 @@ class EsmClassifierV1(torch.nn.Module):
         Initializes an ESMClassifier object, as well as the torch.nn.Module superclass. 
         '''
         # Initialize the super class, torch.nn.Module. 
-        super(ESMClassifier, self).__init__()
+        super(EsmClassifier, self).__init__()
 
         self.model = EsmForSequenceClassification.from_pretrained(name, num_labels=1)
 
@@ -173,7 +173,7 @@ def esm_train(model, train_loader, test_loader=None, n_epochs=300):
 
 
 # TODO: Fix how labels are managed and stored. 
-def esm_test(model, test_loader, embedding_file=None):
+def esm_test(model, test_loader):
     '''
     Evaluate the model on the test data. 
     '''
@@ -181,7 +181,7 @@ def esm_test(model, test_loader, embedding_file=None):
     
     model.eval() # Put the model in evaluation mode. 
 
-    accuracy, loss = [], []
+    preds, labels, loss = [], [], []
     for batch in tqdm(test_loader, desc='Calculating batch loss...'): 
         batch = {k: v.to(device) for k, v in batch.items()} # Mount on the GPU. 
         
@@ -189,41 +189,21 @@ def esm_test(model, test_loader, embedding_file=None):
             batch_logits, batch_loss = model(**batch)
         loss.append(batch_loss.expand(1))
 
-        batch_prediction = torch.round(batch_logits) # .to(device) # To zero or one.
-        # NOTE: I think it doesn't actually matter if I shuffle or not. 
-        batch_accuracy = (batch_prediction == batch['labels']).float().mean() # Should be able to do this if I don't shuffle. 
-        accuracy.append(batch_accuracy)
+        preds.append(torch.round(batch_logits)) # .to(device) # To zero or one.
+        labels.append(batch.get('labels', None))
 
     # Concatenate the accumulated results. 
-    loss = torch.mean(torch.cat(loss))
-    accuracy = np.mean(accuracy)
+    preds = torch.flatten(torch.cat(preds))
 
-    return loss, accuracy
-
-
-if __name__ == '__main__':
-    from dataset import SequenceDataset
-    from torch.utils.data import DataLoader
-    from transformers import EsmTokenizer
+    try: # If labels are given, losses will be calculated. 
+        labels = torch.cat(labels)
+        loss = torch.cat(loss).mean()
+        return {'preds':preds, 'loss':loss.item(), 'labels':labels}
+    except:
+        return {'preds':preds, 'loss':None, 'labels':None}
 
 
-    tokenizer = EsmTokenizer.from_pretrained('facebook/esm2_t6_8M_UR50D')
-    kwargs = {'padding':True, 'truncation':True, 'return_tensors':'pt'}
 
-    # Grab the pre-loaded embeddings. 
-    train_embeddings = pd.read_csv('/home/prichter/Documents/protex/data/train_embeddings.csv')
-
-    train_data = SequenceDataset(pd.read_csv('/home/prichter/Documents/protex/data/train.csv'), tokenizer=tokenizer, embeddings=train_embeddings, **kwargs)
-    train_loader = DataLoader(train_data, batch_size=64) # Reasonable batch size?
-
-    # test_data = SequenceDataset(pd.read_csv('/home/prichter/Documents/protex/data/test.csv'), tokenizer=tokenizer, **kwargs)
-    # test_loader = DataLoader(test_data, batch_size=64) # Reasonable batch size?
-    
-    model = ESMClassifierV2()
-    loss = esm_train(model, train_loader, n_epochs=200)
-    print(loss)
-    
-    torch.save(model, '/home/prichter/Documents/protex/model_esm_v2.pickle')
 
 
 

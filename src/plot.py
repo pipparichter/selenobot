@@ -1,6 +1,10 @@
 '''
 Plotting utilities for the ProTex tool. 
 '''
+# # Where is tensorflow being imported such that I even need to shut it up??
+# import tensorflow as tf
+# tf.logging.set_verbosity(tf.logging.WARN)
+
 import matplotlib.pyplot as plt
 import seaborn as sns
 import dataset 
@@ -13,15 +17,23 @@ colors = sns.color_palette('Paired')
 palette = 'Paired'
 
 
-def plot_embeddings(embeddings, n_points=500, labels=None, filename='embeddings_esm.png', title='ESM-generated protein embeddings'):
+
+
+def plot_embeddings(embeddings, n_points=100, labels=None, filename=None, title=None, palette='Paired'):
     '''
-    Apply PCA dimensionality reduction to the tokenized amino acid sequences (both those generated
-    simply by counting amino acid content, and those generated using ESM). 
+    Apply PCA dimensionality reduction to the tokenized amino acid sequences (both 
+    those generated simply by counting amino acid content, and those generated using ESM). 
 
     args:
-        - embeddings
-        - n_points
-        - labels
+        - embeddings (pd.DataFrame): A pandas DataFrame with embedding information. The columns
+            should be numbers corresponding to positions on the embedding vector. There should 
+            also be an 'index' column, which connects each embedding to the amino acid sequence
+            in the original data. 
+        - n_points (int): The number of datapoints to plot. 
+        - labels (np.array): An array with size len(embeddings). Contains a label for each
+            data point. 
+        - filename (str): File name under which to save the figure. 
+        - title (str): A title for the plot. 
     '''
     # Get rid of the index values prior to PCA application. 
     embeddings = embeddings.drop(columns=['index']).values
@@ -33,24 +45,19 @@ def plot_embeddings(embeddings, n_points=500, labels=None, filename='embeddings_
     fig, ax = plt.subplots(1)
     ax.set_title(title)
     
-    # Instantiate the PCA model for dimensionality reduction.  
-    # pca = PCA(n_components=2)
     umap = UMAP(n_components=2) # UMAP seems to work a bit better than PCA. 
     ax.set_xlabel('UMAP 1')
     ax.set_ylabel('UMAP 2')
-    # fit_transform should take in data of (n_samples, n_features)
-    # data = pd.DataFrame(pca.fit_transform(embeddings), columns=['PCA 1', 'PCA 2'])
     data = pd.DataFrame(umap.fit_transform(embeddings), columns=['UMAP 1', 'UMAP 2'])
 
     if labels is not None:
         data['label'] = labels[sample_idxs]
         sns.scatterplot(data=data, x='UMAP 1', y='UMAP 2', ax=ax, hue='label', palette=palette)
-        # sns.scatterplot(data=data, x='PCA 1', y='PCA 2', ax=ax, hue='label', palette=palette)
-        # ax.legend(['short', 'selenoprotein'])
     else:
-        sns.scatterplot(data=data, x='UMAP 1', y='UMAP 2', ax=ax)
+        sns.scatterplot(data=data, x='UMAP 1', y='UMAP 2', ax=ax, palette=palette)
 
-    fig.savefig(filename, format='png')
+    if filename is not None: # Save the figure, if a filename is specified. 
+        fig.savefig(filename, format='png')
 
 
 def plot_dataset_length_distributions(sec_data, short_data):
@@ -61,9 +68,6 @@ def plot_dataset_length_distributions(sec_data, short_data):
         - sec_data (pd.DataFrame)
         - short_data (pd.DataFrame)
     '''
-    # sec_data = dataset.fasta_to_df('/home/prichter/Documents/protex/data/sec.fasta')
-    # short_data = dataset.fasta_to_df('/home/prichter/Documents/protex/data/sec.fasta')
-
     plot_data = {}
 
     # Grab the sequence lengths. 
@@ -89,7 +93,6 @@ def plot_dataset_length_distributions(sec_data, short_data):
 def plot_train_test_composition(train_data, test_data, train_labels, test_labels):
     '''
     '''
-
     # Label is 1 if the sequence is a selenoprotein. 
     train_sec_count = sum(train_labels)
     test_sec_count = sum(test_labels)

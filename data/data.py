@@ -2,18 +2,23 @@
 Code for gathering and preprocessing the data in the /protex/data directory. 
 '''
 
+# TODO: Replicate procedure I used to generate all the data files in thie file, mostly
+# for the sake of record-keeping. 
+
 import requests
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
 import torch
 import time
+from transformers import EsmTokenizer, AutoTokenizer, EsmModel
 
 
 def get_id(metadata):
     '''
-    Extract the unique identifier from a FASTA metadata string (the information on the line preceding
-    the actual sequence). This ID should be flanked by '|'.
+    Extract the unique identifier from a FASTA metadata string (the 
+    information on the line preceding the actual sequence). This ID should 
+    be flanked by '|'.
 
     args:
         - metadata (str): A metadata string containing an ID. 
@@ -28,8 +33,9 @@ def get_id(metadata):
 
 def fasta_to_df(fasta_file):
     '''
-    Read data from a FASTA file and convert it to a pandas DataFrame. The resulting DataFrame contains
-    a column for the sequence and a column for the unique identifier. 
+    Read data from a FASTA file and convert it to a pandas DataFrame. The 
+    resulting DataFrame contains a column for the sequence and a column for 
+    the unique identifier. 
 
     args:
         - fasta_file (str): Either a path to the FASTA file or the contents of the file. 
@@ -70,8 +76,9 @@ def df_to_fasta(df, fasta_file):
     Write a DataFrame containing FASTA data to a FASTA file format.
 
     args:
-        - df (pd.DataFrame): A DataFrame containing, at minimum, a metadata column, as well as a sequence column. 
-        - fasta_file (str): The path to the file. 
+        - df (pd.DataFrame): A DataFrame containing, at minimum, a metadata column, 
+            as well as a sequence column. 
+        - fasta_file (str): The path to the file which will contain the FASTA data. 
     '''
     with open(fasta_file, 'w', encoding='utf8') as f:
         # Iterate over the DataFrames as a set of named tuples.
@@ -87,8 +94,9 @@ def df_to_fasta(df, fasta_file):
 
 def clstr_to_df(clstr_file):
     '''
-    Reads a clustr file (the output file from CD-hit) into a pandas DataFrame. DataFrame has columns
-    for the cluster number and sequence ID (it discards a lot of the info in the clstr file). 
+    Reads a clustr file (the output file from CD-hit) into a pandas DataFrame. 
+    DataFrame has columns for the cluster number and sequence ID (it discards 
+    a lot of the info in the clstr file). 
 
     kwargs:
         - clstr_file (str): The path to the file containing the cluster data. 
@@ -130,11 +138,12 @@ def truncate(seq):
 
 def truncate_selenoproteins(fasta_file):
     '''
-    Truncate the selenoproteins stored in the inputted file at the first selenocysteine residue. 
-    Overwrites the original file with the truncated sequence data. 
+    Truncate the selenoproteins stored in the inputted file at the first 
+    selenocysteine residue. Overwrites the original file with the truncated 
+    sequence data. 
 
-    kwargs:
-        - fasta_file
+    args:
+        - fasta_file (str): The path to the file which contains FASTA data. 
     '''
     data = fasta_to_df(fasta_file)
 
@@ -148,7 +157,12 @@ def truncate_selenoproteins(fasta_file):
 
 def download_short_proteins(dist, fasta_file):
     '''
-    Download short proteins from the UniProt database according to the length distribution of the truncated selenoproteins.
+    Download short proteins from the UniProt database according to the
+    length distribution of the truncated selenoproteins.
+
+    args:
+        - dist (?): A distribution generated using a kernel density estimate. 
+        - fasta_file (str): The path to the file which contains FASTA data. 
     '''
     delta = 0
     # There are about 20,000 selenoproteins listed, so try to get an equivalent number of short proteins. 
@@ -200,7 +214,8 @@ def sum_clusters(clusters):
     Calculate the total number of entries in a set of clusters. 
 
     args:
-        - clusters (list): A list of two-tuples where the first element is the cluster ID, and the second element is the cluster size. 
+        - clusters (list): A list of two-tuples where the first element is the 
+            cluster ID, and the second element is the cluster size. 
     '''
     return sum([c[1] for c in clusters] + [0])
 
@@ -211,7 +226,6 @@ def train_test_split(data, test_size=0.25, train_size=0.75):
 
     args:   
         - data (pd.DataFrame): A DataFrame with, at minimum, columns 'seq', 'cluster', 'id'. 
-    kwargs: 
         - test_size (float)
         - train_size (float)
     '''
@@ -251,7 +265,7 @@ def train_test_split(data, test_size=0.25, train_size=0.75):
         i_prev = i
 
     # Now, the clusters have been organized into the training and test sets. 
-    # The cluster size information isn't relevant anymore, so remove this information, leaving only the cluster labels.
+    # The cluster size information isn't relevant anymore, so remove it.
     train_clusters = [c[0] for c in train_clusters]
     test_clusters = [c[0] for c in test_clusters]
 
@@ -260,23 +274,28 @@ def train_test_split(data, test_size=0.25, train_size=0.75):
     
     return train_data, test_data # For now, just return the full DataFrames.
 
-    
-# if __name__ == '__main__':
-#     # Want to add the labels to the CSV file to avoid extra steps. 
-# 
-#     # Read in the selenoprotein data. 
-#     # sec_data = fasta_to_df('./data/sec.fasta')
-#     
-#     # Add the labels to the files. 
-#     for csv_file in ['./data/train.csv', './data/test.csv']:
-#         # data = pd.read_csv(csv_file, usecols=['seq', 'id', 'cluster'])
-#         data = pd.read_csv(csv_file, usecols=['seq', 'id', 'cluster', 'label'])
-# 
-#         # labels = generate_labels(data, sec_data)
-#         # data['label'] = labels
-# 
-#         data.to_csv(csv_file) # Overwrite the existing file. 
 
+def generate_esm_embeddings(data, embedding_file=None):
+    '''
+    Run a file full of amino acid sequences through the ESM model in order to generate
+    embeddings. 
+
+    args: 
+        - data (pd.DataFrame)
+        - filename (str)
+    '''
+    name = 'facebook/esm2_t6_8M_UR50D' # Name of the pre-trained model. 
+    tokenizer = AutoTokenizer.from_pretrained(name)
+    model = EsmModel.from_pretrained(name)
+
+    inputs = tokenizer(data['seqs'])
+
+    
+
+if __name__ == '__main__':
+    pass
+    # ------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------
 
 # def generate_labels(data, sec_data):
 #     '''
