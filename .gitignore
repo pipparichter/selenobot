@@ -5,3 +5,4 @@ data/*.clstr
 env/
 .vscode/
 *.pickle
+.ipynb_checkpoints/
