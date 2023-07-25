@@ -1,4 +1,7 @@
-data/
+data/*.csv
+data/*.fasta
+data/*.zip
+data/*.clstr
 env/
 .vscode/
 *.pickle

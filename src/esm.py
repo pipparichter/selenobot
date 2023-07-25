@@ -15,7 +15,7 @@ from torch.nn.functional import cross_entropy, binary_cross_entropy
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-class ESMClassifierV2(torch.nn.Module):
+class EsmClassifierV2(torch.nn.Module):
     
     def __init__(self, name='facebook/esm2_t6_8M_UR50D'):
         '''
@@ -85,7 +85,7 @@ class ESMClassifierV2(torch.nn.Module):
         
         return logits, loss
 
-class ESMClassifierV1(torch.nn.Module):
+class EsmClassifierV1(torch.nn.Module):
     
     def __init__(self, name='facebook/esm2_t6_8M_UR50D'):
         '''

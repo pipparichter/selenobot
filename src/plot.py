@@ -1,15 +1,12 @@
 '''
 Plotting utilities for the ProTex tool. 
 '''
-
-# import umap.umap_ as umap
 import matplotlib.pyplot as plt
 import seaborn as sns
 import dataset 
 import numpy as np
 import pandas as pd
 from umap import UMAP
-
 from sklearn.decomposition import PCA
 
 colors = sns.color_palette('Paired')
@@ -54,35 +51,6 @@ def plot_embeddings(embeddings, n_points=500, labels=None, filename='embeddings_
         sns.scatterplot(data=data, x='UMAP 1', y='UMAP 2', ax=ax)
 
     fig.savefig(filename, format='png')
-
-# def plot_umap(data, filename='umap_plot.png'):
-#     '''
-#     Apply UMAP dimensionality reduction to embeddings, and plot in
-#     two-dimensional space. 
-#     '''
-#     reducer = umap.UMAP()
-#     fig, ax = plt.subplots(1)
-#     ax.set_xlabel('UMAP 1')
-#     ax.set_ylabel('UMAP 2')
-    
-#     legend = []
-
-#     for label, embeddings in data.items():
-
-#         legend.append(label)
-
-#         # Need to convert from tensor back to NumPy array, I think.
-#         reduced_embeddings = reducer.fit_transform(embeddings)
-#         # print(reduced_embeddings.shape, reduced_embeddings_truncated.shape)
-#         reduced_embeddings = pd.DataFrame(reduced_embeddings, columns=['UMAP 1', 'UMAP 2'])
-
-#         sns.scatterplot(reduced_embeddings, ax=ax, x='UMAP 1', y='UMAP 2')
-    
-#     ax.legend(legend)
-#     plt.savefig(filename)
-
-# TODO: It might be useful to visualize clusters somehow. Maybe show how they are represented in UMAP
-# space... Only issue is that there are over 8000 clusters, so this may not be useful or worthwhile. 
 
 
 def plot_dataset_length_distributions(sec_data, short_data):
@@ -138,16 +106,5 @@ def plot_train_test_composition(train_data, test_data, train_labels, test_labels
 
     fig.savefig('train_test_composition.png', format='png')
    
-
-
-
-if __name__ == '__main__':
-
-    # embeddings = pd.read_csv('/home/prichter/Documents/protex/data/train_embeddings_esm.csv')
-    # labels = pd.read_csv('/home/prichter/Documents/protex/data/train.csv')['label'].values
-    # labels[labels == 0] = 'short proteins'
-    # labels[labels == 1] = 'selenoproteins'
-    # plot_embeddings(embeddings, labels=labels)
-
 
 

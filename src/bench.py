@@ -32,7 +32,6 @@ class BenchmarkTokenizer():
             - data (list): A list of amino acid sequences. 
         '''
 
-
         # Map each amino acid to an integer using self.map_
         mapped = [np.array([self.map_[res] for res in seq]) for seq in data]
 
@@ -49,31 +48,18 @@ class BenchmarkTokenizer():
             # Now need to normalize according to sequence length. 
             encoded_seq = encoded_seq / seq_length
 
-            encoded_seqs.append(encoded_seq)
-        
-        # if self.padding:
-        #     max_length = len(max(encoded_seqs, key=len))
-        #     for i, seq in enumerate(encoded_seqs):
-        #         # Pad with zeros. 
-        #         seq = np.concat(seq, np.zeros(max_length - len(seq)))
-        #         encoded_seqs[i] = seq 
-
-        return {'input_ids':np.array(encoded_seqs)}
+            encoded_seqs.append(encoded_seq.tolist())
+       
+        # encoded_seqs is now a 2D list. Convert to a tensor for the sake of compatibility
+        return {'input_ids':torch.tensor(encoded_seqs)}
 
 
-# NOTE: Should I make this inheret from a torch.nn.module?
-# class BenchmarkClassifier(torch.nn.Module):
-# I think because there aren't weights being updated, etc. I should not do this. 
 class BenchmarkClassifier():
     '''
     '''
-    def __init__(self, n_components=2):
+    def __init__(self):
 
-        # Want to produce a vector where each dimension corresponds to an amino acid, and the 
-        # value contained represents the count. Also will probably want to normalize the vectors according to overall 
-        # sequence length. 
-        
-        self.n_components = n_components # For the PCA model
+        # self.n_components = n_components # For the PCA model
         self.logreg = LogisticRegression() # (positive=True)
 
     def __call__(self, **kwargs):
@@ -82,114 +68,78 @@ class BenchmarkClassifier():
         '''
         return self.predict(**kwargs)
 
-    def fit(self, input_ids=None, labels=None):
+    def fit(self, data, labels):
         '''
+        Fits the underlying logistic regression model to input data. In this case, labels must be specified. 
+
+        args:
+            - data (np.array)
+            - labels (np.array)
         '''
         # pca = PCA(n_components=self.n_components)
         # pca_outputs = pca.fit_transform(input_ids)
-        
-        # NOTE: Why are the logreg outputs not 1 or 0?
-        self.logreg.fit(input_ids, labels) # Should modify the object. 
-        logreg_outputs = torch.DoubleTensor(self.logreg.predict(input_ids))
-        logreg_probabilities = torch.DoubleTensor(self.logreg.predict_proba(input_ids)[:, 1])
+        self.logreg.fit(data, labels) # Should modify the object. 
 
-        # Calculate loss if labels are specified. 
-        loss = None
-        if labels is not None:
-            # Might need to convert things to tensors for this to work.  
-            # loss = binary_cross_entropy(logreg_outputs, labels)
-            loss = binary_cross_entropy(logreg_probabilities, labels)
-
-        return logreg_outputs, loss
-
-    # Just call the input data input_ids to match the PyTorch conventions. 
-    def predict(self, input_ids=None, labels=None):
+    def predict(self, data, labels=None):
         '''
+        Uses the fitted logistic regression model to predict the labels of the input data. 
+        If labels are given, the test accuracy and lost are returned. 
 
-        kwargs:
-            - input_ids (list): The tokenized input data.
-            - labels (list)
+        args:
+            - data (np.array)
+            - labels (np.array)
         '''
-
-        # Will want to instantiate a new PCA model each time.  
-        # pca = PCA(n_components=self.n_components)
-        # pca_outputs = pca.fit_transform(input_ids)
-
-        # Pass the PCA outputs into the already-fitted linear regression thing. 
-        logreg_outputs = torch.DoubleTensor(self.logreg.predict(input_ids))
-        logreg_probabilities = torch.DoubleTensor(self.logreg.predict_proba(input_ids)[:, 1])
+        # Pass the PCA outputs into the already-fitted logistic regression thing. 
+        preds = self.logreg.predict(data)
+        probs = torch.DoubleTensor(self.logreg.predict_proba(labels)[:, 1])
         
         # Calculate loss if labels are specified. 
         loss = None
         # NOTE: For loss, maybe I should be outputting specific probabilities, not labels. 
         if labels is not None:
             # Might need to convert things to tensors for this to work.  
-            # loss = binary_cross_entropy(logreg_outputs, labels)
-            loss = binary_cross_entropy(logreg_probabilities, labels)
+            loss = binary_cross_entropy(probs, torch.DoubleTensor(labels)).item()
+        
+        return preds, loss
 
-        return logreg_outputs, loss
-
-
-# NOTE: For this to make sense, the batch_sizes for the train and test loader must be the total number
-# of datapoints (only one batch). 
 
 def bench_train(model, train_loader):
     '''
-    Fits the underlying linear regression-based benchmark model to the data. 
+    Fits the underlying linear regression-based benchmark model to the data. This function is just 
+    intended to keep the API consistent with other models. 
 
     args:
         - model (BenchmarkClassifier)
         - train_loader (DataLoader)
     '''
-    for batch in train_loader:
-        # This should pass in both the labels and the input_ids.
-        predictions, loss = model.fit(**batch)
-        accuracy = (predictions == batch['labels']).float().mean()
-        break # Should only be one batch. Maybe a more user-friendly way to do this. 
+    # Both of these should return stuff as Numpy arrays. 
+    data =  train_loader.get_data()
+    labels = train_loader.get_labels()
 
+    # This should pass in both the labels and the input_ids.
+    model.fit(data, labels)
+    preds, loss = model.predict(data, labels=labels)
 
-    # If labels are given, go ahead and calculate loss, accuracy, etc. 
-    return loss.item(), accuracy.item()
+    accuracy = np.mean(preds == labels)
+    return loss, accuracy
 
 
 def bench_test(model, test_loader):
     '''
-    Evaluate the benchmark model on the test data. 
+    Evaluate the benchmark model on the test data. This function is just intended to keep the
+    API consistent with other models. 
 
     args:
         - model (BenchmarkClassifier)
         - test_loader (DataLoader)
     '''
+    # Both of these should return stuff as Numpy arrays. 
+    data = train_loader.get_data()
+    labels = train_loader.get_labels()
 
-    for batch in test_loader: # I think batch is a dictionary?
-        predictions, loss = model(**batch)
-        accuracy = (predictions == batch['labels']).float().mean()
-        break # Should not go through the loop more than once. 
+    preds, loss = model(data, labels=labels)
+    accuracy = np.mean(preds == labels)
 
-    return loss.item(), accuracy.item()
+    return loss, accuracy
 
-
-
-if __name__ == '__main__':
-    pass 
-    # from dataset import SequenceDataset
-    # from torch.utils.data import DataLoader
-
-    # tokenizer = EsmTokenizer.from_pretrained('facebook/esm2_t6_8M_UR50D')
-    # kwargs = {'padding':True, 'truncation':True, 'return_tensors':'pt'}
-
-    # # Grab the pre-loaded embeddings. 
-    # train_embeddings = pd.read_csv('/home/prichter/Documents/protex/data/train_embeddings.csv')
-
-    # train_data = SequenceDataset(pd.read_csv('/home/prichter/Documents/protex/data/train.csv'), tokenizer=tokenizer, embeddings=train_embeddings, **kwargs)
-    # train_loader = DataLoader(train_data, batch_size=64) # Reasonable batch size?
-
-    # # test_data = SequenceDataset(pd.read_csv('/home/prichter/Documents/protex/data/test.csv'), tokenizer=tokenizer, **kwargs)
-    # # test_loader = DataLoader(test_data, batch_size=64) # Reasonable batch size?
-    
-    # model = ESMClassifierV2()
-    # loss = esm_train(model, train_loader, n_epochs=200)
-    # print(loss)
-    
-    # torch.save(model, '/home/prichter/Documents/protex/model_esm_v2.pickle')
 
