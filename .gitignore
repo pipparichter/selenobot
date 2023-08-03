@@ -2,7 +2,9 @@ data/*.csv
 data/*.fasta
 data/*.zip
 data/*.clstr
+data/*.h5
 env/
 .vscode/
 *.pickle
 .ipynb_checkpoints/
+src/__pycache__

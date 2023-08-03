@@ -5,13 +5,9 @@ models, like that defined in /protex/src/bench.py.
 '''
 
 import torch
-import requests
 import pandas as pd
 import numpy as np
-from tqdm import tqdm
-import time
 
-# device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
 class SequenceDataset(torch.utils.data.Dataset):
@@ -25,36 +21,22 @@ class SequenceDataset(torch.utils.data.Dataset):
                 'seq' at minimum, unless the data is already tokenized. 
             - tokenizer (torch.Tokenizer): A tokenizer for converting the sequence data 
                 to numerical data. 
-            - embeddings (pd.DataFrame): Pre-generated embeddings, if applicable. 
+            - embeddings (np.array): Pre-generated embeddings, if applicable. 
             - kwargs: Specs to be passed into the Tokenizer before it is called on the data. 
         '''
         if tokenizer is not None:
-            # Tokenizer should always return a dictionary. One of the keys
-            # should be input_ids, with a tensor as the value.  
             self.data = tokenizer(list(data['seq']), **kwargs)
         else: # If no tokenizer is specified, probably passing in pre-embedded data. 
-            self.data = {'input_ids':torch.Tensor(data.drop(columns=['index']).values)}
+            self.data = {'input_ids':torch.tensor(data.drop(columns=['index']).values)}
 
         # Store as tensor for compatibility Pytorch stuff. 
         self.labels = labels if labels is None else torch.Tensor(labels)
-
-        if 'label' in data.columns:
-            self.labels = torch.tensor(data['label'])
-
+        
+        
         self.length = len(data)
-
-        self.embeddings = None
-        # Load in pre-generated embedding data, if available. Indices should align with dataset indices. 
-        if embeddings is not None:
-            indices = embeddings['index'].values
-            embeddings = embeddings.drop(columns=['index']).values
-            # Sort the embeddings according to the indices. Should already be no duplicates.  
-            embeddings = embeddings[np.argsort(indices)]
-            self.embeddings = torch.tensor(embeddings)
+        self.embeddings = embeddings if embeddings is None else torch.Tensor(embeddings)
 
     def __getitem__(self, idx):
-        # Get an item from the dataset 
-
         item = {key: val[idx] for key, val in self.data.items()}
 
         if self.labels is not None:

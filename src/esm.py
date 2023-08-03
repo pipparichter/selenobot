@@ -43,47 +43,33 @@ class EsmClassifierV2(torch.nn.Module):
 
     def forward(self, input_ids=None, attention_mask=None, labels=None, index=None, embeddings=None):
         '''
+        A forward pass of the EsmClassifierV2. 
 
         args:
-            - input_ids (torch.Tensor): Has a shape of (batch_size, sequence length). I think these are just the tokenized
+            - input_ids (torch.Tensor): Has a shape of (batch_size, sequence length). The tokenized
                 equivalents of each sequence element. 
             - attention_mask (torch.Tensor): A tensor of ones and zeros. 
-            - labels (torch.Tensor): Has a size of (batch_size,). Indicated whether or not a sequence is truncated (1)
-                or full-length (0).
-            - index (int): The indices corresponding to the batch data's original position in the dataset. 
-            - embeddings (np.array): The ESM-generated embedding of the amino acid sequence. 
+            - labels (torch.Tensor): Has a size of (batch_size,). Indicates whether or not a sequence 
+                is a selenoprotein (1) or not (0).
+            - index (?): The indices corresponding to the batch data's original position in the dataset. 
+            - embeddings (?): The ESM-generated embedding of the amino acid sequence. 
         '''
         if embeddings is not None:
             # Make sure data types line up, so the linear layer doesn't flip out. 
             embedding = embeddings.to(self.classifier.weight.dtype)
         else: # Only bother doing a forward pass if the embedding is not already generated. 
-            # Extract the weights from the model.
             last_hidden_state = self.esm(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
-            # Decided on sigmoid activation, not sure if something else is better. 
-            last_hidden_state = torch.nn.functional.sigmoid(last_hidden_state)
             embedding = torch.mean(last_hidden_state, 1)
-            # Will be useful to write the encodings to a file. Should be a sequence of 320-dimensional vectors. 
 
-        # NOTE: Do we want to take the average before or after nonlinear normalization?
-        # Probably before?
         logits = self.classifier(embedding)
         logits = torch.nn.functional.sigmoid(logits)
         
-        # CODE FOR WRITING ESM EMBEDDINGS ----------------------------------------------
-        # # Easiest thing to do is probably convert from tensor to numpy to CSV. 
-        # encoding = encoding.numpy()
-        # encoding = pd.DataFrame(embedding) # Not sure what the column names will be here?
-        # encoding.to_csv('/home/prichter/Documents/protex/data/test_embeddings.csv', index=False, header=False, mode='a')
-
-        # indices = pd.DataFrame(index.numpy())
-        # indices.to_csv('/home/prichter/Documents/protex/data/test_indices.csv', index=False, header=False, mode='a')
-        # ------------------------------------------------------------------------------
-
         loss = None
         if labels is not None:
             loss = binary_cross_entropy(torch.reshape(logits, labels.size()), labels.to(logits.dtype))
         
         return logits, loss
+        
 
 class EsmClassifierV1(torch.nn.Module):
     
@@ -124,14 +110,8 @@ class EsmClassifierV1(torch.nn.Module):
         return logits, loss
 
 
-# TODO: This is code duplication. Probably should come up with a way to organize functions. 
-# Also kind of reluctant to put this in utils, because that's mostly file reading and writing.  
-def esm_train(model, train_loader, test_loader=None, n_epochs=300):
+def esm_train(model, train_dataloader, test_dataloader=None, n_epochs=300):
     '''
-
-    args:
-        - model (torch.nn.Module)
-        - train_loader (torch.utils.data.DataLoader)
     '''
     model = model.to(device) # Make sure everything is running on the GPU. 
 
@@ -146,9 +126,9 @@ def esm_train(model, train_loader, test_loader=None, n_epochs=300):
     for epoch in tqdm(range(n_epochs), desc='Training classifier...'):
 
         batch_count = 0
-        batch_total = len(train_loader)
+        batch_total = len(train_dataloader)
 
-        for batch in train_loader:
+        for batch in train_dataloader:
             print(f'BATCH {batch_count}/{batch_total}\t', end='\r')
             batch_count += 1
 
@@ -161,13 +141,13 @@ def esm_train(model, train_loader, test_loader=None, n_epochs=300):
         
         losses['train'].append(loss.item()) # Add losses to a history. 
         
-        if test_loader is not None:
-            # test_loss, accuracy = esm_test(model, test_loader)
-            test_loss, _ = esm_test(model, test_loader)
-            losses['test'].append(test_loss.item())
-            # losses['accuracy'].append(accuracy.item())
-            # Make sure to put the model back in train mode. 
-            model.train()
+        # if test_loader is not None:
+        #     # test_loss, accuracy = esm_test(model, test_loader)
+        #     test_loss, _ = esm_test(model, test_loader)
+        #     losses['test'].append(test_loss.item())
+        #     # losses['accuracy'].append(accuracy.item())
+        #     # Make sure to put the model back in train mode. 
+        #     model.train()
 
     return losses
 

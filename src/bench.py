@@ -11,6 +11,8 @@ import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
+# TODO: Possibly re-name the tokenizer to like, AAC tokenizer. 
+
 # Tokenizer class to mimic the HuggingFace interface.   
 # This class is used within SequenceDataset class. This class takes the entire DataFrame upon instantiation,
 # and handles the labels this way. 
@@ -31,7 +33,6 @@ class BenchmarkTokenizer():
         args:
             - data (list): A list of amino acid sequences. 
         '''
-
         # Map each amino acid to an integer using self.map_
         mapped = [np.array([self.map_[res] for res in seq]) for seq in data]
 
