@@ -4,30 +4,21 @@ import numpy as np
 import torch
 
 import sys
-sys.path.append('/home/prichter/Documents/protex/src')
+sys.path.append('/home/prichter/Documents/selenobot/src')
 from src.dataset import SequenceDataset
-from src.esm import EsmClassifierV1, EsmClassifierV2, esm_test, esm_train
+from src.esm import EsmClassifierV2, esm_test, esm_train
 from src.bench import BenchmarkClassifier, BenchmarkTokenizer
 from torch.utils.data import DataLoader
 from transformers import EsmModel, EsmTokenizer, AutoTokenizer
 
 from src.plot import *
 
-figure_dir = '/home/prichter/Documents/protex/figures/'
-data_dir = '/home/prichter/Documents/protex/data/'
+figure_dir = '/home/prichter/Documents/selenobot/figures/'
+data_dir = '/home/prichter/Documents/selenobot/data/'
 
-def generate_esm_embedding(sequences):
-    '''
-    Tokenize an input amino acid sequence, and plug it into the ESM model. Produces
-    an embedding of the sequence in a new latent space. 
+import h5py
 
-    args:
-        - sequences (list): A list of amino acid sequences, given as strings. 
-    '''
-    model = EsmModel.from_pretrained('facebook/esm2_t6_8M_UR50D')
-    inputs = EsmTokenizer(sequences)
-    
-
+def get_h5_embedding(filename, keyset=None):
 # def summary(model):
 #     '''
 #     Print out a summary of the model weights, and which parameters are trainable. 
@@ -56,8 +47,8 @@ def generate_esm_embedding(sequences):
 
 if __name__ == '__main__':
 
-    train_data = pd.read_csv('/home/prichter/Documents/protex/data/train.csv')
-    test_data = pd.read_csv('/home/prichter/Documents/protex/data/test.csv')
+    train_data = pd.read_csv(data_dir + 'train.csv')
+    test_data = pd.read_csv(data_dir + 'test.csv')
     
     train_embeddings_esm = np.loadtxt(data_dir + 'train_embeddings_esm.csv', delimiter=',')
     train_embeddings_acc = np.loadtxt(data_dir + 'train_embeddings_acc.csv', delimiter=',')
@@ -139,11 +130,7 @@ if __name__ == '__main__':
     # # ------------------------------------------------------------------------------------------
     
     # # EsmClassifierV2 --------------------------------------------------------------------------
-
-    # tokenizer = AutoTokenizer.from_pretrained('facebook/esm2_t6_8M_UR50D')
-    # # Load in the train and test Datasets with pre-generated embeddings. 
-    # kwargs = {'tokenizer':tokenizer, 'return_tensors':'pt', 'padding':True, 'truncation':True}
-    # test_dataset = SequenceDataset(test_data, labels=test_data['label'].values, embeddings=test_embeddings_esm, **kwargs)
+   # test_dataset = SequenceDataset(test_data, labels=test_data['label'].values, embeddings=test_embeddings_esm, **kwargs)
     # train_dataset = SequenceDataset(train_data, labels=train_data['label'].values, embeddings=train_embeddings_esm, **kwargs)
 
     # # Now use ESM V2 to generate the same plots. Load up the pre-trained model
@@ -176,24 +163,30 @@ if __name__ == '__main__':
     # (in place of the ESM embeddings). 
     # ------------------------------------------------------------------------------------------
 
-    train_embeddings_prot5 = pd.read_hdf(data_dir + 'train.28Jul2023.embeddings.h5')
-    test_embeddings_prot5 = pd.read_hdf(data_dir + 'test.28Jul2023.embeddings.h5')
+    train_embeddings_prot5, _ = get_h5_embedding(data_dir + 'train.28Jul2023.embeddings.h5')
+    train_embeddings_prot5 = train_embeddings_prot5.values
+ 
+    test_embeddings_prot5, gene_names = get_h5_embedding(data_dir + 'test.28Jul2023.embeddings.h5')
+    assert np.all(np.array(gene_names) == test_data['id'].values)
+    test_embeddings_prot5 = test_embeddings_prot5.values
+
+    
+    # train_embeddings_prot5 = pd.read_hdf(data_dir + 'train.28Jul2023.embeddings.h5')
+    # test_embeddings_prot5 = pd.read_hdf(data_dir + 'test.28Jul2023.embeddings.h5')
  
     tokenizer = AutoTokenizer.from_pretrained('facebook/esm2_t6_8M_UR50D')
     # Load in the train and test Datasets with pre-generated embeddings. 
     kwargs = {'tokenizer':tokenizer, 'return_tensors':'pt', 'padding':True, 'truncation':True}
-    test_dataset = SequenceDataset(test_data, labels=test_data['label'].values, embeddings=train_embeddings_prot5, **kwargs)
-    train_dataset = SequenceDataset(train_data, labels=train_data['label'].values, embeddings=t, **kwargs)
+    test_dataset = SequenceDataset(test_data, labels=test_data['label'].values, embeddings=test_embeddings_prot5, **kwargs)
+    train_dataset = SequenceDataset(train_data, labels=train_data['label'].values, embeddings=train_embeddings_prot5, **kwargs)
 
     # Now use ESM V2 to generate the same plots. Load up the pre-trained model
-    test_dataloader = DataLoader(test_dataset, batch_size=128, shuffle=True)
-    train_dataloader = DataLoader(train_dataset, batch_size=128, shuffle=True)
+    test_dataloader = DataLoader(test_dataset, batch_size=128, shuffle=False)
+    train_dataloader = DataLoader(train_dataset, batch_size=128, shuffle=False)
 
-    # esm_v2_model = EsmClassifierV2()
-    # losses = esm_train(esm_v2_model, train_dataloader)
-    # torch.save(esm_v2_model, 'esm_v2_model.pickle') # Save the trained model. 
+    esm_v2_model = EsmClassifierV2()
+    losses = esm_train(esm_v2_model, train_dataloader, n_epochs=100)
 
-    esm_v2_model = torch.load('/home/prichter/Documents/protex/esm_v2_model.pickle')
     output = esm_test(esm_v2_model, test_dataloader)
 
     # print('LOSS:', output['loss'])
@@ -205,8 +198,7 @@ if __name__ == '__main__':
     labels = np.array(labels)
      
     palette = {'correct':'green', 'incorrect':'red'}
-    plot_embeddings(train_embeddings_prot5, labels=labels, title='Prot5 predictions in AAC embedding space', n_points=300, filename=figure_dir + 'embeddings_aac_with_esmv2_prediction.png', palette=palette)
-    plot_embeddings(test_embeddings_esm, labels=labels, title='Prot5 predictions in ESM embedding space', n_points=300, filename=figure_dir + 'embeddings_esm_with_esmv2_prediction.png', palette=palette)
+    plot_embeddings(test_embeddings_prot5, labels=labels, title='Classifier predictions using Prot5 embeddings', n_points=300, filename=figure_dir + 'embeddings_prot5_with_prediction.png', palette=palette)
 
 
     

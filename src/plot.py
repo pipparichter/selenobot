@@ -4,7 +4,8 @@ Plotting utilities for the ProTex tool.
 # # Where is tensorflow being imported such that I even need to shut it up??
 # import tensorflow as tf
 # tf.logging.set_verbosity(tf.logging.WARN)
-
+import sys
+sys.path.append('/home/prichter/Documents/selenobot/src/')
 import matplotlib.pyplot as plt
 import seaborn as sns
 import dataset 
