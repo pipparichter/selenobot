@@ -27,7 +27,7 @@ class Classifier(torch.nn.Module):
         '''
         This function should be overwritten in classes which inherit from this one. 
         '''
-        # TODO: Probably shoulprint(dir(pr5_test_dataset))d have an error message pop up if this is ever called. 
+        # TODO: Probably should have an error message pop up if this is ever called. 
         return None, None
 
     def test_(self, dataloader):
@@ -52,7 +52,7 @@ class Classifier(torch.nn.Module):
 
         losses = {'train':[], 'test':[]}
 
-        optimizer = torch.optim.Adam(self.parameters(), lr=0.01)
+        optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
         # This is trying to call train recursively...
         # self.train() # Put the model in training mode. 
 
@@ -156,8 +156,7 @@ class EmbeddingClassifier(Classifier):
         data = data.type(self.classifier.weight.dtype)
 
         logits = self.classifier(data)
-        logits = torch.nn.functional.sigmoid(logits)
-        
+        logits = torch.nn.functional.sigmoid(logits)        
         loss = None
         if label is not None:
             loss = torch.nn.functional.binary_cross_entropy(torch.reshape(logits, label.size()), label.to(logits.dtype))
