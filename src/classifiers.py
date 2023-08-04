@@ -8,8 +8,6 @@ import os
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
-from torch.optim import Adam
-from torch.nn.functional import cross_entropy, binary_cross_entropy
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -21,7 +19,62 @@ class Classifier(torch.nn.Module):
     def __init__(self):
 
         super(Classifier, self).__init__()
+
+        # Make sure everything is running on GPU. 
+        self.to(device)
+
+    def forward(self):
+        '''
+        This function should be overwritten in classes which inherit from this one. 
+        '''
+        # TODO: Probably shoulprint(dir(pr5_test_dataset))d have an error message pop up if this is ever called. 
+        return None, None
+
+    def test_(self, dataloader):
+        '''
+        '''
+        self.eval() # Put the model in evaluation mode. 
+
+        losses = []
+
+        for batch in dataloader: 
+            batch = {key:torch.Tensor(batch[key]) for key in ['data', 'label']}
+            logits, loss = self(**batch)
         
+            losses.append(loss.item()) # Add losses to a history. 
+
+        return np.mean(losses) # Return the loss averaged over each batch. 
+
+    def train_(self, dataloader, test_dataloader=None, epochs=300):
+        '''
+        '''
+        self.train() # Put the model in train mode. 
+
+        losses = {'train':[], 'test':[]}
+
+        optimizer = torch.optim.Adam(self.parameters(), lr=0.01)
+        # This is trying to call train recursively...
+        # self.train() # Put the model in training mode. 
+
+        for epoch in tqdm(range(epochs)):
+
+            for batch in dataloader:
+                batch = {key:torch.Tensor(batch[key]) for key in ['data', 'label']}
+                logits, loss = self(**batch)
+                loss.backward() #
+                optimizer.step() 
+                optimizer.zero_grad()
+            
+            losses['train'].append(loss.item()) # Add losses to a history. 
+            
+            if test_dataloader is not None:
+                test_loss = self.test_(test_dataloader)
+                losses['test'].append(test_loss)
+                # Make sure to put the model back in train mode. 
+                self.train() 
+        
+        return losses
+
 
 class NextTokenClassifier(Classifier):
     '''
@@ -83,71 +136,54 @@ class NextTokenClassifier(Classifier):
 class EmbeddingClassifier(Classifier):
     '''
     '''
-    
-    def __init__(self):
+    def __init__(self, latent_dim):
+        '''
+
+        '''
 
         # Initialize the super class, torch.nn.Module. 
         super(EmbeddingClassifier, self).__init__()
 
-
-        # Should be 320... 
-        # hidden_size = self.esm.get_submodule('encoder.layer.5.output.dense').out_features
-        self.latent_dim = None
-        self.classifier = torch.nn.Linear(self.self.latent_dim, 1)
+        self.classifier = torch.nn.Linear(latent_dim, 1)
 
 
-    def forward(self, embedding=None, labels=None):
+    def forward(self, data=None, label=None, **kwargs):
         '''
-        A forward pass of the EmbeddingClassifier
+        A forward pass of the EmbeddingClassifier. In this case, the data 
+        passed into the function should be sequence embeddings. 
         '''
-        logits = self.classifier(embedding)
+        # Make sure the data is of the same type as the layer weights. 
+        data = data.type(self.classifier.weight.dtype)
+
+        logits = self.classifier(data)
         logits = torch.nn.functional.sigmoid(logits)
         
         loss = None
-        if labels is not None:
-            loss = binary_cross_entropy(torch.reshape(logits, labels.size()), labels.to(logits.dtype))
+        if label is not None:
+            loss = torch.nn.functional.binary_cross_entropy(torch.reshape(logits, label.size()), label.to(logits.dtype))
         
         return logits, loss
  
 
+if __name__ == '__main__':
 
-def esm_train(model, train_dataloader, test_dataloader=None, n_epochs=300):
-    '''
-    '''
-    model = model.to(device) # Make sure everything is running on the GPU. 
+    from datasets import *
+    from torch.utils.data import DataLoader
 
-    # losses = {'train':[], 'test':[], 'accuracy':[]}
-    losses = {'train':[], 'test':[]}
+    figure_dir = '/home/prichter/Documents/selenobot/figures/'
+    data_dir = '/home/prichter/Documents/selenobot/data/'
 
-    optimizer = Adam(model.parameters(), lr=0.01)
-    # optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
-
-    model.train() # Put the model in training mode. 
-
-    for epoch in tqdm(range(n_epochs), desc='Training classifier...'):
-
-        batch_count = 0
-        batch_total = len(train_dataloader)
-
-        for batch in train_dataloader:
-            print(f'BATCH {batch_count}/{batch_total}\t', end='\r')
-            batch_count += 1
-
-            batch = {k: v.to(device) for k, v in batch.items()} # Mount on the GPU. 
-
-            logits, loss = model(**batch)
-            loss.backward() #
-            optimizer.step() 
-            optimizer.zero_grad()
-        
-        losses['train'].append(loss.item()) # Add losses to a history. 
-        
-        # if test_loader is not None:
-        #     # test_loss, accuracy = esm_test(model, test_loader)
-        #     test_loss, _ = esm_test(model, test_loader)
-        #     losses['test'].append(test_loss.item())
-        #     # losses['accuracy'].append(accuracy.item())
-        #     # Make sure to put the model back in train mode. 
-        #     model.train()
-
+    train_data = pd.read_csv(data_dir + 'train.csv')
+    test_data = pd.read_csv(data_dir + 'test.csv')
  
+    dataset = EmbeddingDataset.from_csv(data_dir + 'train_embeddings_pr5.csv')
+
+    dataloader = DataLoader(dataset, batch_size=32)
+
+    # TODO: Probably should just allow you to specify a hidden dimension. 
+    classifier = EmbeddingClassifier(dataset.latent_dim)
+    classifier.train(dataloader)
+
+
+
+

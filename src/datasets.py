@@ -33,15 +33,13 @@ class Dataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
 
         item = {'data':self.data[idx]}
-
-        for key, val in self.metadata.items():
-            item[key] = val[idx]
+        
+        if self.metadata is not None:
+            for key, val in self.metadata.items():
+                item[key] = val[idx]
 
         return item
 
-    def tokenize(self, tokenizer):
-
-        self.data = tokenizer(self.data)
 
     def to_csv(self, filename):
 
@@ -72,6 +70,10 @@ class EmbeddingDataset(Dataset):
     def embed(self, data, embedder=None, tokenizer=None):
         '''
         '''
+        # If no embedder is specified, don't do anything to the data. 
+        if embedder is None:
+            return data
+
         batch_size = 10
         n_batches = (len(data) // batch_size) + 1
         # Get indices for batch elements.  
@@ -89,33 +91,42 @@ class EmbeddingDataset(Dataset):
             batch_data = {key:value[batch].to(device) for key, value in data.items()}
 
             embeddings.append(embedder(**batch_data))
-            # x = embedder(**batch_data)
-            # print(x)
 
         # Return the embedded data, which will be passed into the parent class constructor. 
         return np.concat(embeddings)
 
-    def from_h5(filename):
-        '''
-        Load an EmbeddingDataset object from a file.
-        '''
+    # def from_h5(filename, metadata=None):
+    #     '''
+    #     Load an EmbeddingDataset object from a .h5 file.
+    #     '''
 
-        f = h5py.File(filename)
-        Xg = [] # What is this?
+    #     file_ = h5py.File(filename)
+    #     data = [] 
+    #     gene_names = file_.keys()
 
-        if keyset is None:
-            gene_names = list(f.keys())
-        else:
-            gene_names = keyset
-            
-        for key in gene_names:
-            # What does this do?
-            Xg.append(f[key][()])
+    #     for key in gene_names:
+    #         # What does this do?
+    #         data.append(file_[key][()])
         
-        f.close()
-        Xg = pd.DataFrame(np.asmatrix(Xg), index=gene_names)
+    #     file_.close()
+
+    #     data = np.array(data)
+
+    #     return EmbeddingDataset(data, metadata=metadata)
+
+    def from_csv(filename):
         
-        return Xg, gene_names
+        # For now, expect columns id (which is the index), labels, and the embedding. 
+        df = pd.read_csv(filename)
+        
+        # to_dict was being weird here, for whatever reason. 
+        metadata = {}
+        metadata['label'] = df['label'].values
+        metadata['id'] = df['id'].values
+        
+        data = df.drop(columns=['label', 'id']).values
+
+        return EmbeddingDataset(data, metadata=metadata)
 
 
     def to_csv(self, filename):
@@ -195,13 +206,11 @@ class AacEmbeddingDataset(EmbeddingDataset):
             embeddings.append(e.tolist())
        
         # encoded_seqs is now a 2D list. Convert to numpy array for storage. 
-        return torch.Tensor(embeddings)
-
+        return np.array(embeddings)
 
 
 # Testing!
 if __name__ == '__main__':
-
 
     figure_dir = '/home/prichter/Documents/selenobot/figures/'
     data_dir = '/home/prichter/Documents/selenobot/data/'
@@ -212,7 +221,9 @@ if __name__ == '__main__':
     # data = AacEmbeddingDataset(train_data['seq'].values)
     seqs = train_data['seq'].values
     metadata = train_data.drop(columns=['seq']).to_dict()
-    data = EsmEmbeddingDataset(seqs, metadata=metadata)
+    # data = EsmEmbeddingDataset(seqs, metadata=metadata)
+
+    dataset = EmbeddingDataset.from_csv(data_dir + 'test_embeddings_pr5.csv')
 
 
 
