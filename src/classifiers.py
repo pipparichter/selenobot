@@ -23,6 +23,10 @@ class Classifier(torch.nn.Module):
         # Make sure everything is running on GPU. 
         self.to(device)
 
+        self.losses = {'train':[], 'test':[]} # Store the model training losses. 
+        self.preds = None # Store the predictions on training and test sets. 
+
+
     def forward(self):
         '''
         This function should be overwritten in classes which inherit from this one. 
@@ -51,6 +55,7 @@ class Classifier(torch.nn.Module):
         self.train() # Put the model in train mode. 
 
         losses = {'train':[], 'test':[]}
+        preds = []
 
         optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
         # This is trying to call train recursively...
@@ -58,21 +63,29 @@ class Classifier(torch.nn.Module):
 
         for epoch in tqdm(range(epochs)):
 
+            batch_losses = []
+
             for batch in dataloader:
                 batch = {key:torch.Tensor(batch[key]) for key in ['data', 'label']}
                 logits, loss = self(**batch)
+
                 loss.backward() #
                 optimizer.step() 
                 optimizer.zero_grad()
+
+                batch_losses.append(loss.item())
             
-            losses['train'].append(loss.item()) # Add losses to a history. 
+            losses['train'].append(np.mean(batch_losses)) # Add losses to a history. 
             
             if test_dataloader is not None:
                 test_loss = self.test_(test_dataloader)
                 losses['test'].append(test_loss)
                 # Make sure to put the model back in train mode. 
                 self.train() 
-        
+
+            #
+
+        self.losses = losses 
         return losses
 
 
@@ -140,12 +153,17 @@ class EmbeddingClassifier(Classifier):
         '''
 
         '''
+        hidden_dim = 512
 
         # Initialize the super class, torch.nn.Module. 
         super(EmbeddingClassifier, self).__init__()
-
-        self.classifier = torch.nn.Linear(latent_dim, 1)
-
+        
+        # Subbing in Josh's classification head. 
+        self.classifier = torch.nn.Sequential(
+            torch.nn.Linear(latent_dim, hidden_dim),
+            torch.nn.ReLU(),
+            torch.nn.Linear(hidden_dim, 1),
+            torch.nn.Sigmoid())
 
     def forward(self, data=None, label=None, **kwargs):
         '''
@@ -153,10 +171,10 @@ class EmbeddingClassifier(Classifier):
         passed into the function should be sequence embeddings. 
         '''
         # Make sure the data is of the same type as the layer weights. 
-        data = data.type(self.classifier.weight.dtype)
+        data = data.type(torch.float32)
 
         logits = self.classifier(data)
-        logits = torch.nn.functional.sigmoid(logits)        
+        # logits = torch.nn.functional.sigmoid(logits)        
         loss = None
         if label is not None:
             loss = torch.nn.functional.binary_cross_entropy(torch.reshape(logits, label.size()), label.to(logits.dtype))

@@ -49,7 +49,8 @@ class Dataset(torch.utils.data.Dataset):
         df['seq'] = self.data
         df = pd.DataFrame(df) # Convert the dictionary to a DataFrame. 
 
-        df.to_csv(filename, index=True, index_labels=list(self.metadata.keys()))
+        df = df.set_index('id')
+        df.to_csv(filename, index=True, index_label='id')
 
     def __len__(self):
         return self.length
@@ -86,14 +87,14 @@ class EmbeddingDataset(Dataset):
             data = {'seqs':data}
 
         embeddings = []
-        for batch in batches:
+        for batch in tqdm(batches):
             # Extract the batch data, and spin up on to a GPU, if available. 
             batch_data = {key:value[batch].to(device) for key, value in data.items()}
 
             embeddings.append(embedder(**batch_data))
 
         # Return the embedded data, which will be passed into the parent class constructor. 
-        return np.concat(embeddings)
+        return np.concatenate(embeddings)
 
     # def from_h5(filename, metadata=None):
     #     '''
@@ -139,9 +140,11 @@ class EmbeddingDataset(Dataset):
             df[key] = value 
 
         # I don't think it makes sense to write the sequences to the embedding file. 
-        df = df.drop(columns=['seq']) 
+        if 'seq' in df.columns:
+            df = df.drop(columns=['seq']) 
 
-        df.to_csv(filename, index=True, index_labels=list(self.metadata.keys()))
+        df = df.set_index('id')
+        df.to_csv(filename, index=True, index_label='id')
 
 
 class EsmEmbeddingDataset(EmbeddingDataset):
@@ -149,23 +152,75 @@ class EsmEmbeddingDataset(EmbeddingDataset):
     # TODO: Look more into what setting attributes up here does. 
 
     model_name = 'facebook/esm2_t6_8M_UR50D'
+    # model_name = 'esm2_t36_3B_UR50D'
     model = transformers.EsmModel.from_pretrained(model_name).to(device)
     tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
     
-    def __init__(self, data, metadata=None):
+    def __init__(self, data, metadata=None, version=2):
         '''
         '''
-        super(EsmEmbeddingDataset, self).__init__(data, metadata=metadata, embedder=EsmEmbeddingDataset.embedder, tokenizer=EsmEmbeddingDataset.tokenizer)
+        self.version = version 
 
-    def embedder(input_ids=None, attention_mask=None):
-        
+        super(EsmEmbeddingDataset, self).__init__(data, metadata=metadata, embedder=self.embedder, tokenizer=EsmEmbeddingDataset.tokenizer)
+
+    def embedder(self, input_ids=None, attention_mask=None):
+
+        if self.version == 1:
+            return EsmEmbeddingDataset._v1(input_ids=input_ids, attention_mask=attention_mask)
+        elif self.version == 2:
+            return EsmEmbeddingDataset._v2(input_ids=input_ids, attention_mask=attention_mask)
+    
+    def _v2(input_ids=None, attention_mask=None):
+        '''
+        Generates a sequence embedding using the CLS token. 
+        '''
+        EsmEmbeddingDataset.model.eval() # Put the model in evaluation mode. 
+        # Extract the pooler output. 
+        output = EsmEmbeddingDataset.model(input_ids=input_ids, attention_mask=attention_mask).pooler_output
+        # If I don't convert to a numpy array, the process crashes. 
+        return output.detach().numpy()
+
+    def _v1(input_ids=None, attention_mask=None):
+        '''
+        Generates a sequence embedding by mean-pooling over the sequence length. 
+        '''
         EsmEmbeddingDataset.model.eval() # Put the model in evaluation mode. 
 
         output = EsmEmbeddingDataset.model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
-
-        # If I don't convert to a numpy array, the process crashes. 
-        return torch.mean(output, 1).detach().numpy()
  
+        # Sum the attention mask to get the length of each sequence. 
+        denominator = torch.sum(attention_mask, -1, keepdim=True)
+       
+        # Get the dimensions of the attention mask to work. 
+        attention_mask = torch.unsqueeze(attention_mask, dim=-1)
+        attention_mask = attention_mask.expand(-1, -1, 320)
+
+        # Apply the attention mask to the output to effectively remove padding. 
+        numerator = torch.mul(attention_mask, output)
+        # Now sum up over the sequence length dimension. 
+        numerator = torch.sum(numerator, dim=1) # Confirmed the shape is correct. 
+
+        
+        # EsmEmbeddingDataset.check_masking(numerator, output, attention_mask)
+        return torch.divide(numerator, denominator).detach().numpy()
+        # I checked to make sure this was doing what I thought. 
+        
+
+    # def check_masking(X, output, attention_mask):
+
+    #     # Pobably easiest thing to do here is ravel and iterate. 
+    #     # All three arguments should have the same dimension at this point. 
+    #     if not ((X.shape == output.shape) and (X.shape == attention_mask.shape)):
+    #         raise Exception('Dimensions of ESM model output, attention mask, and result of attention mask application do not match.')
+
+    #     # Maybe a cleaner way to do this. Easiest thing is probably flatten and iterate over 1D tensors. 
+    #     X, output, attention_mask = torch.flatten(X), torch.flatten(output), torch.flatten(attention_mask)
+    #     for x, o, a in zip(X, output, attention_mask):
+    #         if (a == 0) and (x != 0):
+    #             raise Exception('Attention mask and numerator elements are mismatched.')
+    #         if (a == 1) and (x != o):
+    #             raise Exception('Output and numerator elements are mismatched.')
+                
 
 # TODO: Support different return types. 
 
@@ -223,8 +278,11 @@ if __name__ == '__main__':
     metadata = train_data.drop(columns=['seq']).to_dict()
     # data = EsmEmbeddingDataset(seqs, metadata=metadata)
 
-    dataset = EmbeddingDataset.from_csv(data_dir + 'test_embeddings_pr5.csv')
-
+    esm_train_dataset = EsmEmbeddingDataset(train_data['seq'].values, metadata={'id':train_data['id'].values, 'label':train_data['label'].values}, version=1)
+    # esm_train_dataset.to_csv(data_dir + 'train_embeddings_esm_v2.csv')
+    
+    esm_test_dataset = EsmEmbeddingDataset(test_data['seq'].values, metadata={'id':test_data['id'].values, 'label':test_data['label'].values})
+    # esm_test_dataset.to_csv(data_dir + 'test_embeddings_esm_v2.csv')
 
 
 

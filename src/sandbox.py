@@ -31,21 +31,38 @@ def h5_to_df(filename):
     return df
 
 
-# df1 = h5_to_df(data_dir + 'test.28Jul2023.embeddings.h5')
+df1 = pd.read_csv(data_dir + 'test_embeddings_esm_v1.csv')
+df1 = df1.astype({'id':'string'})
+
+df2 = pd.read_csv(data_dir + 'test_embeddings_esm_v2.csv')
+df2 = df2.astype({'id':'string'})
+
+df = df1.merge(df2, on='id', how='left')
+# print(df[['label_x', 'label_y']].head())
+
+assert np.all(df['label_x'] == df['label_y'])
+
+
+
+# # df1 = h5_to_df(data_dir + 'test.28Jul2023.embeddings.h5')
+# df = pd.read_csv(data_dir + 'test_embeddings_esm.csv', header=None)
+# print(len(df))
 
 # df2 = pd.read_csv(data_dir + 'test.csv', usecols=['label', 'id']) #, index_col='id')
 # df2 = df2.astype({'id':'string'})
+# df['id'] = df2['id']
+# df['label'] = df2['label']
 
-# df = df1.merge(df2, on='id', how='left')
-# # Make sure the merge worked as intended. 
-# assert (len(df1) == len(df)) and (len(df2) == len(df))
+# # # Make sure the merge worked as intended. 
+# # assert (len(df1) == len(df)) and (len(df2) == len(df))
 
 # df = df.set_index('id')
-# df.to_csv(data_dir + 'test_embeddings_pr5.csv')
+# print(df.shape)
+# df.to_csv(data_dir + 'test_embeddings_esm_v1.csv')
 
-# df = pd.read_csv(data_dir + 'train.csv', index_col=0)
-# df = df.set_index('id')
-# df.to_csv(data_dir + 'train.csv')
+# # df = pd.read_csv(data_dir + 'train.csv', index_col=0)
+# # df = df.set_index('id')
+# # df.to_csv(data_dir + 'train.csv')
 
 
 
