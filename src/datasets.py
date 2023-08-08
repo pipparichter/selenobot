@@ -9,6 +9,7 @@ import transformers
 import torch
 import h5py
 from tqdm import tqdm
+import os 
 
 # I should probably think about a consistent format for all the embeddings. 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -75,7 +76,7 @@ class EmbeddingDataset(Dataset):
         if embedder is None:
             return data
 
-        batch_size = 10
+        batch_size = 1 
         n_batches = (len(data) // batch_size) + 1
         # Get indices for batch elements.  
         batches = np.array_split(np.arange(len(data)), n_batches)
@@ -152,7 +153,7 @@ class EsmEmbeddingDataset(EmbeddingDataset):
     # TODO: Look more into what setting attributes up here does. 
 
     model_name = 'facebook/esm2_t6_8M_UR50D'
-    # model_name = 'esm2_t36_3B_UR50D'
+    # model_name = 'facebook/esm2_t36_3B_UR50D'
     model = transformers.EsmModel.from_pretrained(model_name).to(device)
     tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
     
@@ -178,7 +179,7 @@ class EsmEmbeddingDataset(EmbeddingDataset):
         # Extract the pooler output. 
         output = EsmEmbeddingDataset.model(input_ids=input_ids, attention_mask=attention_mask).pooler_output
         # If I don't convert to a numpy array, the process crashes. 
-        return output.detach().numpy()
+        return output.cpu().detach().numpy()
 
     def _v1(input_ids=None, attention_mask=None):
         '''
@@ -202,7 +203,7 @@ class EsmEmbeddingDataset(EmbeddingDataset):
 
         
         # EsmEmbeddingDataset.check_masking(numerator, output, attention_mask)
-        return torch.divide(numerator, denominator).detach().numpy()
+        return torch.divide(numerator, denominator).cpu().detach().numpy()
         # I checked to make sure this was doing what I thought. 
         
 
@@ -264,25 +265,21 @@ class AacEmbeddingDataset(EmbeddingDataset):
         return np.array(embeddings)
 
 
-# Testing!
 if __name__ == '__main__':
+    # os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb=32'
+    torch.cuda.empty_cache()
 
     figure_dir = '/home/prichter/Documents/selenobot/figures/'
-    data_dir = '/home/prichter/Documents/selenobot/data/'
+    data_dir = '~/'
 
     train_data = pd.read_csv(data_dir + 'train.csv')
     test_data = pd.read_csv(data_dir + 'test.csv')
  
-    # data = AacEmbeddingDataset(train_data['seq'].values)
-    seqs = train_data['seq'].values
-    metadata = train_data.drop(columns=['seq']).to_dict()
-    # data = EsmEmbeddingDataset(seqs, metadata=metadata)
-
-    esm_train_dataset = EsmEmbeddingDataset(train_data['seq'].values, metadata={'id':train_data['id'].values, 'label':train_data['label'].values}, version=1)
-    # esm_train_dataset.to_csv(data_dir + 'train_embeddings_esm_v2.csv')
+    esm_train_dataset = EsmEmbeddingDataset(train_data['seq'].values, metadata={'id':train_data['id'].values, 'label':train_data['label'].values}, version=2)
+    esm_train_dataset.to_csv(data_dir + 'train_esm2_t6_8M_UR50D_v2.csv')
     
-    esm_test_dataset = EsmEmbeddingDataset(test_data['seq'].values, metadata={'id':test_data['id'].values, 'label':test_data['label'].values})
-    # esm_test_dataset.to_csv(data_dir + 'test_embeddings_esm_v2.csv')
+    esm_test_dataset = EsmEmbeddingDataset(test_data['seq'].values, metadata={'id':test_data['id'].values, 'label':test_data['label'].values}, version=2)
+    esm_test_dataset.to_csv(data_dir + 'test_esm2_t6_8M_UR50D_v2.csv')
 
 
 
