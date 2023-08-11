@@ -19,7 +19,9 @@ colors = sns.color_palette('Paired')
 palette = 'Paired'
 
 
+def plot_loss_curve(losses):
 
+    pass
 
 def plot_embeddings(embeddings, n_points=100, labels=None, filename=None, title=None, palette='Paired', **kwargs):
     '''

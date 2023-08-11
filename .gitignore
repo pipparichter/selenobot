@@ -4,6 +4,7 @@ data/*.zip
 data/*.clstr
 data/*.h5
 env/
+.data
 .vscode/
 *.pickle
 .ipynb_checkpoints/

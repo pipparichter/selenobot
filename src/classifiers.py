@@ -122,7 +122,7 @@ class NextTokenClassifier(Classifier):
             # See https://huggingface.co/nferruz/ProtGPT2/discussions/20. 
             next_token_idx = idxs[0] if (idxs[0] != 199) else idxs[1]
 
-            print(label, self.tokenizer.decode(next_token_idx))
+            # print(label, self.tokenizer.decode(next_token_idx))
 
             if next_token_idx == 0: # This is the index for the end-of-text character. 
                 preds.append(0)
@@ -149,7 +149,7 @@ class NextTokenClassifier(Classifier):
 class EmbeddingClassifier(Classifier):
     '''
     '''
-    def __init__(self, latent_dim):
+    def __init__(self, latent_dim, dropout=0):
         '''
 
         '''
@@ -162,6 +162,7 @@ class EmbeddingClassifier(Classifier):
         self.classifier = torch.nn.Sequential(
             torch.nn.Linear(latent_dim, hidden_dim),
             torch.nn.ReLU(),
+            torch.nn.Dropout(p=dropout),
             torch.nn.Linear(hidden_dim, 1),
             torch.nn.Sigmoid())
 
@@ -178,7 +179,7 @@ class EmbeddingClassifier(Classifier):
         loss = None
         if label is not None:
             loss = torch.nn.functional.binary_cross_entropy(torch.reshape(logits, label.size()), label.to(logits.dtype))
-        
+
         return logits, loss
  
 

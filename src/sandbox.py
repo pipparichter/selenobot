@@ -30,17 +30,23 @@ def h5_to_df(filename):
     
     return df
 
+def check_dataset_labels(dataset, data):
+    '''
+    '''
+    df1 = pd.read_csv(data_dir + 'test_embeddings_esm_v1.csv')
+    df1 = df1.astype({'id':'string'})
 
-df1 = pd.read_csv(data_dir + 'test_embeddings_esm_v1.csv')
-df1 = df1.astype({'id':'string'})
+    df2 = pd.read_csv(data_dir + 'test_embeddings_esm_v2.csv')
+    df2 = df2.astype({'id':'string'})
 
-df2 = pd.read_csv(data_dir + 'test_embeddings_esm_v2.csv')
-df2 = df2.astype({'id':'string'})
+    df = df1.merge(df2, on='id', how='left')
+    # print(df[['label_x', 'label_y']].head())
 
-df = df1.merge(df2, on='id', how='left')
-# print(df[['label_x', 'label_y']].head())
+    assert np.all(df['label_x'] == df['label_y'])
 
-assert np.all(df['label_x'] == df['label_y'])
+
+    pass
+
 
 
 
