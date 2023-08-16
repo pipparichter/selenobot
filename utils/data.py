@@ -1,85 +1,48 @@
 '''
-Code for gathering and preprocessing the data in the /protex/data directory. 
+Utility functions for gathering and preprocessing data.
 '''
-
-# TODO: Replicate procedure I used to generate all the data files in thie file, mostly
-# for the sake of record-keeping. 
 
 import requests
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-import torch
 import time
-from transformers import EsmTokenizer, AutoTokenizer, EsmModel
-from torch.utils.data import DataLoader
-
-import sys
-sys.path.append('/home/prichter/Documents/protex/src')
-from dataset import SequenceDataset
-from bench import BenchmarkTokenizer
+from datetime import date
+import re
+import io
 
 
-def get_id(metadata):
-    '''
-    Extract the unique identifier from a FASTA metadata string (the 
+def get_id(head):
+    '''Extract the unique identifier from a FASTA metadata string (the 
     information on the line preceding the actual sequence). This ID should 
     be flanked by '|'.
-
-    args:
-        - metadata (str): A metadata string containing an ID. 
     '''
-    start_idx = metadata.find('|') + 1
+    start_idx = head.find('|') + 1
     # Cut off any extra stuff preceding the ID, and locate the remaining |.
-    metadata = metadata[start_idx:]
-    end_idx = metadata.find('|')
+    head = head[start_idx:]
+    end_idx = head.find('|')
+    return head[:end_idx]
 
-    return str(metadata[:end_idx])
 
-
-def fasta_to_df(fasta_file):
-    '''
-    Read data from a FASTA file and convert it to a pandas DataFrame. The 
+def fasta_to_df(fasta):
+    '''Read data from a FASTA file and convert it to a pandas DataFrame. The 
     resulting DataFrame contains a column for the sequence and a column for 
-    the unique identifier. 
-
-    args:
-        - fasta_file (str): Either a path to the FASTA file or the contents of the file. 
+    the unique identifier.
     '''
-    df = {'seq':[], 'id':[], 'metadata':[]}
-
-    try:
-    # Open the FASTA file, or read in the string.  
-        with open(fasta_file, 'r', encoding='utf8') as f:
-            lines = f.readlines()
-    except:
-        lines = fasta_file.split('\n')
-        lines = [line for line in lines if len(line) > 0]
+    ids = [get_id(head) for head in re.findall(r'^>.*', fasta, re.MULTILINE)]
+    seqs = re.split(r'^>.*', fasta, flags=re.MULTILINE)[1:]
+    # Strip all of the newline characters from the amino acid sequences. 
+    seqs = [s.replace('\n', '') for s in seqs]
     
-    # Metadata is contained on a single line, with the sequence given on the subsequent lines.
-    # The sequence is broken up across multiple lines, with each line containing 60 characters.
-    i = 0 
-    while i < len(lines):
-        # Also extract the unique ID from the metadata line, and add to the DataFrame. 
-        df['metadata'].append(lines[i])
-        df['id'].append(get_id(lines[i]))
-        i += 1
+    df = pd.DataFrame({'seq':seqs, 'id':ids})
+    df = df.astype({'id':'str', 'seq':'str'})
+    df = df.set_index('id')
 
-        seq = ''
-        # Read in the amino acid sequence. The next metadata line wih have a '>' in the front.
-        while (i < len(lines)) and (lines[i][0] != '>'):
-            # Remove whitespace from sequence.
-            seq += lines[i].strip()
-            i += 1        
-        df['seq'].append(seq)
-
-    # Convert to a DataFrame and return. 
-    return pd.DataFrame(df).astype({'id':'str'})
+    return df
 
 
 def df_to_fasta(df, fasta_file):
-    '''
-    Write a DataFrame containing FASTA data to a FASTA file format.
+    '''Write a DataFrame containing FASTA data to a FASTA file format.
 
     args:
         - df (pd.DataFrame): A DataFrame containing, at minimum, a metadata column, 
@@ -143,8 +106,7 @@ def truncate(seq):
 
 
 def truncate_selenoproteins(fasta_file):
-    '''
-    Truncate the selenoproteins stored in the inputted file at the first 
+    '''Truncate the selenoproteins stored in the inputted file at the first 
     selenocysteine residue. Overwrites the original file with the truncated 
     sequence data. 
 
@@ -158,60 +120,6 @@ def truncate_selenoproteins(fasta_file):
     data['seq'] = data['seq'].apply(func)
 
     # Write the DataFrame in FASTA format. THIS OVERWRITES THE FILE.
-    df_to_fasta(data, fasta_file)
-
-
-def download_short_proteins(dist, fasta_file):
-    '''
-    Download short proteins from the UniProt database according to the
-    length distribution of the truncated selenoproteins.
-
-    args:
-        - dist (?): A distribution generated using a kernel density estimate. 
-        - fasta_file (str): The path to the file which contains FASTA data. 
-    '''
-    delta = 0
-    # There are about 20,000 selenoproteins listed, so try to get an equivalent number of short proteins. 
-    n_lengths = 200 # The number of lengths to sample
-    
-    # Dictionary mapping the length to the link to the next page. 
-    history = {}
-
-    with open(fasta_file, 'w', encoding='utf8') as f:
-        # NOTE: Not really sure why the sample isn't one-dimensional. 
-        sample = np.ravel(dist.resample(size=n_lengths)) # Sample lengths from the distribution.
-        sample = np.asarray(sample, dtype='int') # Convert to integers. 
-
-        for l in tqdm(sample, desc='Downloading protein sequences...'):
-            
-            if l in history: # For pagination. 
-                if history[l] is None:
-                    continue
-                # Clean up the URL string stored from the Link header. 
-                url = history[l].split()[0].replace('<', '').replace('>', '').replace(';', '')
-            
-            else: # Link generated for the UniProt REST API.
-                url = f'https://rest.uniprot.org/uniprotkb/search?format=fasta&query=%28%28length%3A%5B{l}%20TO%20{l}%5D%29%29&size=100'
-            
-            # Send the query to UniProt. 
-            try:
-                response = requests.get(url)
-                # Sometimes a link isn't returned? Maybe means no more results?
-                history[l] = response.headers.get('Link', None)
-
-                if response.status_code == 200: # Indicates query was successful.
-                    f.write(response.text)
-                else:
-                    msg = f'The URL {f} threw the following error:\n\n{response.text}'
-                    raise RuntimeError(msg)
-            except requests.packages.urllib3.exceptions.ProtocolError:
-                print('UniProt thinks it is being scraped. Wait a couple of minutes befoe continuing.')
-                time.sleep(60)
-
-
-    # Remove duplicates, as this seems to be an issue. 
-    data = fasta_to_df(fasta_file)
-    data = data.drop_duplicates(subset=['id'])
     df_to_fasta(data, fasta_file)
 
 
@@ -281,79 +189,163 @@ def train_test_split(data, test_size=0.25, train_size=0.75):
     return train_data, test_data # For now, just return the full DataFrames.
 
 
-def generate_esm_embeddings(data, embedding_file=None):
+
+def write(text, path):
+    '''Writes a string of text to a file.'''
+    if path is not None:
+        with open(path, 'w') as f:
+            f.write(text)
+
+
+def read(path):
+    '''Reads the information contained in a text file into a string.'''
+    with open(path, 'r') as f:
+        text = f.read()
+    return text
+
+
+def get_sec_metadata_from_uniprot(fields=['lineage', 'xref_eggnog'], path=None):
+    '''Download metadata from UniProt in TSV format using their API. By default,
+    downloads the taxonomic lineage, as well as the eggNOG orthology group.'''
+
+    fields = '%2C'.join(fields)
+    url = f'https://rest.uniprot.org/uniprotkb/stream?compressed=false&fields=accession%2C{fields}&format=tsv&query=%28%28ft_non_std%3Aselenocysteine%29%29'
+    tsv = requests.get(url).text
+
+    # Clean up the metadata by removing all non-domain taxonomic information.
+    # print(tsv) 
+    func = lambda l : l.split(',')[1].strip().split(' ')[0].lower()
+    df = pd.read_csv(io.StringIO(tsv), delimiter='\t')
+    df['domain'] = df['Taxonomic lineage'].apply(func)
+    df = df.drop(columns=['Taxonomic lineage'])
+    df = df.rename(columns={'Entry':'id', 'eggNOG':'cog'})
+    df = df.set_index('id')
+
+    # Convert back into a text string. 
+    tsv = df.to_csv(sep='\t')
+    write(tsv, path=path)
+
+    return tsv
+
+
+# Gave up on this, as none of the precomputed alignments on eggNOG contain 
+# selenocysteine. 
+
+# def get_alignments_from_eggnog(cogs, path=None):
+#     '''Download the MSA for a particular COG group from eggNOG. 
+#     Data comes in FASTA format.'''
+
+#     for cog in tqdm(cogs):
+#         url = f'http://eggnogapi5.embl.de/nog_data/text/raw_alg/{cog}'
+#         fasta = requests.get(url).text
+
+#         als = re.split(r'^>.*', fasta, flags=re.MULTILINE)[1:]
+#         u = [True if 'U' in a else False for a in als]
+#         if np.any(u):
+#             print('yay')
+
+
+
+def get_seqs_from_eggnog(cog, path=None):
+    '''Download the whole protein sequences for a particular COG group from
+    eggNOG. Data comes in FASTA format.'''
+
+    url = f'http://eggnogapi5.embl.de/nog_data/text/fasta/{cog}'
+
+    pass
+
+
+def read_cogs_from_metadata(path):
+    ''''''
+    df = pd.read_csv(path, delimiter='\t')
+    cogs = list(df['cog'].dropna())
+
+    # Replace all semicolons with spaces, as some of the proteins
+    # have multiple COGs. 
+    cogs = ' '.join(cogs)
+    cogs = cogs.replace(';', ' ')
+    cogs = cogs.split()
+
+    # Drop duplicates. 
+    cogs = list(set(cogs))
+
+    return cogs
+
+
+def get_sec_from_uniprot(path=None):
+    '''Uses the UniProt API to download all known selenoproteins from the database.
+    It returns a text string with the information in FASTA format.'''
+
+    url = 'https://rest.uniprot.org/uniprotkb/stream?format=fasta&query=%28%28ft_non_std%3Aselenocysteine%29%29'
+    fasta = requests.get(url).text
+
+    write(fasta, path)
+
+    return fasta
+
+
+def get_by_dist_from_uniprot(dist, path=None):
     '''
-    Run a file full of amino acid sequences through the ESM model in order to generate
-    embeddings. For now, the embeddings are generated by taking the mean of every
-    embedding sequence element. Embeddings are written directly to the file as 
-    comma-separated vectors. 
+    Download proteins from the UniProt database according to a specified
+    length distribution.'''
 
-    args: 
-        - data (pd.DataFrame): DataFrame containing the sequence information. 
-        - embedding_file (str): File to which the embeddings are written. 
-    '''
-    name = 'facebook/esm2_t6_8M_UR50D' # Name of the pre-trained model. 
-    tokenizer = AutoTokenizer.from_pretrained(name)
-    model = EsmModel.from_pretrained(name)
-
-    kwargs = {'padding':True, 'truncation':True, 'padding':True, 'return_tensors':'pt'}
-    dataset = SequenceDataset(data, tokenizer=tokenizer, **kwargs) # No need to pass in labels.
-    # Made sure not to shuffle the data, so everything should be in the same order. 
-    dataloader = DataLoader(dataset, shuffle=False, batch_size=10)
-
-    with open(embedding_file, 'a') as f:
+    delta = 0
+    # There are about 20,000 selenoproteins listed, so try to get an equivalent number of short proteins. 
+    n_lengths = 200 # The number of lengths to sample
     
-        for batch in tqdm(dataloader, desc='Processing batches...'): 
-            # Remove all the extraneous stuff. 
-            batch = {'input_ids':batch['input_ids'], 'attention_mask':batch['attention_mask']}
-            last_hidden_state = model(**batch).last_hidden_state
+    # Dictionary mapping the length to the link to the next page. 
+    history = {}
 
-            # Embedding has shape (batch_size, 320) after taking the mean. 
-            embeddings = torch.mean(last_hidden_state, 1).detach().numpy()
-            np.savetxt(f, embeddings, delimiter=',')
+    with open(fasta_file, 'w', encoding='utf8') as f:
+        # NOTE: Not really sure why the sample isn't one-dimensional. 
+        sample = np.ravel(dist.resample(size=n_lengths)) # Sample lengths from the distribution.
+        sample = np.asarray(sample, dtype='int') # Convert to integers. 
+
+        for l in tqdm(sample, desc='Downloading protein sequences...'):
+            
+            if l in history: # For pagination. 
+                if history[l] is None:
+                    continue
+                # Clean up the URL string stored from the Link header. 
+                url = history[l].split()[0].replace('<', '').replace('>', '').replace(';', '')
+            
+            else: # Link generated for the UniProt REST API.
+                url = f'https://rest.uniprot.org/uniprotkb/search?format=fasta&query=%28%28length%3A%5B{l}%20TO%20{l}%5D%29%29&size=100'
+            
+            # Send the query to UniProt. 
+            try:
+                response = requests.get(url)
+                # Sometimes a link isn't returned? Maybe means no more results?
+                history[l] = response.headers.get('Link', None)
+
+                if response.status_code == 200: # Indicates query was successful.
+                    f.write(response.text)
+                else:
+                    msg = f'The URL {f} threw the following error:\n\n{response.text}'
+                    raise RuntimeError(msg)
+            except requests.packages.urllib3.exceptions.ProtocolError:
+                print('UniProt thinks it is being scraped. Wait a couple of minutes befoe continuing.')
+                time.sleep(60)
 
 
-def generate_acc_embeddings(data, embedding_file=None):
-    '''
-    Generate embeddings of amino acid sequences based on their amino acid
-    content alone (position-agnostic). This is done using the BenchmarkTokenizer, 
-    defined in /src/bench.py. Embeddings are written directly to the file as 
-    comma-separated values. 
+    # Remove duplicates, as this seems to be an issue. 
+    data = fasta_to_df(fasta_file)
+    data = data.drop_duplicates(subset=['id'])
+    df_to_fasta(data, fasta_file)
 
-    args: 
-        - data (pd.DataFrame): DataFrame containing the amino acid sequences. 
-        - embedding_file (str): File to which the embeddings are written. 
-    '''
-    tokenizer = BenchmarkTokenizer()
 
-    dataset = SequenceDataset(data, tokenizer=tokenizer) # No need to pass in labels.
-    # Made sure not to shuffle the data, so everything should be in the same order. 
-    dataloader = DataLoader(dataset, shuffle=False, batch_size=128)
+def main(data_dir='/home/prichter/Documents/selenobot/data/'):
 
-    with open(embedding_file, 'a') as f:
+    today = date.today().strftime('%m%d%y')
+
+    # get_sec_from_uniprot(path=data_dir + f'uniprot_{today}_sec.fasta'
+    # get_sec_metadata_from_uniprot(path=data_dir + f'uniprot_{today}_sec_metadata.tsv')
+    cogs = read_cogs_from_metadata(data_dir + f'uniprot_{today}_sec_metadata.tsv')
     
-        for batch in tqdm(dataloader, desc='Processing batches...'): 
-            # Remove all the extraneous stuff. 
-            embeddings = batch['input_ids'].numpy() # Size (batch_size, embedding_dim)
-            np.savetxt(f, embeddings, delimiter=',')
+    get_alignments_from_eggnog(cogs, path=data_dir + f'eggnog_{today}_cogs')
+    pass
 
 
 if __name__ == '__main__':
-    # ------------------------------------------------------------------------------------------
-    # I realized that a lot of the computational cost of running the ESM classifier comes from
-    # generating the ESM embeddings (not the linear classification head). Because all of the ESM
-    # model weights are frozen anyway, I thought it would be wise to write all the embeddings
-    # to files. This will speed things up a bit. 
-    # ------------------------------------------------------------------------------------------
-
-    train_data = pd.read_csv('/home/prichter/Documents/protex/data/train.csv', index_col=0)
-    test_data = pd.read_csv('/home/prichter/Documents/protex/data/test.csv', index_col=0)
-
-    # generate_esm_embeddings(train_data, '/home/prichter/Documents/protex/data/train_embeddings_esm.csv')
-    # generate_esm_embeddings(test_data, '/home/prichter/Documents/protex/data/test_embeddings_esm.csv')
-    # generate_acc_embeddings(train_data, '/home/prichter/Documents/protex/data/train_embeddings_acc.csv')
-    # generate_acc_embeddings(test_data, '/home/prichter/Documents/protex/data/test_embeddings_acc.csv')
-
-
-
+    main()
 

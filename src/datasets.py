@@ -35,6 +35,12 @@ class Dataset(torch.utils.data.Dataset):
     def __len__(self):
         return self.length
 
+    def metadata(self): # Is a DataFrame the best choice of object to return here?
+        '''Extract the metadata (i.e. the labels and accession numbers) from the 
+        underlying DataFrame. A DataFrame is returned.'''
+        return self.data.loc[['label', 'id']]
+        # Maybe returning a dictionary would be better?
+
     def to_csv(self, path):
         '''Write a Dataset object to a CSV file. 
 
@@ -53,11 +59,21 @@ class EmbeddingDataset(Dataset):
         args:
             - data (pd.DataFrame): The data to be stored in the object. 
         '''
+        # Only want to store the metadata in the DataFrame. 
+        super(EmbeddingDataset, self).__init__(data.loc[['label', 'id']])
+        
+        # Makes sense to store the embeddings as a separate array. 
+        self.embs = self.data.drop(columns=['label', 'id'], inplace=False, errors='ignore').values
 
-        super(EmbeddingDataset, self).__init__(data)
 
     def __getitem__(self, idx):
-        pass
+        '''Overrides the Dataset __getitem__ method. This is slightly different, as the
+        embedding data is stored in a separate attribute for ease of access.'''
+        
+        item = super(EmbeddingDataset, self).__getitem__(idx)
+        item['embedding'] = self.embds[idx]
+        
+        return item
 
     def embeddings(self, return_type='np'):
         '''Extracts the embeddings from the underlying DataFrame.
@@ -67,13 +83,10 @@ class EmbeddingDataset(Dataset):
                 should be returned. 'np' for numpy, 'pt' for torch.Tensor. 
         '''
 
-        emb = self.data.drop(columns=['label', 'id'], inplace=False, errors='ignore')
-        emb = emb.values # This should be a numpy array. 
-
         if return_type == 'np':
-            return emb
+            return self.embs
         elif return_type == 'pt':
-            return torch.Tensor(emb)
+            return torch.Tensor(self.embs)
         else:
             raise ValueError('Return type must be one of: pt, np.')
 
@@ -97,10 +110,37 @@ class EmbeddingDataset(Dataset):
         # Be picky about what is being read into the object. Eventually, we can 
         # add more checks to control what is loaded in (like type restrictions).
         data = pd.read_csv(path, 
-            lambda c : (c in ['label', 'id']) or type(c) == int)
+            usecols=lambda c : (c in ['label', 'id']) or type(c) == int)
 
         return EmbeddingDataset(data)
 
+    def to_csv(self, path):
+        '''Overwrites the to_csv method defined in the Dataset class, to accomodate
+        the storage of the embeddings in a separate attribute.'''
+
+        data = pd.DataFrame(self.embs)
+        data = pd.concat([data, self.data], axis=1)
+        data = data.set_index('id')
+
+        data.to_csv(path)
+
 
 class SequenceDataset(Dataset):
-    pass
+
+    def __init__(self, data):
+
+        super(SequenceDataset, self).__init__(data)
+
+    def sequences(self):
+        '''Extract the amino acid sequences from the underlying DataFrame. Returns
+        the sequences as a list, for compatibility with tokenizers.'''
+        return list(self.data.loc['seq'].values)
+ 
+    def from_csv(path):
+        '''Load an EmbeddingDataset object from a CSV file.'''
+        # Be picky about what is being read into the object. Eventually, we can 
+        # add more checks to control what is loaded in (like type restrictions).
+        data = pd.read_csv(path, 
+            usecols=lambda c : c in ['label', 'id', 'seq']) 
+
+        return SequenceDataset(data)

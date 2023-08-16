@@ -10,6 +10,8 @@ from tqdm import tqdm
 import numpy as np
 import pandas as pd
 
+from datasets import EmbeddingDataset
+
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
@@ -43,10 +45,10 @@ class Embedder():
         
         if tokenizer is not None:
             # Output of this is a dictionary, with keys relevant to the particular model. 
-            data = tokenizer(list(data), return_tensors='pt', padding=True, truncation=True) 
+            data = tokenizer(dataset.sequences(), return_tensors='pt', padding=True, truncation=True) 
         else: 
             # If no tokenizer is specified, just convert to a dictionary. 
-            data = {'seqs':data}
+            data = {'seqs':dataset.sequences()}
 
         embeddings = []
         for batch in tqdm(batches):
@@ -54,13 +56,21 @@ class Embedder():
             batch_data = {key:value[batch].to(device) for key, value in data.items()}
             embeddings.append(embedder(**batch_data))
 
+        embeddings = np.concatenate(embeddings)
+        data = pd.DataFrame(embeddings)
+        # Extract the metadata (labels and accession) from the SequenceDataset and 
+        data = pd.concat([dataset.metadata(), data])
+
+        # Initialize and return an EmbeddingDataset object. 
+        return EmbeddingDataset(data)
+
         # Return the embedded data, which will be passed into the parent class constructor. 
         # return np.concatenate(embeddings)
 
 
 class EsmEmbedder(Embedder):
 
-    def __init__(self, dataset, pooling='cls', model_name='facebook/esm2_t6_8M_UR50D'):
+    def __init__(self, pooling='cls', model_name='facebook/esm2_t6_8M_UR50D'):
         '''Initializes an EsmEmbedder object. 
 
         args:
@@ -129,7 +139,6 @@ class EsmEmbedder(Embedder):
         # Now sum up over the sequence length dimension. 
         numerator = torch.sum(numerator, dim=1) # Confirmed the shape is correct. 
 
-        
         # EsmEmbeddingDataset.check_masking(numerator, output, attention_mask)
         return torch.divide(numerator, denominator).cpu().detach().numpy()
         # I checked to make sure this was doing what I thought. 
