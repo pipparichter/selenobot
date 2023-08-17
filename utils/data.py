@@ -41,24 +41,25 @@ def fasta_to_df(fasta):
     return df
 
 
-def df_to_fasta(df, fasta_file):
-    '''Write a DataFrame containing FASTA data to a FASTA file format.
+def df_to_fasta(df, path=None, textwidth=80):
+    '''Convert a DataFrame containing FASTA data to a FASTA file format.'''
 
-    args:
-        - df (pd.DataFrame): A DataFrame containing, at minimum, a metadata column, 
-            as well as a sequence column. 
-        - fasta_file (str): The path to the file which will contain the FASTA data. 
-    '''
-    with open(fasta_file, 'w', encoding='utf8') as f:
-        # Iterate over the DataFrames as a set of named tuples.
-        for row in df.itertuples():
-            f.write(row.metadata)
-            
-            # Split the sequence up into shorter, sixty-character strings.
-            n = len(row.seq)
-            seq = [row.seq[i:min(n, i + 60)] for i in range(0, n, 60)]
-            seq = '\n'.join(seq) + '\n'
-            f.write(seq)
+    fasta = ''
+    for row in df.itertuples():
+        fasta += '>  |' + row.id + '|\n'
+        # Split the sequence up into shorter, sixty-character strings.
+        n = len(row.seq)
+        seq = [row.seq[i:min(n, i + textwidth)] for i in range(0, n, textwidth)]
+
+        assert ''.join(seq) == row.seq # Make sure no information was lost. 
+
+        seq = '\n'.join(seq) + '\n'
+        fasta += seq
+    
+    # Write the FASTA string to the path-specified file. 
+    write(fasta, path=path)
+
+    return fasta
 
 
 def clstr_to_df(clstr_file):
@@ -96,31 +97,28 @@ def clstr_to_df(clstr_file):
     return pd.DataFrame(df).astype({'cluster':'int64', 'id':'str'})
 
 
-def truncate(seq):
-    '''
-    Truncate the input amino acid sequence at the first selenocysteine residue,
-    which is denoted "U."
-    '''
-    idx = seq.find('U')
-    return seq[:idx]
-
-
-def truncate_selenoproteins(fasta_file):
+def truncate_selenoproteins(fasta, path=None):
     '''Truncate the selenoproteins stored in the inputted file at the first 
     selenocysteine residue. Overwrites the original file with the truncated 
-    sequence data. 
+    sequence data.'''
+    df = fasta_to_df(fasta_file)
 
-    args:
-        - fasta_file (str): The path to the file which contains FASTA data. 
-    '''
-    data = fasta_to_df(fasta_file)
+    df_trunc = {'id':[], 'seq':[]}
+    for row in df.itertuples():
+        
+        # Find indices where a selenocysteine occurs. 
+        idxs = np.where(list(row.seq) == 'U')
+        # Sequentially truncate at each selenocysteine redidue. 
+        seqs = [row.seq[:idx] for idx in idxs]
+        # Add new truncated sequences, and the corresponding gene IDs, to the
+        # dictionary which will become the new DataFrame. 
+        df_trunc['id'] += [row.id] * len(seqs)
+        df_trunc['seq'] += seqs
 
-    # Truncate the data at the first 'U' residue
-    func = np.vectorize(truncate, otypes=[str])
-    data['seq'] = data['seq'].apply(func)
+    df_trunc = pd.DataFrame(df_trunc)
+    fasta = df_to_fasta(df_trunc, path=path)
 
-    # Write the DataFrame in FASTA format. THIS OVERWRITES THE FILE.
-    df_to_fasta(data, fasta_file)
+    return fasta # Return a FASTA file with the truncated proteins. 
 
 
 def sum_clusters(clusters):
@@ -204,7 +202,7 @@ def read(path):
     return text
 
 
-def get_sec_metadata_from_uniprot(fields=['lineage', 'xref_eggnog'], path=None):
+def get_sec_metadata_from_uniprot(fields=['lineage'], path=None):
     '''Download metadata from UniProt in TSV format using their API. By default,
     downloads the taxonomic lineage, as well as the eggNOG orthology group.'''
 
@@ -212,64 +210,20 @@ def get_sec_metadata_from_uniprot(fields=['lineage', 'xref_eggnog'], path=None):
     url = f'https://rest.uniprot.org/uniprotkb/stream?compressed=false&fields=accession%2C{fields}&format=tsv&query=%28%28ft_non_std%3Aselenocysteine%29%29'
     tsv = requests.get(url).text
 
-    # Clean up the metadata by removing all non-domain taxonomic information.
-    # print(tsv) 
-    func = lambda l : l.split(',')[1].strip().split(' ')[0].lower()
-    df = pd.read_csv(io.StringIO(tsv), delimiter='\t')
-    df['domain'] = df['Taxonomic lineage'].apply(func)
-    df = df.drop(columns=['Taxonomic lineage'])
-    df = df.rename(columns={'Entry':'id', 'eggNOG':'cog'})
-    df = df.set_index('id')
+    if 'lineage' in fields:
+        # Clean up the metadata by removing all non-domain taxonomic information.
+        func = lambda l : l.split(',')[1].strip().split(' ')[0].lower()
+        df = pd.read_csv(io.StringIO(tsv), delimiter='\t')
+        df['domain'] = df['Taxonomic lineage'].apply(func)
+        df = df.drop(columns=['Taxonomic lineage'])
+        df = df.rename(columns={'Entry':'id', 'eggNOG':'cog'})
+        df = df.set_index('id')
 
-    # Convert back into a text string. 
-    tsv = df.to_csv(sep='\t')
-    write(tsv, path=path)
+        # Convert back into a text string. 
+        tsv = df.to_csv(sep='\t')
+        write(tsv, path=path)
 
     return tsv
-
-
-# Gave up on this, as none of the precomputed alignments on eggNOG contain 
-# selenocysteine. 
-
-# def get_alignments_from_eggnog(cogs, path=None):
-#     '''Download the MSA for a particular COG group from eggNOG. 
-#     Data comes in FASTA format.'''
-
-#     for cog in tqdm(cogs):
-#         url = f'http://eggnogapi5.embl.de/nog_data/text/raw_alg/{cog}'
-#         fasta = requests.get(url).text
-
-#         als = re.split(r'^>.*', fasta, flags=re.MULTILINE)[1:]
-#         u = [True if 'U' in a else False for a in als]
-#         if np.any(u):
-#             print('yay')
-
-
-
-def get_seqs_from_eggnog(cog, path=None):
-    '''Download the whole protein sequences for a particular COG group from
-    eggNOG. Data comes in FASTA format.'''
-
-    url = f'http://eggnogapi5.embl.de/nog_data/text/fasta/{cog}'
-
-    pass
-
-
-def read_cogs_from_metadata(path):
-    ''''''
-    df = pd.read_csv(path, delimiter='\t')
-    cogs = list(df['cog'].dropna())
-
-    # Replace all semicolons with spaces, as some of the proteins
-    # have multiple COGs. 
-    cogs = ' '.join(cogs)
-    cogs = cogs.replace(';', ' ')
-    cogs = cogs.split()
-
-    # Drop duplicates. 
-    cogs = list(set(cogs))
-
-    return cogs
 
 
 def get_sec_from_uniprot(path=None):
@@ -284,67 +238,14 @@ def get_sec_from_uniprot(path=None):
     return fasta
 
 
-def get_by_dist_from_uniprot(dist, path=None):
-    '''
-    Download proteins from the UniProt database according to a specified
-    length distribution.'''
-
-    delta = 0
-    # There are about 20,000 selenoproteins listed, so try to get an equivalent number of short proteins. 
-    n_lengths = 200 # The number of lengths to sample
-    
-    # Dictionary mapping the length to the link to the next page. 
-    history = {}
-
-    with open(fasta_file, 'w', encoding='utf8') as f:
-        # NOTE: Not really sure why the sample isn't one-dimensional. 
-        sample = np.ravel(dist.resample(size=n_lengths)) # Sample lengths from the distribution.
-        sample = np.asarray(sample, dtype='int') # Convert to integers. 
-
-        for l in tqdm(sample, desc='Downloading protein sequences...'):
-            
-            if l in history: # For pagination. 
-                if history[l] is None:
-                    continue
-                # Clean up the URL string stored from the Link header. 
-                url = history[l].split()[0].replace('<', '').replace('>', '').replace(';', '')
-            
-            else: # Link generated for the UniProt REST API.
-                url = f'https://rest.uniprot.org/uniprotkb/search?format=fasta&query=%28%28length%3A%5B{l}%20TO%20{l}%5D%29%29&size=100'
-            
-            # Send the query to UniProt. 
-            try:
-                response = requests.get(url)
-                # Sometimes a link isn't returned? Maybe means no more results?
-                history[l] = response.headers.get('Link', None)
-
-                if response.status_code == 200: # Indicates query was successful.
-                    f.write(response.text)
-                else:
-                    msg = f'The URL {f} threw the following error:\n\n{response.text}'
-                    raise RuntimeError(msg)
-            except requests.packages.urllib3.exceptions.ProtocolError:
-                print('UniProt thinks it is being scraped. Wait a couple of minutes befoe continuing.')
-                time.sleep(60)
-
-
-    # Remove duplicates, as this seems to be an issue. 
-    data = fasta_to_df(fasta_file)
-    data = data.drop_duplicates(subset=['id'])
-    df_to_fasta(data, fasta_file)
-
-
 def main(data_dir='/home/prichter/Documents/selenobot/data/'):
+    
 
     today = date.today().strftime('%m%d%y')
 
     # get_sec_from_uniprot(path=data_dir + f'uniprot_{today}_sec.fasta'
     # get_sec_metadata_from_uniprot(path=data_dir + f'uniprot_{today}_sec_metadata.tsv')
-    cogs = read_cogs_from_metadata(data_dir + f'uniprot_{today}_sec_metadata.tsv')
-    
-    get_alignments_from_eggnog(cogs, path=data_dir + f'eggnog_{today}_cogs')
     pass
-
 
 if __name__ == '__main__':
     main()
