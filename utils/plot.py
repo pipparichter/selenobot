@@ -1,62 +1,130 @@
 '''
 Plotting utilities for the ProTex tool. 
 '''
-# # Where is tensorflow being imported such that I even need to shut it up??
-# import tensorflow as tf
-# tf.logging.set_verbosity(tf.logging.WARN)
 import sys
 sys.path.append('/home/prichter/Documents/selenobot/src/')
 import matplotlib.pyplot as plt
 import seaborn as sns
-import dataset 
 import numpy as np
 import pandas as pd
 from umap import UMAP
-from sklearn.decomposition import PCA
 from sklearn.metrics import confusion_matrix
-
-colors = sns.color_palette('Paired')
-palette = 'Paired'
+import sklearn.decomposition
 
 
-def plot_loss_curve(losses):
+palette = 'Set2'
 
+
+def plot_distribution(data, ax=None, path=None, title=None, xlabel=None, **kwargs):
+    '''Visualize the distribution of a set of data. 
+
+
+    '''
+    if ax is None:
+        fig, ax = plt.subplots(1)
+
+    sns.histplot(data=data, ax=ax, legend=False,  **kwargs)
+
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+
+    # If the data passed into the function is more than one-dimensional, 
+    # apply dimensionality reduction to one dimension. 
+    if len(data.shape) > 1 and (data.shape[-1] > 1):
+        pca = sklearn.decomposition.PCA(n_components=1)
+        data = pca.fit_transform(data)
+
+    # Data should be one-dimensional following PCA reduction. 
+    data = np.ravel(data)
+
+    if path is not None:   
+        try:
+            fig.savefig(path, format='png')
+        except NameError:
+            print('Figure could not be saved.')
+
+
+def plot_distributions(data, title=None, path=None, xlabel=None, **kwargs):
+    '''Plots multiple distributions on the same histogram by calling the
+    plot_distribution function on each dataset specified.
+    
+    args:
+        - data (tuple): A tuple where each element is a dataset whose
+            distribution to plot. 
+    ''' 
+    assert type(data) == tuple
+    assert len(data) > 1 # Make sure more than one dataset is speciied.
+    assert np.all([d.shape[-1] == data[0].shape[-1] for d in data])
+
+    # We will want to reduce each of the datasets in the same PCA pass. 
+    
+    # Get the sizes of each dataset passed in to the function. 
+    # This will allow us to extract individual datasets after combination. 
+    sizes = [len(d) for d in data]
+    data = np.concatenate(data, axis=0)
+    # If data is multi-dimensional, reduce using PCA. 
+    if len(data.shape) > 1 and (data.shape[-1] > 1):
+        pca = sklearn.decomposition.PCA(n_components=1)
+        data = pca.fit_transform(data)
+
+    # Data should be one-dimensional following PCA reduction. 
+    data = np.ravel(data)
+
+    fig, ax = plt.subplots(1)
+
+    idx = 0
+    for size in sizes:
+        plot_distribution(data[idx:idx + size], ax=ax, **kwargs)
+        idx += size
+
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+
+    if path is not None:
+        fig.savefig(path, format='png')
+
+    
+
+
+def plot_assess_filter_sprot(data):
+    ''''''''
     pass
 
-def plot_embeddings(embeddings, n_points=100, labels=None, filename=None, title=None, palette='Paired', **kwargs):
-    '''
-    Apply PCA dimensionality reduction to the tokenized amino acid sequences (both 
-    those generated simply by counting amino acid content, and those generated using ESM). 
+
+def plot_filter_sprot(data, idxs=None, clusters=None, path=None):
+    '''Visualizes the filtering procedure carried out by the filter_sprot
+    function. Plots both the K-means clusters and the data which "passes"
+    the filter.
 
     args:
-        - embeddings (np.array): An array with dimensions (samples, embedding_dim). 
-        - n_points (int): The number of datapoints to plot. 
-        - labels (np.array): An array with size len(embeddings). Contains a label for each
-            data point. 
-        - filename (str): File name under which to save the figure. 
-        - title (str): A title for the plot. 
+        - data (np.array): An array containing the SwissProt embeddings before 
+            being filtered.
+        - idxs (np.array): The filter indices. 
+        - clusters (np.array): The cluster label for each sequence embedding in data.
+        - path (str): The path for where to save the generated figure. 
     '''
-    # Sample rows from the array without replacement.
-    sample_idxs =  np.random.choice(len(embeddings), size=n_points, replace=False)
-    embeddings = embeddings[sample_idxs, 1:]
-    
-    fig, ax = plt.subplots(1)
-    ax.set_title(title)
-    
-    umap = UMAP(n_components=2) # UMAP seems to work a bit better than PCA. 
-    ax.set_xlabel('UMAP 1')
-    ax.set_ylabel('UMAP 2')
-    # Convert to a DataFrame to make seaborn plotting easier. 
-    data = pd.DataFrame(umap.fit_transform(embeddings), columns=['UMAP 1', 'UMAP 2'])
 
-    if labels is not None:
-        data['label'] = np.array(labels)[sample_idxs] # Make sure labels is an array. 
-        sns.scatterplot(data=data, x='UMAP 1', y='UMAP 2', ax=ax, hue='label', palette=palette, **kwargs)
-    else:
-        sns.scatterplot(data=data, x='UMAP 1', y='UMAP 2', ax=ax, palette=palette, **kwargs)
+    assert idxs is not None
+    assert clusters is not None
+    
+    idxs = np.concatenate([np.arange(len(data)), idxs])
+    n, m = len(data), len(idxs) # n is the number of non-filtered elements. 
 
-    if filename is not None: # Save the figure, if a filename is specified. 
-        fig.savefig(filename, format='png')
+    # Use PCA to put the data in two-dimensional space. 
+    pca = sklearn.decomposition.PCA(n_components=2)
+    data = pca.fit_transform(data)
+
+    print('PCA decomposition of SwissProt data completed.')
+
+    df = pd.DataFrame({'PCA 1':data[idxs, 0], 'PCA 2':data[idxs, 1], 'cluster':clusters[idxs], 'filter':[0]*n + [1]*(m - n)})
+
+    fig, axes = plt.subplots(2, figsize=(8, 10))
+    # sns.scatterplot(data=df x='UMAP 1', y='UMAP 2', ax=ax, hue='label', legend=False, **kwargs)
+    sns.scatterplot(data=df, x='PCA 1', y='PCA 2', ax=axes[0], hue='filter', legend=False, s=2, palette={0:'gray', 1:'black'})
+    sns.scatterplot(data=df, x='PCA 1', y='PCA 2', ax=axes[1], hue='cluster', legend=False, s=2, palette='Set2')
+    axes[0].set_title('Selecting representative sequences from SwissProt')
+
+    fig.savefig(path, format='png')
 
 
 def plot_confusion_matrix(preds, labels, filename=None, title=None):

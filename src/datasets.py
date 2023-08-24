@@ -90,21 +90,6 @@ class EmbeddingDataset(Dataset):
         else:
             raise ValueError('Return type must be one of: pt, np.')
 
-    def from_h5(path):
-        '''Load an EmbeddingDataset object from an H5 file.'''
-        file_ = h5py.File(filename)
-
-        ids = file_.keys() # Not sure what this does. 
-        data = [file_[key][()] for key in ids] # Not sure what this does either. 
-        
-        file_.close()
-
-        # Use the embedding data to initialize a DataFrame. 
-        data = pd.DataFrame(data)
-        data['ids'] = ids
-
-        return EmbeddingDataset(data)
-
     def from_csv(path):
         '''Load an EmbeddingDataset object from a CSV file.'''
         # Be picky about what is being read into the object. Eventually, we can 
