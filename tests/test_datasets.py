@@ -1,13 +1,12 @@
-import sys
-sys.path.append('/home/prichter/Documents/selenobot')
-sys.path.append('/home/prichter/Documents/selenobot/src')
-sys.path.append('/home/prichter/Documents/selenobot/utils')
 
 import unittest
 from utils.data import fasta_to_df, read
 
 import numpy as np
 import pandas as pd
+
+import sys
+sys.path.append('/home/prichter/Docmuments/src/')
 
 data_dir = '/home/prichter/Documents/selenobot/data/'
 sec_trunc_path = data_dir + 'uniprot_081123_sec_trunc.fasta'
@@ -69,9 +68,4 @@ class TestData(unittest.TestCase):
         # assert np.all([df_sec['sec_counts'].loc[id_] == np.sum(df_sec_trunc.index == id_) for id_ in df_sec.index])
 
 
-
-
-
-if __name__ == '__main__':
-    unittest.main()
 

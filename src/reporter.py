@@ -1,8 +1,8 @@
 '''Defining a class used to more easily manage data reporting on the performance of a Classifier.'''
 
-import tqdm
 import numpy as np
 import pandas as pd
+import pickle
 
 
 def check_df(df):
@@ -12,6 +12,13 @@ def check_df(df):
     
     length = len(list(df.values())[0])
     assert np.all([len(df[key]) == length for key in df.keys()]), msg
+
+
+def check_type(x, t):
+    pass
+    # assert type(x) is not None, 'Input value is None.'
+    # assert type(x) == t, f'Expected type {repr(t)}, got {repr(type(x))}.'
+
 
 class Reporter():
     '''A class for storing information associated with model performance.'''
@@ -36,54 +43,50 @@ class Reporter():
         '''Check if the Reporter is active.'''
         assert self.active, 'Reporter object must be active to add metrics.'
 
+
     def open(self):
         self.active = True
-        self.pbar = tqdm.tqdm(range(self.epochs), desc='reporter.Reporter.open')
 
     def close(self):
         self.active = False
         # Now that logging is complete, load the number of batches which have been processed, if any. 
-        self.batches = len(self.train_loss)
-        self.pbar.close() # Close out the progress bar. 
+        self.batches = len(self.train_losses)
     
     def set_batches_per_epoch(self, batches_per_epoch):
-        assert type(batches_per_epoch) == int
+        check_type(batches_per_epoch, int)
         self.batches_per_epoch = batches_per_epoch
 
-    def add_train_loss(self, train_loss):
+    def add_train_loss(self, loss):
         '''Add a train_loss to the internal list.'''
         self.check_active()
         # The input loss is expected to be a tensor, so make sure to convert to a float. 
-        self.train_loss.append(train_loss.item())
+        self.train_losses.append(loss.item())
 
-    def add_train_acc(self, train_acc):
+    def add_train_acc(self, acc):
         '''Add a train_acc to the internal list.'''
         self.check_active()
-        # The input loss is probably a tensor, so make sure to convert to a float. 
-        assert type(train_acc) == float
-        self.train_acc.append(train_acc)
+        check_type(acc, float)
+        self.train_accs.append(acc)
 
-    def add_train_metrics(self, train_loss, train_acc):
-        self.add_train_loss(train_loss)
-        self.add_train_acc(train_acc)
+    def add_train_metrics(self, loss, acc):
+        self.add_train_loss(loss)
+        self.add_train_acc(acc)
 
-    def add_val_loss(self, val_loss):
+    def add_val_loss(self, loss):
         '''Add a val_loss to the internal list.'''
         self.check_active()
         # The input loss is expected to be a tensor, so make sure to convert to a float. 
-        self.val_loss.append(val_loss.item())
+        self.val_losses.append(loss.item())
 
-    def add_val_acc(self, val_acc):
+    def add_val_acc(self, acc):
         '''Add a val_acc to the internal list.'''
         self.check_active()
-        # The input loss is probably a tensor, so make sure to convert to a float. 
-        assert type(val_acc) == float
-        self.val_acc.append(val_acc)
-        self.pbar.set_postfix({'val_acc':np.round(val_acc, 2)})
+        check_type(acc, float)
+        self.val_accs.append(acc)
 
-    def add_val_metrics(self, val_loss, val_acc):
-        self.add_val_loss(val_loss)
-        self.add_val_acc(val_acc)
+    def add_val_metrics(self, loss, acc):
+        self.add_val_loss(loss)
+        self.add_val_acc(acc)
 
     # def add_test_loss(self, test_loss):
     #     '''Add a test_loss to the internal list.'''
@@ -93,7 +96,7 @@ class Reporter():
 
     # def add_test_acc(self, test_acc):
     #     '''Add a test_acc to the internal list.'''
-    #     self.check_active()
+    #     self.check_active()build_loss_df(info, pool=pool)
     #     # The input loss is probably a tensor, so make sure to convert to a float. 
     #     assert type(test_acc) == float
     #     self.test_acc.append(test_acc)

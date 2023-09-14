@@ -2,6 +2,10 @@
 A generic linear classifier which sorts embedded amino acid sequences into two categories:
 selenoprotein or non-selenoprotein. 
 '''
+
+import sys
+sys.path.append('/home/prichter/Documents/selenobot/src')
+
 import transformers
 import torch
 import os
@@ -14,6 +18,9 @@ import torcheval
 # import torchmetrics
 from sklearn.metrics import balanced_accuracy_score
 from reporter import Reporter
+
+import warnings
+warnings.simplefilter('ignore')
 
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -35,6 +42,9 @@ class WeightedBCELoss(torch.nn.Module):
         w = torch.where(targets == 1, self.w, 1).to(device)
 
         return (ce * w).mean()
+
+# def balanced_accuracy(outputs, targets):
+#     # My own implementation of balanced 
 
 
 # Why use the torchmetrics package instead of the usual?
@@ -58,16 +68,24 @@ class Classifier(torch.nn.Module):
         '''Reset the model weights according to the weight initialization function.'''
         self.init_weights()
 
-    def predict(self, dataloader, threshold=None):
+    def predict(self, dataloader, threshold=0.5):
         '''Applies the model to a DataLoader, accumulating predictions across batches.
         Returns the model predictions, as well as '''
         self.eval() # Put the model in evaluation mode. 
+
+        # total_sec = 0
 
         outputs, targets = [], []
         for batch in dataloader:
             batch_outputs, batch_targets = self(**batch)   
             outputs.append(batch_outputs)
             targets.append(batch_targets)
+
+            # total_sec += torch.sum(batch_targets).item()
+
+        # print(total_sec)
+
+
 
         # Concatenate outputs and labels into single tensors. 
         outputs, targets = torch.concat(outputs), torch.concat(targets)
@@ -77,7 +95,7 @@ class Classifier(torch.nn.Module):
         
         self.train() # Go ahead and put back in train mode. 
 
-        return outputs, targets
+        return outputs.to(targets.dtype), targets
 
 
     def evaluate(self, dataloader, loss_func=None):
@@ -85,10 +103,11 @@ class Classifier(torch.nn.Module):
         of the model on the data, as well as the accuracy.'''
 
         assert loss_func is not None, 'classifiers.Classifier.evaluate: A loss function must be specified.'
-        outputs, targets = self.predict(dataloader)
+        outputs, targets = self.predict(dataloader, threshold=0.5)
 
         loss = loss_func(outputs, targets)
-        accuracy = balanced_accuracy_score(outputs, targets, threshold=0.5)
+        # accuracy = balanced_accuracy_score(torch.where(outputs < 0.5, 0, 1).to(targets.dtype), targets)
+        accuracy = balanced_accuracy_score(outputs.to(targets.dtype).detach().numpy(), targets.detach().numpy())
 
         return loss, accuracy
 
@@ -105,6 +124,7 @@ class Classifier(torch.nn.Module):
         reporter.open()
 
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
+        pbar = tqdm(range(epochs), desc='classifiers.Classifier.train_')
 
         for epoch in pbar:
 
@@ -113,21 +133,27 @@ class Classifier(torch.nn.Module):
             if val is not None:
                 val_loss, val_acc = self.evaluate(val, loss_func=loss_func)
                 reporter.add_val_metrics(val_loss, val_acc)
+                pbar.set_postfix({'val_acc':np.round(val_acc, 2)})
 
             for batch in dataloader:
 
                 # Evaluate the model on the batch in the training dataloader. 
                 outputs, targets = self(**batch)
                 loss = loss_func(outputs, targets)
-                acc = balanced_accuracy_score(outputs, targets)
+                # Make sure to asjust outputs so that things are zero or one. 
+                # acc = balanced_accuracy_score(torch.where(outputs < 0.5, 0, 1).to(targets.dtype), list(targets))
+                acc = balanced_accuracy_score(torch.where(outputs < 0.5, 0, 1).detach().numpy(), targets.detach().numpy())
 
-                reporter.add_train_metrics(train_loss, train_acc)
+                reporter.add_train_metrics(loss, acc)
 
                 loss.backward()
                 optimizer.step() 
                 optimizer.zero_grad()
 
+            pbar.update()
+
         reporter.close()
+        pbar.close()
         
         return reporter
 
@@ -165,12 +191,12 @@ class EmbeddingClassifier(Classifier):
         torch.nn.init.xavier_normal_(self.classifier[3].weight)
 
 
-    def forward(self, data=None, label=None, **kwargs):
+    def forward(self, emb=None, label=None, **kwargs):
         '''
         A forward pass of the EmbeddingClassifier. In this case, the data 
         passed into the function should be sequence embeddings. 
         '''
-        logits = self.classifier(data)
+        logits = self.classifier(emb)
         # logits = torch.nn.functional.sigmoid(logits)        
         loss = None
 
@@ -219,13 +245,13 @@ class AacClassifier(Classifier):
         # encoded_seqs is now a 2D list. Convert to numpy array for storage. 
         return list(emb)
 
-    def forward(self, data=None, label=None, **kwargs):
+    def forward(self, seq=None, label=None, **kwargs):
         '''
         A forward pass of the EmbeddingClassifier. In this case, the data 
         passed into the function should be sequence embeddings. 
         '''
         # I think data is going to be a tensor of shape (batch_size), where each element is a sequence string. 
-        data = torch.Tensor([[self.tokenize(seq) for seq in data]]).to(torch.float32)
+        data = torch.Tensor([[self.tokenize(s) for s in seq]]).to(torch.float32)
 
         logits = self.classifier(data)
 

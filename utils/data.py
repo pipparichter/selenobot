@@ -161,26 +161,7 @@ def pd_to_fasta(df, path=None, textwidth=80):
     write(fasta, path=path)
 
 
-def filter_sec_trunc(path, trunc=1, out_path=None):
-    '''Scans the file containing the sequentially-truncated selenoproteins, and grabs those
-    proteins which have been truncated at the [trunc]th Sec residue.
-    
-    args:
-        - path (str): Path to the file containing the truncated selenoproteins. 
-        - trunc (int): Number of the Sec residue at which the collected proteins
-            are truncated. 
-    '''
-    tag = f'[{trunc}]'
-    df = pd_from_fasta(path)
-    idxs = np.array([tag in id_ for id_ in df.index])
-
-    # Filter numpy array by Boolean index. 
-    df = df[idxs]
-    pd_to_fasta(df, path=out_path)
-
-
-
-def truncate_sec(path=None, out_path=None):
+def truncate_sec(path=None, out_path=None, first_sec_only=True):
     '''Truncate the selenoproteins stored in the input file at each selenocysteine
     residue, sequentially.'''
 
@@ -191,6 +172,11 @@ def truncate_sec(path=None, out_path=None):
     for row in df.itertuples():
         # Find indices where a selenocysteine occurs. 
         idxs = np.where(np.array(list(row.seq)) == 'U')[0]
+
+        # Only truncate at the first residue if that option is set. 
+        if first_sec_only:
+            idxs = idxs[0:1]
+
         # Sequentially truncate at each selenocysteine redidue. 
         seqs = [row.seq[:idx] for idx in idxs]
         # Add new truncated sequences to the dictionary.  
@@ -229,7 +215,7 @@ def sample_kmeans_clusters(data, size, n_clusters=500, sec_ids=None):
     return np.unique(idxs)
 
 
-def filter_sprot(path, out_path=None, size=None, sec_ids=None):
+def sample_sprot(path, out_path=None, size=None, sec_ids=None):
     '''Filters the SwissProt database by selecting representative proteins. The approach for doing this
     is based on K-means clustering the embedding data, and sampling from each cluster.
 
@@ -253,31 +239,42 @@ def filter_sprot(path, out_path=None, size=None, sec_ids=None):
     pd_to_fasta(data.iloc[idxs], path=out_path)
 
 
-def filter_embeddings(path, out_path=None, ids=None):
-    '''Extract embeddings which match the specified gene IDs and write them to a new
-    file at out_path.'''
+def add_embeddings(data, emb_path=None):
+    '''Extract embeddings which match the gene IDs in the data DataFrame, and add them
+    to the DataFrame.
+    
+    args:
+        - data (pd.DataFrame): A pandas DataFrame with data from a FASTA file. 
+            should have columns 'seq' and index 'id'.
+        - emb_path (str): Path to the CSV file in which the embeddings are stored. 
+    '''
 
+    # Read in the embeddings from the specified path. 
+    embeddings = pd.read_csv(emb_path)
+    
     # Want to avoid loading in all the embeddings at once. 
-    emb_ids = np.ravel(pd.read_csv(path, usecols=['id']).values)
+    emb_ids = np.ravel(pd.read_csv(emb_path, usecols=['id']).values)
     
-    idxs = np.isin(emb_ids, ids)
-    df = pd.read_csv(path, index_col='id')[idxs]
-    df.to_csv(out_path)
+    idxs = np.isin(emb_ids, data.index)
+    seqs = data['seq']
+
+    data = pd.read_csv(emb_path, index_col='id')[idxs]
+    # Make sure to add the sequence information back in. 
+    data['seq'] = seqs
+
+    return data
 
 
-def label(path, sec_ids=None):
-    '''Add labels to the data stored at path. The labels are either 1 or
-    0, indicating whether or not the gene present in the dataset is 
-    a selenoprotein or not.'''
+def add_labels(data, sec_ids=None):
+    '''Add labels to the data stored at path. The labels are either 1 or 0, indicating
+     whether or not the gene present in the dataset is a selenoprotein.'''
 
-    df = pd.read_csv(path, index_col='id')
-    labels = [1 if id_ in sec_ids else 0 for id_ in df.index]
-    
-    df['label'] = labels
-    df.to_csv(path)
+    labels = [1 if id_ in sec_ids else 0 for id_ in data.index]
+    data['label'] = labels
+    return data
 
-
-def train_test_val_split(path, train_size=0.8, test_size=0.1, val_size=0.1):
+# NOTE: Should I make the test set or the validation set smaller? I am just going to go with the validation set being smaller. 
+def train_test_val_split(path, train_size=0.8):
     '''Splits the data stored in the input path into a train set, test set, and validation set.'''
 
     # Read in the data, and convert sizes to integers. 
@@ -285,24 +282,21 @@ def train_test_val_split(path, train_size=0.8, test_size=0.1, val_size=0.1):
 
     train_size = int(train_size * len(data))
     # Because this is truncated, test_size should always be smaller than val_size. 
-    test_size = int(test_size * len(data))
+    test_size = (len(data) - train_size) // 2
     val_size = len(data) - train_size - test_size
 
-    assert train_size + test_size + val_size == len(data)
+    assert train_size + test_size + val_size == len(data), 'All subsets should sum to the total length of the dataset.'
+    assert (train_size > val_size) and (val_size >= test_size), f'Expected size order is train_size > val_size >= test_size. Sizes are train_size={train_size}, val_size={val_size}, test_size={test_size}.'
 
     # Run CD-HIT on the data stored at the given path. 
     clusters = get_homology_clusters(path)
 
     # First want to split away the training data. 
-    the_rest, train_ids = split_by_homology(clusters, size=len(data) - train_size)
+    remainder, train_ids = split_by_homology(clusters, size=len(data) - train_size)
 
     # Filter the remaining clusters, and split into validation and test sets. 
-    clusters = clusters[np.isin(clusters.index, the_rest)]
+    clusters = clusters[np.isin(clusters.index, remainder)]
     test_ids, val_ids = split_by_homology(clusters, size=test_size)
-
-    print(len(train_ids), train_size)
-    print(len(test_ids), test_size)
-    print(len(val_ids), val_size)
 
     # Use the obtained IDs to filter the dataset, and return the DataFrames. 
     train_data = data[np.isin(data.index, train_ids)]
@@ -320,7 +314,7 @@ def split_by_homology(clusters, size=None):
         - clusters (pd.DataFrame): A pandas DataFrame mapping the gene ID to cluster number. 
         - size (int): The size of the first group, which must also be the smaller group. 
     '''
-    assert (len(clusters) - size) > size
+    assert (len(clusters) - size) >= size
 
     ids = [[], []]
     # Sort the groups in descending order of length. 
@@ -377,54 +371,45 @@ def get_homology_clusters(path, c=0.8):
 
     return df
 
+# TODO: Flesh this out in a way that's more user-friendly and easier to debug.
 
-def generate_detect_data(data_dir, figure_dir):
+def generate_detect_data(verbose=False):
     '''Creates a dataset for the detection classification task, which involves determining
     whether a protein, truncated or not, is a selenoprotein. The data consists of truncated and
     non-truncated selenoproteins, as well as a number of normal full-length proteins equal to all 
     selenoproteins.'''
 
     # Define the sub-directory of the data directory for this particular dataset. 
-    sub_data_dir = join(data_dir, 'detect/')
+    SUB_DATA_DIR = join(DATA_DIR, 'detect/')
+    sec_ids = fasta_ids(join(DATA_DIR, 'sec.fasta'))
 
-    path = join(sub_data_dir, 'all.fasta') # Path to write all the data to. 
-    paths = [join(sub_data_dir, 'sec_trunc.fasta'), join(sub_data_dir, 'sprot.fasta')]
+    truncate_sec(path=join(DATA_DIR, 'sec.fasta'), out_path=join(SUB_DATA_DIR, 'sec_trunc.fasta'), first_sec_only=True)
 
-    # # Get the number of truncated and non-truncated selenoproteins. 
-    # size = fasta_size(data_dir + 'sec_trunc.fasta') # + fasta_size(data_dir + 'sec.fasta')
-    sec_ids = fasta_ids(join(data_dir, 'sec.fasta'))
-    # filter_sprot(join(data_dir, 'sprot.fasta'), out_path=join(sub_data_dir, 'sprot.fasta'), size=100000-size, sec_ids=sec_ids)
+    # Get the number of truncated selenoproteins. 
+    sec_size = fasta_size(join(DATA_DIR, 'sec.fasta')) 
+
+    sample_sprot(join(DATA_DIR, 'sprot.fasta'), out_path=join(SUB_DATA_DIR, 'sprot.fasta'), size=100000 - sec_size, sec_ids=sec_ids)
     
-    # filter_sec_trunc(join(data_dir, 'sec_trunc.fasta'), trunc=1, out_path=join(sub_data_dir, 'sec_trunc.fasta'))
-    # fasta_concatenate(paths, out_path=path)
+    fasta_concatenate([join(SUB_DATA_DIR, 'sec_trunc.fasta'), join(SUB_DATA_DIR, 'sprot.fasta')], out_path=join(SUB_DATA_DIR, 'all.fasta'))
+
+    train_data, test_data, and val_data should have sequence information. 
+    train_data, test_data, val_data = train_test_val_split(join(SUB_DATA_DIR, 'all.fasta'))
+
+    # Add labels and embeddings to the data, and write to the file.
+    for data, filename in zip([train_data, test_data, val_data], ['train.csv', 'test.csv', 'val.csv']):
+        data = add_embeddings(data, emb_path=join(DATA_DIR, 'embeddings.csv'))
+        data = add_labels(data, sec_ids=sec_ids)
+        data.to_csv(join(SUB_DATA_DIR, filename))
 
 
-    # train_data, test_data, val_data = train_test_val_split(path)
-
-    # filter_embeddings(join(data_dir, 'embeddings.csv'), out_path=join(sub_data_dir, 'train.csv'), ids=train_data.index)
-    # filter_embeddings(join(data_dir, 'embeddings.csv'), out_path=join(sub_data_dir, 'test.csv'), ids=test_data.index)
-    # filter_embeddings(join(data_dir, 'embeddings.csv'), out_path=join(sub_data_dir, 'val.csv'), ids=val_data.index)
-
-    # # Add labels to the embedding data.
-    # label(join(sub_data_dir, 'train.csv'), sec_ids=sec_ids)
-    # label(join(sub_data_dir, 'test.csv'), sec_ids=sec_ids)
-    # label(join(sub_data_dir, 'val.csv'), sec_ids=sec_ids)
+    # train_data, test_data, val_data = pd.read_csv(join(SUB_DATA_DIR, 'train.csv'), index_col='id'), pd.read_csv(join(SUB_DATA_DIR, 'test.csv'), index_col='id'), pd.read_csv(join(SUB_DATA_DIR, 'val.csv'), index_col='id')
+    plot_train_test_val_split(train_data, test_data, val_data, path=join(FIGURE_DIR, 'train_test_val_split_detect.png'))
 
 
-    # plot_train_test_val_split(train_data, test_data, val_data, path=join(figure_dir, 'train_test_val_split_detect.png'))
-
-    print(len(sec_ids) / fasta_size(path))
-
- 
-
-
-if __name__ == '__main__':
+# if __name__ == '__main__':
 
     # csv_concatenate([join(DATA_DIR, 'sec_trunc_embeddings.csv'), join(DATA_DIR, 'sprot_embeddings.csv')], out_path=join(DATA_DIR, 'embeddings.csv'))
-    # truncate_sec(path=join(DATA_DIR, 'sec.fasta'), out_path=join(DATA_DIR, 'sec_trunc.fasta'))
-    
-    generate_detect_data(DATA_DIR, FIGURE_DIR)
-    # generate_extend_data(DATA_DIR, FIGURE_DIR)
+    # generate_detect_data()
 
 
 

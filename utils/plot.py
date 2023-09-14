@@ -108,7 +108,7 @@ def plot_train_test_val_split(train_data, test_data, val_data, path=None):
     # Make the composition pie charts first. 
     for ax, data, title in zip(axes[:3], [train_data, test_data, val_data], titles):
         sec_count = np.sum([1 if '[' in row.Index else 0 for row in data.itertuples()])
-        ax.pie([sec_count, len(data) - sec_count], labels=['truncated', 'full-length'], autopct='%1.1f%%', colors=cmap(np.arange(3)))
+        ax.pie([sec_count, len(data) - sec_count], labels=[f'truncated ({sec_count})', f'full-length ({len(data) - sec_count})'], autopct='%1.1f%%', colors=cmap(np.arange(3)))
         ax.set_title(title)
 
     data = {}
@@ -116,9 +116,10 @@ def plot_train_test_val_split(train_data, test_data, val_data, path=None):
     data['test'] = np.array([len(s) for s in test_data['seq']])
     data['val'] = np.array([len(s) for s in val_data['seq']])
 
-    sns.histplot(data=data, ax=axes[-1], legend=True, stat='proportion', multiple='dodge', bins=50, palette='Pastel2', ec=None)
+    sns.histplot(data=data, ax=axes[-1], legend=True, stat='count', multiple='dodge', bins=50, palette='Pastel2', ec=None)
+    axes[-1].set_yscale('log')
     axes[-1].set_xlabel('lengths')
-    axes[-1].set_ylabel('count')
+    axes[-1].set_ylabel('log(count)')
     axes[-1].set_title('Length distributions')
 
     # Fix the layout and save the figure in the buffer.
@@ -126,58 +127,11 @@ def plot_train_test_val_split(train_data, test_data, val_data, path=None):
     plt.savefig(path, format='png')
 
 
-
-def pool_train_info(info):
-    '''Pool measurements which were calculated for each batch across all batches in an epoch.
-    Takes an info dictionary returned by the train_ method as input.'''
-    
-    # Get the total number of batches processed using values in the info dictionary. 
-    n = len(info['train_loss']) # The total number of batches. 
-    step = info['batches_per_epoch']
-
-    # Add the relevant fields to the info dictionary. 
-    info['pooled_train_loss'] = []
-    info['pooled_train_acc'] = []
-    info['pooled_train_loss_batches_with_sec'] = []
-    info['pooled_train_loss_batches_without_sec'] = []
-    info['pooled_train_acc_batches_with_sec'] = []
-    info['pooled_train_acc_batches_without_sec'] = []
-
-    # Extract data from dictionary and convert to numpy. 
-    train_loss = np.array(info['train_loss'])   
-    train_acc = np.array(info['train_acc'])
-    
-    msg = 'Expected the same number of train loss and train accuracy measurements.'
-    assert len(train_acc) == len(train_loss), msg
-    
-# for epoch_start, epoch_end in [(i, min(n, i+step)) for i in range(0, n, step)]:
-
-        epoch_train_loss = train_loss[epoch_start:epoch_end]
-        epoch_train_acc = train_acc[epoch_start:epoch_end]
-
-        info['pooled_train_loss'] += [np.mean(epoch_train_loss)]
-        info['pooled_train_acc'] += [np.mean(epoch_train_acc)]
-        
-        # Also pool according to  whether or not selenoproteins are present. 
-        batches_with_sec = np.array(info['sec_in_batch'])[epoch_start:epoch_end] == True
-        batches_without_sec = np.array(info['sec_in_batch'])[epoch_start:epoch_end] == False
-        
-        info['pooled_train_loss_batches_with_sec'] += [np.mean(epoch_train_loss[batches_with_sec])]
-        info['pooled_train_loss_batches_without_sec'] += [np.mean(epoch_train_loss[batches_without_sec])]
-        info['pooled_train_acc_batches_with_sec'] += [np.mean(epoch_train_acc[batches_with_sec])]
-        info['pooled_train_acc_batches_without_sec'] += [np.mean(epoch_train_acc[batches_without_sec])]
-
-    # Add epoch batches to the info object. 
-    info['epoch_batches'] = get_epoch_batches(info)
-
-    return info
-            
-
-def plot_train_(info, path=None, pool=True): # include=['train_loss', 'pooled_train_loss', 'val_loss']):
+def plot_train_(reporter, path=None, pool=True): # include=['train_loss', 'pooled_train_loss', 'val_loss']):
     '''Plots information provided in the info dictionary returned by the train_ model method.'''
 
     # fig, axes = plt.subplots(2, figsize=(12, 10), sharex=True)
-    fig, axes = plt.subplots(2, figsize=(30, 15), sharex=True)
+    fig, axes = plt.subplots(2, figsize=(20, 10), sharex=True)
 
     # Seems as though model performance (as inficated by train loss) may vary substantially
     # between batches with and without a selenoprotein present. Might be helpful to label with this in mind. 
@@ -185,9 +139,9 @@ def plot_train_(info, path=None, pool=True): # include=['train_loss', 'pooled_tr
     # Pool the train accuracy and losses
     info = pool_train_info(info)
 
-    loss_df = build_loss_df(info, pool=pool)
-    acc_df = build_acc_df(info)
-    
+    loss_df = reporter.get_loss_info()
+    acc_df = reporter.get_acc_info()
+
     sns.lineplot(data=loss_df, y='loss', x='batch', hue='metric', ax=axes[0], palette=palette)
     sns.lineplot(data=acc_df, y='accuracy', x='batch', hue='metric', ax=axes[1], palette=palette)
 
@@ -204,15 +158,13 @@ def plot_train_(info, path=None, pool=True): # include=['train_loss', 'pooled_tr
     fig.savefig(path, format='png')
 
 
-def plot_train_losses(infos, path=None, title='plot_train_losses', pool=True, sec_only=False):
+def plot_train_info(reporters, path=None, title='plot_train_losses', pool=True, sec_only=False):
     '''Takes a list of train outputs as input.'''
-
-    assert type(infos) == list
 
     fig, ax = plt.subplots(1, figsize=(16, 10))
     
     # Add bce_loss_weight information to each DataFrame. 
-    dfs = [build_loss_df(info, pool=pool).assign(bce_loss_weight=info['bce_loss_weight']) for info in infos]
+    dfs = [r.get_loss_info().assign(bce_loss_weight=r.bce_loss_weight) for r in reporters]
     df = pd.concat(dfs)
     
     metric = ('pooled_' if pool else '') + 'train_loss' + ('_batches_with_sec' if sec_only else '') 
