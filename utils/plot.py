@@ -12,8 +12,10 @@ from sklearn.metrics import confusion_matrix
 import sklearn.decomposition
 import matplotlib as mpl
 
-
+cmap = mpl.colormaps['Pastel2']
 palette = 'Set2'
+
+# TODO: Might be worth making an info object for plotting results of training. 
 
 
 # def plot_distribution(data, ax=None, path=None, title=None, xlabel=None, **kwargs):
@@ -86,132 +88,212 @@ palette = 'Set2'
 #         fig.savefig(path, format='png')
 
 
-
-def plot_train_test_split(train_data, test_data, path=None):
+def plot_train_test_val_split(train_data, test_data, val_data, path=None):
     '''Plot information about the train-test split.
 
     args:
         - train_data (pd.DataFrame)   
         - test_data (pd.DataFrame)   
+        - val_data (pd.DataFrame)
     '''
-
-    assert 'seq' in train_data.columns
-    assert 'seq' in test_data.columns
-    assert train_data.index.name == test_data.index.name == 'id'
-
-    cmap = mpl.colormaps['Pastel2']
 
     # Things we care about are length distributions, as well as
     # proportion of negative and positive instances (and selenoproteins, for that matter)
 
-    plt.figure(figsize=(10, 10))
+    plt.figure(figsize=(15, 10))
     # Establish the subplots. First and second axes are pie charts, the third are length distributions. 
-    axes = [plt.subplot(2, 2, 1), plt.subplot(2, 2, 2), plt.subplot(2, 2, (3, 4))]
+    axes = [plt.subplot(2, 3, 1), plt.subplot(2, 3, 2),plt.subplot(2, 3, 3), plt.subplot(2, 3, (4, 6))]
+    titles = ['Training set composition', 'Testing set composition', 'Validation set composition']
     
     # Make the composition pie charts first. 
-    for ax, data, title in zip(axes[:2], [train_data, test_data], ['Training set composition', 'Testing set composition']):
-        sec_count, sec_trunc_count, other_count = 0, 0, 0
-
-        for row in data.itertuples():
-            # Yhid vonfiyion is met only for truncated selenoproteins. 
-            if '[' in row.Index:
-                sec_trunc_count += 1
-            elif 'U' in row.seq:
-                sec_count += 1
-            else:
-                other_count += 1
-
-        ax.pie([sec_trunc_count, sec_count, other_count], labels=['trunc_sec', 'sec', 'normal'], autopct='%1.1f%%', frame=True, colors=cmap(np.arange(3)))
+    for ax, data, title in zip(axes[:3], [train_data, test_data, val_data], titles):
+        sec_count = np.sum([1 if '[' in row.Index else 0 for row in data.itertuples()])
+        ax.pie([sec_count, len(data) - sec_count], labels=['truncated', 'full-length'], autopct='%1.1f%%', colors=cmap(np.arange(3)))
         ax.set_title(title)
-        # Turn off annoying tick marks. 
-        ax.set_xticklabels([])
-        ax.set_xticks([])
-        ax.set_yticklabels([])
-        ax.set_yticks([])
 
     data = {}
     data['train'] = np.array([len(s) for s in train_data['seq']])
     data['test'] = np.array([len(s) for s in test_data['seq']])
-    # data = pd.DataFrame(data)
-    # plot_distributions(lengths, ax=axes[2], xlabel='length', title='Sequence length distributions', path=None)
-    # axes[2].legend(['train', 'test'])
+    data['val'] = np.array([len(s) for s in val_data['seq']])
 
-    sns.histplot(data=data, ax=axes[2], legend=True, stat='proportion', multiple='dodge', bins=50, palette='Pastel2', ec=None)
-    axes[2].set_xlabel('lengths')
-    axes[2].set_ylabel('count')
-    axes[2].set_title('Length distributions in training and test set')
+    sns.histplot(data=data, ax=axes[-1], legend=True, stat='proportion', multiple='dodge', bins=50, palette='Pastel2', ec=None)
+    axes[-1].set_xlabel('lengths')
+    axes[-1].set_ylabel('count')
+    axes[-1].set_title('Length distributions')
 
     # Fix the layout and save the figure in the buffer.
     plt.tight_layout()
     plt.savefig(path, format='png')
 
 
-def plot_filter_sprot(data, idxs=None, path=None):
-    '''Visualizes the filtering procedure carried out by the filter_sprot
-    function. Plots both the K-means clusters and the data which "passes"
-    the filter.
 
-    args:
-        - data (np.array): An array containing the SwissProt embeddings before 
-            being filtered.
-        - idxs (np.array): The filter indices. 
-        - path (str): The path for where to save the generated figure. 
-    '''
-
-    assert idxs is not None
+def pool_train_info(info):
+    '''Pool measurements which were calculated for each batch across all batches in an epoch.
+    Takes an info dictionary returned by the train_ method as input.'''
     
-    idxs = np.concatenate([np.arange(len(data)), idxs])
-    n, m = len(data), len(idxs) # n is the number of non-filtered elements. 
+    # Get the total number of batches processed using values in the info dictionary. 
+    n = len(info['train_loss']) # The total number of batches. 
+    step = info['batches_per_epoch']
 
-    # Use PCA to put the data in two-dimensional space. 
-    pca = sklearn.decomposition.PCA(n_components=2)
-    data = pca.fit_transform(data.values)
-    # Get the explained variance ration to determine how important each component is. 
-    evrs = pca.explained_variance_ratio_
+    # Add the relevant fields to the info dictionary. 
+    info['pooled_train_loss'] = []
+    info['pooled_train_acc'] = []
+    info['pooled_train_loss_batches_with_sec'] = []
+    info['pooled_train_loss_batches_without_sec'] = []
+    info['pooled_train_acc_batches_with_sec'] = []
+    info['pooled_train_acc_batches_without_sec'] = []
 
-    # print('PCA decomposition of SwissProt data completed.')
+    # Extract data from dictionary and convert to numpy. 
+    train_loss = np.array(info['train_loss'])   
+    train_acc = np.array(info['train_acc'])
+    
+    msg = 'Expected the same number of train loss and train accuracy measurements.'
+    assert len(train_acc) == len(train_loss), msg
+    
+# for epoch_start, epoch_end in [(i, min(n, i+step)) for i in range(0, n, step)]:
 
-    df = pd.DataFrame({f'PCA 1 (EVR={evrs[0]})':data[idxs, 0], f'PCA 2 (EVR={evrs[1]})':data[idxs, 1],  'filter':[0]*n + [1]*(m - n)})
+        epoch_train_loss = train_loss[epoch_start:epoch_end]
+        epoch_train_acc = train_acc[epoch_start:epoch_end]
 
-    fig, ax = plt.subplots(1)
-    # sns.scatterplot(data=df x='UMAP 1', y='UMAP 2', ax=ax, hue='label', legend=False, **kwargs)
-    sns.scatterplot(data=df, x=f'PCA 1 (EVR={evrs[0]})', y=f'PCA 2 (EVR={evrs[1]})', ax=ax, hue='filter', legend=False, s=2, palette={0:'gray', 1:'black'})
-    ax.set_title('Selecting representative sequences from SwissProt')
+        info['pooled_train_loss'] += [np.mean(epoch_train_loss)]
+        info['pooled_train_acc'] += [np.mean(epoch_train_acc)]
+        
+        # Also pool according to  whether or not selenoproteins are present. 
+        batches_with_sec = np.array(info['sec_in_batch'])[epoch_start:epoch_end] == True
+        batches_without_sec = np.array(info['sec_in_batch'])[epoch_start:epoch_end] == False
+        
+        info['pooled_train_loss_batches_with_sec'] += [np.mean(epoch_train_loss[batches_with_sec])]
+        info['pooled_train_loss_batches_without_sec'] += [np.mean(epoch_train_loss[batches_without_sec])]
+        info['pooled_train_acc_batches_with_sec'] += [np.mean(epoch_train_acc[batches_with_sec])]
+        info['pooled_train_acc_batches_without_sec'] += [np.mean(epoch_train_acc[batches_without_sec])]
+
+    # Add epoch batches to the info object. 
+    info['epoch_batches'] = get_epoch_batches(info)
+
+    return info
+            
+
+def plot_train_(info, path=None, pool=True): # include=['train_loss', 'pooled_train_loss', 'val_loss']):
+    '''Plots information provided in the info dictionary returned by the train_ model method.'''
+
+    # fig, axes = plt.subplots(2, figsize=(12, 10), sharex=True)
+    fig, axes = plt.subplots(2, figsize=(30, 15), sharex=True)
+
+    # Seems as though model performance (as inficated by train loss) may vary substantially
+    # between batches with and without a selenoprotein present. Might be helpful to label with this in mind. 
+
+    # Pool the train accuracy and losses
+    info = pool_train_info(info)
+
+    loss_df = build_loss_df(info, pool=pool)
+    acc_df = build_acc_df(info)
+    
+    sns.lineplot(data=loss_df, y='loss', x='batch', hue='metric', ax=axes[0], palette=palette)
+    sns.lineplot(data=acc_df, y='accuracy', x='batch', hue='metric', ax=axes[1], palette=palette)
+
+    axes[0].set_title(f"Weighted BCE loss (weight={info['bce_loss_weight']})")
+    axes[0].set_yscale('log')
+    # axes[0].set_xlabel('batch')
+
+    axes[1].set_title('Accuracy')
+
+    for ax in axes:
+        ax.vlines(info['epoch_batches'], *ax.get_ylim(), linestyles='dotted', color='LightGray')
+        ax.legend().set_title('')
 
     fig.savefig(path, format='png')
 
 
-# def plot_confusion_matrix(preds, labels, filename=None, title=None):
-#     '''
-#     Plots the confusion matrix for a set of predictions generated 
-#     by a specific model. Because, in this case, the problem is one of
-#     binary classification, this matrix displays true positives, false
-#     positives, true negatives, and false negatives. 
+def plot_train_losses(infos, path=None, title='plot_train_losses', pool=True, sec_only=False):
+    '''Takes a list of train outputs as input.'''
+
+    assert type(infos) == list
+
+    fig, ax = plt.subplots(1, figsize=(16, 10))
+    
+    # Add bce_loss_weight information to each DataFrame. 
+    dfs = [build_loss_df(info, pool=pool).assign(bce_loss_weight=info['bce_loss_weight']) for info in infos]
+    df = pd.concat(dfs)
+    
+    metric = ('pooled_' if pool else '') + 'train_loss' + ('_batches_with_sec' if sec_only else '') 
+    df = df[df['metric'] == metric]
+
+    if not pool:
+        sns.scatterplot(data=df, y='loss', x='batch', hue='bce_loss_weight', ax=ax, palette=palette, edgecolor=None, s=5)
+    else:
+        sns.lineplot(data=df, y='loss', x='batch', hue='bce_loss_weight', ax=ax, palette=palette)
+    
+    ax.legend(loc='upper right', title='bce_loss_weight') # Manually set legend location to avoid it being so slow. 
+
+    ax.set_yscale('log')
+    ax.set_title(title)
+
+    fig.savefig(path, format='png')
+
+
+# def plot_filter_sprot(data, idxs=None, path=None):
+#     '''Visualizes the filtering procedure carried out by the filter_sprot
+#     function. Plots both the K-means clusters and the data which "passes"
+#     the filter.
 
 #     args:
-#         - preds (np.array)
-#         - labels (np.array)
+#         - data (np.array): An array containing the SwissProt embeddings before 
+#             being filtered.
+#         - idxs (np.array): The filter indices. 
+#         - path (str): The path for where to save the generated figure. 
 #     '''
 
-#     # Confusion matrix whose i-th row and j-th column entry indicates 
-#     # the number of samples with true label being i-th class and predicted 
-#     # label being j-th class.
-#     matrix = confusion_matrix(preds, labels)
-#     # tn, fp, fn, tp = matrix.ravel()
+#     assert idxs is not None
+    
+#     idxs = np.concatenate([np.arange(len(data)), idxs])
+#     n, m = len(data), len(idxs) # n is the number of non-filtered elements. 
+
+#     # Use PCA to put the data in two-dimensional space. 
+#     pca = sklearn.decomposition.PCA(n_components=2)
+#     data = pca.fit_transform(data.values)
+#     # Get the explained variance ration to determine how important each component is. 
+#     evrs = pca.explained_variance_ratio_
+
+#     # print('PCA decomposition of SwissProt data completed.')
+
+#     df = pd.DataFrame({f'PCA 1 (EVR={evrs[0]})':data[idxs, 0], f'PCA 2 (EVR={evrs[1]})':data[idxs, 1],  'filter':[0]*n + [1]*(m - n)})
 
 #     fig, ax = plt.subplots(1)
-#     sns.heatmap(matrix, ax=ax, annot=True)
+#     # sns.scatterplot(data=df x='UMAP 1', y='UMAP 2', ax=ax, hue='label', legend=False, **kwargs)
+#     sns.scatterplot(data=df, x=f'PCA 1 (EVR={evrs[0]})', y=f'PCA 2 (EVR={evrs[1]})', ax=ax, hue='filter', legend=False, s=2, palette={0:'gray', 1:'black'})
+#     ax.set_title('Selecting representative sequences from SwissProt')
 
-#     ax.set_xlabel('true')
-#     ax.set_ylabel('predicted')
+#     fig.savefig(path, format='png')
 
-#     # ax.set_xticklabels(['false positive', 'true positive'])
-#     # ax.set_yticklabels(['true negative', 'false negative'])
-#     ax.set_title(title)
 
-#     if filename is not None:
-#         fig.savefig(filename, format='png')
+# Want to visualize selenoprotein enrichment in each cluster. Might be good to have some kind
+# of heatmap, where the color indicates number of selenoproteins. 
 
+# Actually just doing a scatter plot might be easier. Maybe just put scatter number on the x-axis, or
+# do something with cluster size. OK, maybe cluster number on x-axis, size on the y-axis, and color corresponding
+# to selenoprotein count. 
+
+def plot_sample_kmeans_clusters(data, kmeans, n_clusters=None, sec_ids=None, path=None):
+    '''Generates a plot showing the selenoprotein enrichment in the K-means clusters generated
+    in the sample_kmeans_clusters function.'''
+
+    fig, ax = plt.subplots(1, figsize=(14, 5))
+
+    labels = np.arange(n_clusters) # The cluster labels!
+    sizes = [np.sum(kmeans.labels_ == i) for i in labels] # Get the size of each cluster. 
+    
+    ids = data.index.to_numpy()
+    sec_contents = np.array([np.sum(np.isin(ids[kmeans.labels_ == i], sec_ids)) for i in labels])
+
+    df = {'cluster_label':labels, 'cluster_size':sizes, 'sec_content':sec_contents}
+    ax = sns.scatterplot(ax=ax, data=df, hue='sec_content', x='cluster_label', y='cluster_size', palette=sns.color_palette("light:#5A9", as_cmap=True))
+    sns.move_legend(ax, bbox_to_anchor=(1, 1), loc='upper left', frameon=False)
+    ax.set_title('Selenoprotein enrichment in K-means clusters')
+
+    fig.savefig(path, format='png')
+
+def plot_get_homology_cluster():
+    pass
 
 
 

@@ -7,125 +7,114 @@ import pandas as pd
 import numpy as np
 import torch
 import h5py
-import os 
+import os
+import torch
+from torch.utils.data import Dataset, DataLoader 
+from utils.data import pd_from_fasta
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-# It's more convenient to store the embedding information separately from the
-# metadata. Or perhaps just write a method to extract it. 
 
-class Dataset(torch.utils.data.Dataset):
+def dataloader_from_csv(path, batch_size=64, type_='emb', **kwargs):
+    '''Create a DataLoader from a CSV of embedding data.
+    
+    args:
+        - path (str): The path to the CSV file where the data is stored. 
+        - batch_size (int or None): Batch size of the DataLoader. If None, no batches are used. 
+        - type_ (str): One of 'emb', 'seq'. Specifies which type of Dataset to use. 
+        - **kwargs: keyword arguments passed into the Dataset.from_csv function, along with the path. 
+    '''
+    if type_ == 'emb':
+        dataset = EmbeddingDataset.from_csv(path, **kwargs)
+    elif type_ == 'seq':
+        # Assume dataset is being loaded from a FASTA file. 
+        dataset = SequenceDataset.from_fasta(path, **kwargs)
+     
+    # If the batch size is None, load the entire Dataset at once. 
+    if batch_size is None:
+        batch_size = len(dataset)
 
-    def __init__(self, data):
-        '''Initializes a Dataset object, which stores the underlying data.
-        
-        args:
-            - data (pd.DataFrame): The data to be stored in the object. 
-        '''
-        # Make sure the accession number is set as the index. 
-        self.data = data.set_index('id')
-        self.length = len(data)
-
-    def __repr__(self):
-        pass
-
-    def __getitem__(self, idx):
-        return self.data.iloc[idx].to_dict(orient='records')
-
-    def __len__(self):
-        return self.length
-
-    def metadata(self): # Is a DataFrame the best choice of object to return here?
-        '''Extract the metadata (i.e. the labels and accession numbers) from the 
-        underlying DataFrame. A DataFrame is returned.'''
-        return self.data.loc[['label', 'id']]
-        # Maybe returning a dictionary would be better?
-
-    def to_csv(self, path):
-        '''Write a Dataset object to a CSV file. 
-
-        args:
-            - path (str): The path to the CSV file. 
-        '''
-        df = df.set_index('id')
-        df.to_csv(filename, index=True, index_label='id')
+    return DataLoader(dataset, shuffle=True, batch_size=batch_size)
 
 
 class EmbeddingDataset(Dataset):
     
     def __init__(self, data):
-        '''Initializes an EmbeddingDataset object.
+        '''Initializes an EmbeddingDataset from a pandas DataFrame containing
+        embeddings and labels.'''
 
-        args:
-            - data (pd.DataFrame): The data to be stored in the object. 
-        '''
-        # Only want to store the metadata in the DataFrame. 
-        super(EmbeddingDataset, self).__init__(data.loc[['label', 'id']])
-        
         # Makes sense to store the embeddings as a separate array. 
-        self.embs = self.data.drop(columns=['label', 'id'], inplace=False, errors='ignore').values
+        # Make sure the type of the tensor is the same as model weights. 
+        self.embeddings_ = torch.from_numpy(data.drop(columns=['label']).values).type(torch.float32)
+        self.labels_ = torch.from_numpy(data['label'].values).type(torch.float32)
+        self.ids_ = np.ravel((data.index))
 
+        self.latent_dim = self.embeddings_.shape[-1]
+        self.length = len(data)
+
+    def __len__(self):
+        return self.length
 
     def __getitem__(self, idx):
-        '''Overrides the Dataset __getitem__ method. This is slightly different, as the
-        embedding data is stored in a separate attribute for ease of access.'''
-        
-        item = super(EmbeddingDataset, self).__getitem__(idx)
-        item['embedding'] = self.embds[idx]
-        
-        return item
-
-    def embeddings(self, return_type='np'):
-        '''Extracts the embeddings from the underlying DataFrame.
-
-        args:
-            - return_type (str): Indicates the format in which the embeddings
-                should be returned. 'np' for numpy, 'pt' for torch.Tensor. 
-        '''
-
-        if return_type == 'np':
-            return self.embs
-        elif return_type == 'pt':
-            return torch.Tensor(self.embs)
-        else:
-            raise ValueError('Return type must be one of: pt, np.')
+        '''Returns an item from the EmbeddingDataset.'''
+        return {'label':self.labels_[idx], 'data':self.embeddings_[idx], 'id':self.ids_[idx]}
 
     def from_csv(path):
         '''Load an EmbeddingDataset object from a CSV file.'''
         # Be picky about what is being read into the object. Eventually, we can 
         # add more checks to control what is loaded in (like type restrictions).
-        data = pd.read_csv(path, 
-            usecols=lambda c : (c in ['label', 'id']) or type(c) == int)
-
+        data = pd.read_csv(path, index_col='id')
         return EmbeddingDataset(data)
-
-    def to_csv(self, path):
-        '''Overwrites the to_csv method defined in the Dataset class, to accomodate
-        the storage of the embeddings in a separate attribute.'''
-
-        data = pd.DataFrame(self.embs)
-        data = pd.concat([data, self.data], axis=1)
-        data = data.set_index('id')
-
-        data.to_csv(path)
 
 
 class SequenceDataset(Dataset):
 
     def __init__(self, data):
+        '''Instantiates a SequenceDataset using a pandas DataFrame which contains sequence and
+        label information.'''
 
-        super(SequenceDataset, self).__init__(data)
+        # Make sure the type of the tensor is the same as model weights. 
+        # self.sequences_ = torch.from_numpy(data['seq'].values).type(torch.float32)
+        self.sequences_ = data['seq'].values
+        self.labels_ = torch.from_numpy(data['label'].values)
+        self.ids_ = np.array(list(data.index))
 
-    def sequences(self):
-        '''Extract the amino acid sequences from the underlying DataFrame. Returns
-        the sequences as a list, for compatibility with tokenizers.'''
-        return list(self.data.loc['seq'].values)
- 
-    def from_csv(path):
-        '''Load an EmbeddingDataset object from a CSV file.'''
-        # Be picky about what is being read into the object. Eventually, we can 
-        # add more checks to control what is loaded in (like type restrictions).
-        data = pd.read_csv(path, 
-            usecols=lambda c : c in ['label', 'id', 'seq']) 
+        self.length = len(data)
 
-        return SequenceDataset(data)
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, idx):
+        '''Returns an item from the EmbeddingDataset.'''
+        return {'label':self.labels_[idx], 'data':self.sequences_[idx]} # , 'id':self.ids_[idx]}
+    
+    def from_fasta(path, ids=None, labels=None):
+        '''Load an EmbeddingDataset object from a FASTA file.'''
+
+        assert len(ids) == len(labels)
+        
+        # Load in all the sequences to a DataFrame. 
+        data = pd_from_fasta(path)
+
+        if ids is not None:
+            # Use the specified IDs to filter the data. 
+            data = data[np.isin(data.index, ids)]
+
+        # Add labels to the dataset. 
+        if labels is not None:
+            data = data.reindex(list(ids))
+            data['label'] = labels
+
+        return SequenceDataset(data) 
+
+    # def from_csv(path, ids=None):
+    #     '''Load an EmbeddingDataset object from a CSV file.'''
+
+    #     # Load in all the sequences to a DataFrame. 
+    #     data = pd.read_csv(path, index_col='id')
+
+    #     if ids is not None:
+    #         # Use the specified IDs to filter the data. 
+    #         data = data[np.isin(data.index, ids)]
+
+    #     return SequenceDataset(data)
