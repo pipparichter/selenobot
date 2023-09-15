@@ -1,6 +1,3 @@
-'''
-Utility functions for gathering and preprocessing data.
-'''
 
 import requests
 import pandas as pd
@@ -9,8 +6,6 @@ from tqdm import tqdm
 import time
 from datetime import date
 import re
-import io
-import h5py
 import sklearn.cluster
 from tqdm import tqdm
 import random
@@ -18,147 +13,13 @@ import subprocess
 import os
 from os.path import join
 
-import sys
-sys.path.append('/home/prichter/Documents/selenobot/utils')
+from src.utils import *
 
-from plot import *
-
-DATA_DIR = '/home/prichter/Documents/selenobot/data/uniprot_2023_03/' 
+DATA_DIR = '/home/prichter/Documents/selenobot/data/uniprot_2023_03/'
+DETECT_DATA_DIR = '/home/prichter/Documents/selenobot/data/uniprot_2023_03/detect/'
 FIGURE_DIR = '/home/prichter/Documents/selenobot/figures/'
 
 # TODO: It might be worth writing a class to manage FASTA files. 
-
-def write(text, path):
-    '''Writes a string of text to a file.'''
-    if path is not None:
-        with open(path, 'w') as f:
-            f.write(text)
-
-def read(path):
-    '''Reads the information contained in a text file into a string.'''
-    with open(path, 'r') as f:
-        text = f.read()
-    return text
-
-
-def clear(path):
-    '''Clear the contents of the file found at the path.'''
-    open(path, 'w').close()
-
-
-def get_id(head):
-    '''Extract the unique identifier from a FASTA metadata string (the 
-    information on the line preceding the actual sequence). This ID should 
-    be flanked by '|'.
-    '''
-    start_idx = head.find('|') + 1
-    # Cut off any extra stuff preceding the ID, and locate the remaining |.
-    head = head[start_idx:]
-    end_idx = head.find('|')
-    return head[:end_idx]
-
-
-def fasta_ids(path):
-    '''Extract all gene IDs stored in a FASTA file.'''
-    # Read in the FASTA file as a string. 
-    fasta = read(path)
-    # Extract all the IDs from the headers, and return the result. 
-    ids = [get_id(head) for head in re.findall(r'^>.*', fasta, re.MULTILINE)]
-    return np.array(ids)
-
-def csv_ids(path):
-    '''Extract all gene IDs stored in a CSV file.'''
-    df = pd.read_csv(path, usecols=['id']) # Only read in the ID values. 
-    return np.ravel(df.values)
-
-def csv_labels(path):
-    '''Extract all gene IDs stored in a CSV file.'''
-    df = pd.read_csv(path, usecols=['label']) # Only read in the ID values. 
-    # Seems kind of bonkers that I need to ravel this. 
-    return np.ravel(df.values.astype(np.int32))
-
-
-def fasta_seqs(path):
-    '''Extract all amino acid sequences stored in a FASTA file.'''
-    # Read in the FASTA file as a string. 
-    fasta = read(path)
-    seqs = re.split(r'^>.*', fasta, flags=re.MULTILINE)[1:]
-    # Strip all of the newline characters from the amino acid sequences. 
-    seqs = [s.replace('\n', '') for s in seqs]
-    # return np.array(seqs)
-    return seqs
-    
-
-def fasta_size(path):
-    '''Get the number of entries in a FASTA file.'''
-    return len(fasta_ids(path))
-
-
-def fasta_concatenate(paths, out_path=None):
-    '''Combine the FASTA files specified by the paths. Creates a new file
-    containing the combined data.'''
-
-    dfs = [pd_from_fasta(p) for p in paths]
-    df = pd.concat(dfs)
-    pd_to_fasta(df, path=out_path)
-
-
-def csv_concatenate(paths, out_path=None):
-    '''Combine the CSV files specified by the paths. Creates a new file
-    containing the combined data.'''
-
-    dfs = [pd.read_csv(p, index_col='id') for p in paths]
-    df = pd.concat(dfs)
-    df.to_csv(out_path)
-
-
-def pd_from_clstr(path):
-    '''Convert a .clstr file string to a pandas DataFrame. The resulting 
-    DataFrame maps cluster label to gene ID.'''
-
-    # Read in the cluster file as a string. 
-    clstr = read(path)
-    df = {'id':[], 'cluster':[]}
-    # The start of each new cluster is marked with a line like ">Cluster [num]"
-    clusters = re.split(r'^>.*', clstr, flags=re.MULTILINE)
-    # Split on the newline. 
-    for i, cluster in enumerate(clusters):
-        ids = [get_id(x) for x in cluster.split('\n') if x != '']
-        df['id'] += ids
-        df['cluster'] += [i] * len(ids)
-
-    return pd.DataFrame(df).set_index('id')
-
-
-def pd_from_fasta(path):
-    '''Load a FASTA file in as a pandas DataFrame.'''
-
-    ids = fasta_ids(path)
-    seqs = fasta_seqs(path)
-
-    df = pd.DataFrame({'seq':seqs, 'id':ids})
-    # df = df.astype({'id':str, 'seq':str})
-    df = df.set_index('id')
-    
-    return df
-
-
-def pd_to_fasta(df, path=None, textwidth=80):
-    '''Convert a pandas DataFrame containing FASTA data to a FASTA file format.'''
-
-    fasta = ''
-    for row in tqdm(df.itertuples(), desc='df_to_fasta', total=len(df)):
-        fasta += '>|' + str(row.Index) + '|\n'
-
-        # Split the sequence up into shorter, sixty-character strings.
-        n = len(row.seq)
-        seq = [row.seq[i:min(n, i + textwidth)] for i in range(0, n, textwidth)]
-
-        seq = '\n'.join(seq) + '\n'
-        fasta += seq
-    
-    # Write the FASTA string to the path-specified file. 
-    write(fasta, path=path)
 
 
 def truncate_sec(path=None, out_path=None, first_sec_only=True):
@@ -187,7 +48,6 @@ def truncate_sec(path=None, out_path=None, first_sec_only=True):
     pd_to_fasta(df_trunc, path=out_path)
 
 
-
 def sample_kmeans_clusters(data, size, n_clusters=500, sec_ids=None):
     '''Sample n elements such that the elements are spread across a set
     of K-means clusters of. Returns the indices of data elements in the sample '''
@@ -207,9 +67,6 @@ def sample_kmeans_clusters(data, size, n_clusters=500, sec_ids=None):
         idxs += list(np.random.choice(cluster_idxs, min(n, len(cluster_idxs))))
     # Maks sure no duplicate indices are collected. 
 
-    # Also return the fitted kmeans model. 
-    plot_sample_kmeans_clusters(data, kmeans, n_clusters=n_clusters, sec_ids=sec_ids, path=join(FIGURE_DIR, 'sample_kmeans_clusters.png'))
-    
     # Make sure to exclude the IDs which are selenoproteins. 
     idxs = [idx for idx in idxs if data.index[idx] not in sec_ids]
     return np.unique(idxs)
@@ -271,6 +128,7 @@ def add_labels(data, sec_ids=None):
 
     labels = [1 if id_ in sec_ids else 0 for id_ in data.index]
     data['label'] = labels
+
     return data
 
 # NOTE: Should I make the test set or the validation set smaller? I am just going to go with the validation set being smaller. 
@@ -298,6 +156,9 @@ def train_test_val_split(path, train_size=0.8):
     clusters = clusters[np.isin(clusters.index, remainder)]
     test_ids, val_ids = split_by_homology(clusters, size=test_size)
 
+    assert len(np.unique(np.concatenate([train_ids, test_ids, val_ids]))) == len(np.concatenate([train_ids, test_ids, val_ids])), 'Some proteins are represented more than once in the partitioned data.'
+    assert len(train_ids) + len(test_ids) + len(val_ids) == len(data), 'The lengths of the combined partitioned data do not add up to the original dataset.'
+
     # Use the obtained IDs to filter the dataset, and return the DataFrames. 
     train_data = data[np.isin(data.index, train_ids)]
     test_data = data[np.isin(data.index, test_ids)]
@@ -314,7 +175,7 @@ def split_by_homology(clusters, size=None):
         - clusters (pd.DataFrame): A pandas DataFrame mapping the gene ID to cluster number. 
         - size (int): The size of the first group, which must also be the smaller group. 
     '''
-    assert (len(clusters) - size) >= size
+    assert (len(clusters) - size) >= size, f'The size argument must specify the smaller partition. Provided arguments are len(clusters)={len(lusters)} and size={size}.'
 
     ids = [[], []]
     # Sort the groups in descending order of length. 
@@ -341,6 +202,9 @@ def split_by_homology(clusters, size=None):
             group = 0
         
     pbar.close()
+
+    assert len(ids[0]) + len(ids[1]) == len(clusters), f'The combined sizes of the partitions ({len(ids[0]) + len(ids[1])}) do not add up to the size of the original data ({len(clusters)}).'
+    assert len(ids[0]) < len(ids[1]), 'The first set of IDs should be smaller than the second.'
 
     return tuple(ids)
 
@@ -379,37 +243,37 @@ def generate_detect_data(verbose=False):
     non-truncated selenoproteins, as well as a number of normal full-length proteins equal to all 
     selenoproteins.'''
 
-    # Define the sub-directory of the data directory for this particular dataset. 
-    SUB_DATA_DIR = join(DATA_DIR, 'detect/')
-    sec_ids = fasta_ids(join(DATA_DIR, 'sec.fasta'))
+    # truncate_sec(path=join(DATA_DIR, 'sec.fasta'), out_path=join(DETECT_DATA_DIR, 'sec_trunc.fasta'), first_sec_only=True)
+    # Make sure to use IDs of truncated proteins. 
+    sec_ids = fasta_ids(join(DETECT_DATA_DIR, 'sec_trunc.fasta'))
 
-    truncate_sec(path=join(DATA_DIR, 'sec.fasta'), out_path=join(SUB_DATA_DIR, 'sec_trunc.fasta'), first_sec_only=True)
+    # # Get the number of truncated selenoproteins. 
+    # sec_size = fasta_size(join(DATA_DIR, 'sec.fasta')) 
 
-    # Get the number of truncated selenoproteins. 
-    sec_size = fasta_size(join(DATA_DIR, 'sec.fasta')) 
+    # # Get the number of truncated selenoproteins. 
+    # sec_size = fasta_size(join(DATA_DIR, 'sec.fasta')) 
 
-    sample_sprot(join(DATA_DIR, 'sprot.fasta'), out_path=join(SUB_DATA_DIR, 'sprot.fasta'), size=100000 - sec_size, sec_ids=sec_ids)
+    # sample_sprot(join(DATA_DIR, 'sprot.fasta'), out_path=join(DETECT_DATA_DIR, 'sprot.fasta'), size=100000 - sec_size, sec_ids=sec_ids)
     
-    fasta_concatenate([join(SUB_DATA_DIR, 'sec_trunc.fasta'), join(SUB_DATA_DIR, 'sprot.fasta')], out_path=join(SUB_DATA_DIR, 'all.fasta'))
+    # fasta_concatenate([join(DETECT_DATA_DIR, 'sec_trunc.fasta'), join(DETECT_DATA_DIR, 'sprot.fasta')], out_path=join(DETECT_DATA_DIR, 'all.fasta'))
+    # sample_sprot(join(DATA_DIR, 'sprot.fasta'), out_path=join(DETECT_DATA_DIR, 'sprot.fasta'), size=100000 - sec_size, sec_ids=sec_ids)
+    
+    # fasta_concatenate([join(DETECT_DATA_DIR, 'sec_trunc.fasta'), join(DETECT_DATA_DIR, 'sprot.fasta')], out_path=join(DETECT_DATA_DIR, 'all.fasta'))
 
-    train_data, test_data, and val_data should have sequence information. 
-    train_data, test_data, val_data = train_test_val_split(join(SUB_DATA_DIR, 'all.fasta'))
+    # ctrain_data, test_data, and val_data should have sequence information. 
+    train_data, test_data, val_data = train_test_val_split(join(DETECT_DATA_DIR, 'all.fasta'))
 
     # Add labels and embeddings to the data, and write to the file.
     for data, filename in zip([train_data, test_data, val_data], ['train.csv', 'test.csv', 'val.csv']):
         data = add_embeddings(data, emb_path=join(DATA_DIR, 'embeddings.csv'))
         data = add_labels(data, sec_ids=sec_ids)
-        data.to_csv(join(SUB_DATA_DIR, filename))
+        data.to_csv(join(DETECT_DATA_DIR, filename))
 
 
-    # train_data, test_data, val_data = pd.read_csv(join(SUB_DATA_DIR, 'train.csv'), index_col='id'), pd.read_csv(join(SUB_DATA_DIR, 'test.csv'), index_col='id'), pd.read_csv(join(SUB_DATA_DIR, 'val.csv'), index_col='id')
-    plot_train_test_val_split(train_data, test_data, val_data, path=join(FIGURE_DIR, 'train_test_val_split_detect.png'))
-
-
-# if __name__ == '__main__':
+if __name__ == '__main__':
 
     # csv_concatenate([join(DATA_DIR, 'sec_trunc_embeddings.csv'), join(DATA_DIR, 'sprot_embeddings.csv')], out_path=join(DATA_DIR, 'embeddings.csv'))
-    # generate_detect_data()
+    generate_detect_data()
 
 
 

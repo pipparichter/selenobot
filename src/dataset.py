@@ -10,7 +10,7 @@ import h5py
 import os
 import torch
 from torch.utils.data import DataLoader
-from utils.data import pd_from_fasta
+from utils import pd_from_fasta
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -51,7 +51,7 @@ class Dataset(torch.utils.data.Dataset):
         return self.length
 
     def __getitem__(self, idx):
-        '''Returns an item from the EmbeddingDataset.'''
+        '''Returns an item from the Dataset.'''
         return {'label':self.labels_[idx], 'emb':self.embeddings_[idx], 'id':self.ids_[idx], 'seq':self.sequences_[idx]}
 
     def from_csv(path):
