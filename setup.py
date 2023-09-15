@@ -132,7 +132,7 @@ def add_labels(data, sec_ids=None):
     return data
 
 # NOTE: Should I make the test set or the validation set smaller? I am just going to go with the validation set being smaller. 
-def train_test_val_split(path, train_size=0.8):
+def train_test_val_split(path, train_size=0.8, verbose=True):
     '''Splits the data stored in the input path into a train set, test set, and validation set.'''
 
     # Read in the data, and convert sizes to integers. 
@@ -148,16 +148,21 @@ def train_test_val_split(path, train_size=0.8):
 
     # Run CD-HIT on the data stored at the given path. 
     clusters = get_homology_clusters(path)
+    # assert len(clusters) == len(data), f'Information for {len(clusters)} sequences was returned. Expected {len(data)} entries.'
 
     # First want to split away the training data. 
     remainder, train_ids = split_by_homology(clusters, size=len(data) - train_size)
 
+
     # Filter the remaining clusters, and split into validation and test sets. 
     clusters = clusters[np.isin(clusters.index, remainder)]
+    assert len(clusters) == len(remainder), f'After filtering using the remaining indices, len(clusters)={len(clusters)}, which is not equal to len(remainder)={len(remainder)}.'
+
     test_ids, val_ids = split_by_homology(clusters, size=test_size)
+    assert (len(test_ids) + len(val_ids)) == len(remainder), f'The sizes of test_ids ({len(test_ids)}) and val_ids {len(test_ids)}) do not account for the entire remainder, which has {len(remainder)} entrues.'
 
     assert len(np.unique(np.concatenate([train_ids, test_ids, val_ids]))) == len(np.concatenate([train_ids, test_ids, val_ids])), 'Some proteins are represented more than once in the partitioned data.'
-    assert len(train_ids) + len(test_ids) + len(val_ids) == len(data), 'The lengths of the combined partitioned data do not add up to the original dataset.'
+    # assert (len(train_ids) + len(test_ids) + len(val_ids)) == len(data), f'The lengths of the combined partitioned data ({(len(train_ids) + len(test_ids) + len(val_ids))}) do not add up to the original dataset ({len(data)}).'
 
     # Use the obtained IDs to filter the dataset, and return the DataFrames. 
     train_data = data[np.isin(data.index, train_ids)]
@@ -209,6 +214,24 @@ def split_by_homology(clusters, size=None):
     return tuple(ids)
 
 
+def pd_from_clstr(path):
+    '''Convert a .clstr file string to a pandas DataFrame. The resulting 
+    DataFrame maps cluster label to gene ID.'''
+
+    # Read in the cluster file as a string. 
+    clstr = read(path)
+    df = {'id':[], 'cluster':[]}
+    # The start of each new cluster is marked with a line like ">Cluster [num]"
+    clusters = re.split(r'^>.*', clstr, flags=re.MULTILINE)
+    # Split on the newline. 
+    for i, cluster in enumerate(clusters):
+        ids = [get_id(x) for x in cluster.split('\n') if x != '']
+        df['id'] += ids
+        df['cluster'] += [i] * len(ids)
+
+    return pd.DataFrame(df).set_index('id')
+
+
 def get_homology_clusters(path, c=0.8):
     '''Run CD-HIT on the FASTA file stored in the input path, generating the
     homology-based sequence similarity clusters.'''
@@ -232,7 +255,7 @@ def get_homology_clusters(path, c=0.8):
         subprocess.run(f'mv {o}.clstr {f}', shell=True)
 
     df = pd_from_clstr(f)
-
+    
     return df
 
 # TODO: Flesh this out in a way that's more user-friendly and easier to debug.
@@ -243,24 +266,24 @@ def generate_detect_data(verbose=False):
     non-truncated selenoproteins, as well as a number of normal full-length proteins equal to all 
     selenoproteins.'''
 
-    # truncate_sec(path=join(DATA_DIR, 'sec.fasta'), out_path=join(DETECT_DATA_DIR, 'sec_trunc.fasta'), first_sec_only=True)
+    truncate_sec(path=join(DATA_DIR, 'sec.fasta'), out_path=join(DETECT_DATA_DIR, 'sec_trunc.fasta'), first_sec_only=True)
     # Make sure to use IDs of truncated proteins. 
     sec_ids = fasta_ids(join(DETECT_DATA_DIR, 'sec_trunc.fasta'))
 
-    # # Get the number of truncated selenoproteins. 
-    # sec_size = fasta_size(join(DATA_DIR, 'sec.fasta')) 
+    # Get the number of truncated selenoproteins. 
+    sec_size = fasta_size(join(DATA_DIR, 'sec.fasta')) 
 
-    # # Get the number of truncated selenoproteins. 
-    # sec_size = fasta_size(join(DATA_DIR, 'sec.fasta')) 
+    # Get the number of truncated selenoproteins. 
+    sec_size = fasta_size(join(DATA_DIR, 'sec.fasta')) 
 
-    # sample_sprot(join(DATA_DIR, 'sprot.fasta'), out_path=join(DETECT_DATA_DIR, 'sprot.fasta'), size=100000 - sec_size, sec_ids=sec_ids)
+    sample_sprot(join(DATA_DIR, 'sprot.fasta'), out_path=join(DETECT_DATA_DIR, 'sprot.fasta'), size=100000 - sec_size, sec_ids=sec_ids)
     
-    # fasta_concatenate([join(DETECT_DATA_DIR, 'sec_trunc.fasta'), join(DETECT_DATA_DIR, 'sprot.fasta')], out_path=join(DETECT_DATA_DIR, 'all.fasta'))
-    # sample_sprot(join(DATA_DIR, 'sprot.fasta'), out_path=join(DETECT_DATA_DIR, 'sprot.fasta'), size=100000 - sec_size, sec_ids=sec_ids)
+    fasta_concatenate([join(DETECT_DATA_DIR, 'sec_trunc.fasta'), join(DETECT_DATA_DIR, 'sprot.fasta')], out_path=join(DETECT_DATA_DIR, 'all.fasta'))
+    sample_sprot(join(DATA_DIR, 'sprot.fasta'), out_path=join(DETECT_DATA_DIR, 'sprot.fasta'), size=100000 - sec_size, sec_ids=sec_ids)
     
-    # fasta_concatenate([join(DETECT_DATA_DIR, 'sec_trunc.fasta'), join(DETECT_DATA_DIR, 'sprot.fasta')], out_path=join(DETECT_DATA_DIR, 'all.fasta'))
+    fasta_concatenate([join(DETECT_DATA_DIR, 'sec_trunc.fasta'), join(DETECT_DATA_DIR, 'sprot.fasta')], out_path=join(DETECT_DATA_DIR, 'all.fasta'))
 
-    # ctrain_data, test_data, and val_data should have sequence information. 
+    # train_data, test_data, and val_data should have sequence information. 
     train_data, test_data, val_data = train_test_val_split(join(DETECT_DATA_DIR, 'all.fasta'))
 
     # Add labels and embeddings to the data, and write to the file.

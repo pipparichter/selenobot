@@ -89,22 +89,6 @@ def csv_concatenate(paths, out_path=None):
     df.to_csv(out_path)
 
 
-def pd_from_clstr(path):
-    '''Convert a .clstr file string to a pandas DataFrame. The resulting 
-    DataFrame maps cluster label to gene ID.'''
-
-    # Read in the cluster file as a string. 
-    clstr = read(path)
-    df = {'id':[], 'cluster':[]}
-    # The start of each new cluster is marked with a line like ">Cluster [num]"
-    clusters = re.split(r'^>.*', clstr, flags=re.MULTILINE)
-    # Split on the newline. 
-    for i, cluster in enumerate(clusters):
-        ids = [get_id(x) for x in cluster.split('\n') if x != '']
-        df['id'] += ids
-        df['cluster'] += [i] * len(ids)
-
-    return pd.DataFrame(df).set_index('id')
 
 
 def pd_from_fasta(path):
