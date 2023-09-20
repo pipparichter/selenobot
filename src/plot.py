@@ -7,10 +7,12 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 import pandas as pd
-from umap import UMAP
-from sklearn.metrics import confusion_matrix
-import sklearn.decomposition
+import sklearn
 import matplotlib as mpl
+import sklearn
+
+import utils
+from tqdm import tqdm
 
 cmap = mpl.colormaps['Pastel2']
 palette = 'Set2'
@@ -18,83 +20,23 @@ palette = 'Set2'
 # TODO: Might be worth making an info object for plotting results of training. 
 
 
-# def plot_distribution(data, ax=None, path=None, title=None, xlabel=None, **kwargs):
-#     '''Visualize the distribution of a set of data. 
 
 
-#     '''
-#     # assert type(data) == np.array, 'Input data must be a numpy array.'
-#     assert ax is not None
-
-#     sns.histplot(data=data, ax=ax, legend=False,  **kwargs)
-
-#     ax.set_title(title)
-#     ax.set_xlabel(xlabel)
-
-#     # If the data passed into the function is more than one-dimensional, 
-#     # apply dimensionality reduction to one dimension. 
-#     if len(data.shape) > 1 and (data.shape[-1] > 1):
-#         pca = sklearn.decomposition.PCA(n_components=1)
-#         data = pca.fit_transform(data.values)
-
-#     # Data should be one-dimensional following PCA reduction. 
-#     data = np.ravel(data)
-
-#     if path is not None:   
-#         try:
-#             fig.savefig(path, format='png')
-#         except NameError:
-#             print('Figure could not be saved.')
 
 
-# def plot_distributions(data, title=None, path=None, xlabel=None, ax=None, **kwargs):
-#     '''Plots multiple distributions on the same histogram by calling the
-#     plot_distribution function on each dataset specified.
-    
-#     args:
-#         - data (tuple): A tuple where each element is a dataset whose
-#             distribution to plot. 
-#     ''' 
-#     assert type(data) == tuple
-#     assert ax is not None
-#     assert len(data) > 1 # Make sure more than one dataset is speciied.
-#     assert np.all([d.shape[-1] == data[0].shape[-1] for d in data])
-
-#     # We will want to reduce each of the datasets in the same PCA pass. 
-    
-#     # Get the sizes of each dataset passed in to the function. 
-#     # This will allow us to extract individual datasets after combination. 
-#     sizes = [len(d) for d in data]
-#     data = np.concatenate(data, axis=0)
-#     # If data is multi-dimensional, reduce using PCA. 
-#     if len(data.shape) > 1 and (data.shape[-1] > 1):
-#         pca = sklearn.decomposition.PCA(n_components=1)
-#         data = pca.fit_transform(data)
-
-#     # Data should be one-dimensional following PCA reduction. 
-#     data = np.ravel(data)
-
-#     fig, ax = plt.subplots(1)
-
-#     idx = 0
-#     for size in sizes:
-#         plot_distribution(data[idx:idx + size], ax=ax, **kwargs)
-#         idx += size
-
-#     ax.set_title(title)
-#     ax.set_xlabel(xlabel)
-
-#     if path is not None:
-#         fig.savefig(path, format='png')
-
-
-def plot_train_test_val_split(train_data, test_data, val_data, path=None):
-    '''Plot information about the train-test split.
+# TODO: Thinking about switching this over to plot from file paths. 
+def plot_train_test_val_split(
+    train_data:pd.DataFrame=None, 
+    test_data:pd.DataFrame=None, 
+    val_data:pd.DataFrame=None, 
+    path:str=None) -> None: 
+    '''Plot information about the train-test-validation  split.
 
     args:
-        - train_data (pd.DataFrame)   
-        - test_data (pd.DataFrame)   
-        - val_data (pd.DataFrame)
+        - train_data: A DataFrame containing the train data.   
+        - test_data: A DataFrame containing the test data.     
+        - val_data: A DataFrame containing the validation data.  
+        - path: The path to which the file should be written. If None, the figure is not saved. 
     '''
 
     # Things we care about are length distributions, as well as
@@ -124,11 +66,13 @@ def plot_train_test_val_split(train_data, test_data, val_data, path=None):
 
     # Fix the layout and save the figure in the buffer.
     plt.tight_layout()
-    plt.savefig(path, format='png')
+    
+    if path is not None:
+        plt.savefig(path, format='png')
 
 
-def plot_train_(reporter, path=None, pool=True): # include=['train_loss', 'pooled_train_loss', 'val_loss']):
-    '''Plots information provided in the info dictionary returned by the train_ model method.'''
+def plot_model_training(reporter, path=None): # include=['train_loss', 'pooled_train_loss', 'val_loss']):
+    '''Plots information provided in the Reporter object returned by the train_ model method.'''
 
     # fig, axes = plt.subplots(2, figsize=(12, 10), sharex=True)
     fig, axes = plt.subplots(2, figsize=(20, 10), sharex=True)
@@ -137,115 +81,121 @@ def plot_train_(reporter, path=None, pool=True): # include=['train_loss', 'poole
     # between batches with and without a selenoprotein present. Might be helpful to label with this in mind. 
 
     # Pool the train accuracy and losses
-    info = pool_train_info(info)
+    # info = pool_train_info(info)
 
     loss_df = reporter.get_loss_info()
     acc_df = reporter.get_acc_info()
 
-    sns.lineplot(data=loss_df, y='loss', x='batch', hue='metric', ax=axes[0], palette=palette)
-    sns.lineplot(data=acc_df, y='accuracy', x='batch', hue='metric', ax=axes[1], palette=palette)
+    sns.lineplot(data=loss_df, y='value', x='batch', hue='metric', ax=axes[0], palette=palette)
+    sns.lineplot(data=acc_df, y='value', x='batch', hue='metric', ax=axes[1], palette=palette)
 
-    axes[0].set_title(f"Weighted BCE loss (weight={info['bce_loss_weight']})")
+    axes[0].set_title(f"Weighted BCE loss (weight={reporter.bce_loss_weight})")
     axes[0].set_yscale('log')
+    axes[0].set_ylabel('log(loss)')
     # axes[0].set_xlabel('batch')
 
     axes[1].set_title('Accuracy')
+    axes[1].set_ylabel('accuracy')
 
     for ax in axes:
-        ax.vlines(info['epoch_batches'], *ax.get_ylim(), linestyles='dotted', color='LightGray')
+        ax.vlines(reporter.get_epoch_batches(), *ax.get_ylim(), linestyles='dotted', color='LightGray')
         ax.legend().set_title('')
 
-    fig.savefig(path, format='png')
+    if path is not None:
+        fig.savefig(path, format='png')
 
 
-def plot_train_info(reporters, path=None, title='plot_train_losses', pool=True, sec_only=False):
-    '''Takes a list of train outputs as input.'''
 
-    fig, ax = plt.subplots(1, figsize=(16, 10))
+def plot_confusion_matrix(reporter:Reporter, path:str=None):
+    ''''''
+    # Confusion matrix function takes y_predicted and y_true as inputs, which is exactly the output of the predict method.
+
+
+
+
+def plot_homology_clusters(clstr_path:str=None, fasta_path:str=None, path:str=None) -> None:
+    '''Plot information relating to CD-HIT performance on the data. 
     
-    # Add bce_loss_weight information to each DataFrame. 
-    dfs = [r.get_loss_info().assign(bce_loss_weight=r.bce_loss_weight) for r in reporters]
-    df = pd.concat(dfs)
+    args:
+        - clstr_path: The path to the clstr file produced by the program. 
+        - fasta_path: The path to the FASTA file from which the program generated clusters. 
+        - c: Percent similarity, one of the inputs to CD-HIT. 
+        - l: Minimum sequence length, one of the inputs to CD-HIT. 
+        - n: Word length, one of the inputs to CD-HIT. 
+        - path: The path to which the file should be written. If None, the figure is not saved. 
+    '''
+    plt.figure(figsize=(18, 12))
+    # Set a title for the entire figure. 
+    # plt.suptitle('Homology cluster information')
     
-    metric = ('pooled_' if pool else '') + 'train_loss' + ('_batches_with_sec' if sec_only else '') 
-    df = df[df['metric'] == metric]
+    # Establish the subplots. plot on the first row is a cluster size distribution, and the two plots below are scatterplots.
+    axes = [plt.subplot(2, 2, (1, 2)), plt.subplot(2, 2, 3), plt.subplot(2, 2, 4)]
 
-    if not pool:
-        sns.scatterplot(data=df, y='loss', x='batch', hue='bce_loss_weight', ax=ax, palette=palette, edgecolor=None, s=5)
-    else:
-        sns.lineplot(data=df, y='loss', x='batch', hue='bce_loss_weight', ax=ax, palette=palette)
-    
-    ax.legend(loc='upper right', title='bce_loss_weight') # Manually set legend location to avoid it being so slow. 
+    plot_data = {'label':[], 'sec_content':[], 'mean_length':[], 'cluster_size':[]}
 
-    ax.set_yscale('log')
-    ax.set_title(title)
+    clstr_data = utils.pd_from_clstr(clstr_path) # Read in the clstr information.
+    # clstr_data = utils.pd_from_clstr(clstr_path)[:100] # Read in the clstr information.
+    fasta_data = utils.pd_from_fasta(fasta_path)
 
-    fig.savefig(path, format='png')
+    for label, data in tqdm(clstr_data.groupby('cluster'), desc='plot.plot_homology_clusters'):
 
+        # Worried that grabbing the sequences from FASTA might be excessively slow.  
+        idxs = np.where(np.isin(fasta_data.index, data.index))[0]
+        seqs = fasta_data.iloc[idxs]['seq'].values
 
-# def plot_filter_sprot(data, idxs=None, path=None):
-#     '''Visualizes the filtering procedure carried out by the filter_sprot
-#     function. Plots both the K-means clusters and the data which "passes"
-#     the filter.
+        size = len(data) # Get the length of the cluster. 
+        sec_content = len([id_ for id_ in data.index if '[' in id_]) / size
 
-#     args:
-#         - data (np.array): An array containing the SwissProt embeddings before 
-#             being filtered.
-#         - idxs (np.array): The filter indices. 
-#         - path (str): The path for where to save the generated figure. 
-#     '''
-
-#     assert idxs is not None
-    
-#     idxs = np.concatenate([np.arange(len(data)), idxs])
-#     n, m = len(data), len(idxs) # n is the number of non-filtered elements. 
-
-#     # Use PCA to put the data in two-dimensional space. 
-#     pca = sklearn.decomposition.PCA(n_components=2)
-#     data = pca.fit_transform(data.values)
-#     # Get the explained variance ration to determine how important each component is. 
-#     evrs = pca.explained_variance_ratio_
-
-#     # print('PCA decomposition of SwissProt data completed.')
-
-#     df = pd.DataFrame({f'PCA 1 (EVR={evrs[0]})':data[idxs, 0], f'PCA 2 (EVR={evrs[1]})':data[idxs, 1],  'filter':[0]*n + [1]*(m - n)})
-
-#     fig, ax = plt.subplots(1)
-#     # sns.scatterplot(data=df x='UMAP 1', y='UMAP 2', ax=ax, hue='label', legend=False, **kwargs)
-#     sns.scatterplot(data=df, x=f'PCA 1 (EVR={evrs[0]})', y=f'PCA 2 (EVR={evrs[1]})', ax=ax, hue='filter', legend=False, s=2, palette={0:'gray', 1:'black'})
-#     ax.set_title('Selecting representative sequences from SwissProt')
-
-#     fig.savefig(path, format='png')
+        mean_length = np.mean([len(seq) for seq in seqs])
 
 
-# Want to visualize selenoprotein enrichment in each cluster. Might be good to have some kind
-# of heatmap, where the color indicates number of selenoproteins. 
+        plot_data['label'].append(label)
+        plot_data['cluster_size'].append(size)
+        plot_data['sec_content'].append(np.round(sec_content, 1))
+        plot_data['mean_length'].append(mean_length)
 
-# Actually just doing a scatter plot might be easier. Maybe just put scatter number on the x-axis, or
-# do something with cluster size. OK, maybe cluster number on x-axis, size on the y-axis, and color corresponding
-# to selenoprotein count. 
+    # First deal with plots on the first row. 
 
-def plot_sample_kmeans_clusters(data, kmeans, n_clusters=None, sec_ids=None, path=None):
-    '''Generates a plot showing the selenoprotein enrichment in the K-means clusters generated
-    in the sample_kmeans_clusters function.'''
+    # Plot on the top distribution of cluster size. 
+    sns.histplot(data=plot_data['cluster_size'], ax=axes[0], legend=False, bins=100, color='seagreen')#, c='seagreen')
+    axes[0].set_xlabel('cluster_size')
+    axes[0].set_yscale('log')
+    axes[0].set_ylabel('log(count)')
+    axes[0].set_title('Cluster size distribution')
 
-    fig, ax = plt.subplots(1, figsize=(14, 5))
+    # Minimum cluster size for displaying on the scatterplots. 
+    min_cluster_size = 2
+    # min_cluster_size_filter = 
 
-    labels = np.arange(n_clusters) # The cluster labels!
-    sizes = [np.sum(kmeans.labels_ == i) for i in labels] # Get the size of each cluster. 
-    
-    ids = data.index.to_numpy()
-    sec_contents = np.array([np.sum(np.isin(ids[kmeans.labels_ == i], sec_ids)) for i in labels])
+    # Additional plots to show how selenoprotein content and sequence length are represented over clusters. 
+    plot_data = pd.DataFrame(plot_data)
 
-    df = {'cluster_label':labels, 'cluster_size':sizes, 'sec_content':sec_contents}
-    ax = sns.scatterplot(ax=ax, data=df, hue='sec_content', x='cluster_label', y='cluster_size', palette=sns.color_palette("light:#5A9", as_cmap=True))
-    sns.move_legend(ax, bbox_to_anchor=(1, 1), loc='upper left', frameon=False)
-    ax.set_title('Selenoprotein enrichment in K-means clusters')
+    # Want to bin the data to make hues look nicer. 
+    min_mean_length, max_mean_length = min(plot_data['mean_length']), max(plot_data['mean_length'])
+    # mean_length_step = (max_mean_length - min_mean_length) // 10
+    # bins =  np.concatenate([np.arange(0, max_mean_length, 250), np.array([max_mean_length])])
+    bins =  np.arange(0, max_mean_length, 500)
+    bin_labels = ['< 500'] + [f'{int(bins[i])} < length < {int(bins[i + 1])}' for i in range(1, len(bins) - 2)] + [f' > {int(bins[-1])}'] 
+    plot_data['mean_length'] = pd.cut(plot_data['mean_length'], bins=bins) # , labels=bin_labels)
 
-    fig.savefig(path, format='png')
+    # cmap = sns.light_palette("seagreen", as_cmap=True).resampled(len(bin_labels))# (np.arange(len(bin_labels)))
 
-def plot_get_homology_cluster():
+    sns.scatterplot(data=plot_data, x='label', y='cluster_size', hue='mean_length', ax=axes[1], s=6, edgecolor=None, palette=sns.light_palette('seagreen', n_colors=len(bin_labels)), legend='auto')
+    axes[1].set_title('Mean sequence length across clusters')
+    axes[1].set_yscale('log')
+    axes[1].set_ylabel('log(cluster_size)')
+    axes[1].legend(labels=bin_labels)
+
+    sns.scatterplot(data=plot_data, x='label', y='cluster_size', hue='sec_content', ax=axes[2], s=6, edgecolor=None, palette=sns.light_palette('seagreen', n_colors=11), legend='auto')
+    axes[2].set_title('Selenoprotein content across clusters')
+    axes[2].set_yscale('log')
+    axes[2].set_ylabel('log(cluster_size)')
+
+    plt.tight_layout()
+    if path is not None:
+        plt.savefig(path, format='png')
+
+
+
+def plot_roc_curve():
     pass
-
-
-

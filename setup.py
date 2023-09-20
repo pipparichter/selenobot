@@ -21,6 +21,8 @@ FIGURE_DIR = '/home/prichter/Documents/selenobot/figures/'
 
 # TODO: It might be worth writing a class to manage FASTA files. 
 
+# https://ftp.uniprot.org/pub/databases/uniprot/previous_releases/release-2023_03/knowledgebase/ 
+
 
 def truncate_sec(path=None, out_path=None, first_sec_only=True):
     '''Truncate the selenoproteins stored in the input file at each selenocysteine
@@ -48,7 +50,7 @@ def truncate_sec(path=None, out_path=None, first_sec_only=True):
     pd_to_fasta(df_trunc, path=out_path)
 
 
-def sample_kmeans_clusters(data, size, n_clusters=500, sec_ids=None):
+def sample_kmeans_clusters(data, size, n_clusters=500):
     '''Sample n elements such that the elements are spread across a set
     of K-means clusters of. Returns the indices of data elements in the sample '''
     
@@ -61,18 +63,16 @@ def sample_kmeans_clusters(data, size, n_clusters=500, sec_ids=None):
     n = size // n_clusters # How much to sample from each cluster. 
     
     idxs = []
-    for cluster in range(n_clusters):
+    for cluster in tqdm(range(n_clusters), desc='setup.sample_kmeans_cluster'):
         # Get indices for all data in a particular cluster, and randomly select n. 
         cluster_idxs = np.where(kmeans.labels_ == cluster)[0]
         idxs += list(np.random.choice(cluster_idxs, min(n, len(cluster_idxs))))
-    # Maks sure no duplicate indices are collected. 
 
-    # Make sure to exclude the IDs which are selenoproteins. 
-    idxs = [idx for idx in idxs if data.index[idx] not in sec_ids]
+    # Make sure no duplicate indices are collected. 
     return np.unique(idxs)
 
 
-def sample_sprot(path, out_path=None, size=None, sec_ids=None):
+def sample_sprot(path, out_path=None, size=None, verbose=True):
     '''Filters the SwissProt database by selecting representative proteins. The approach for doing this
     is based on K-means clustering the embedding data, and sampling from each cluster.
 
@@ -83,17 +83,30 @@ def sample_sprot(path, out_path=None, size=None, sec_ids=None):
         - sec_ids (np.array): The gene IDs of selenoproteins. 
     '''
     # Read in the FASTA file. 
-    data = pd_from_fasta(path)
+    data = pd_from_fasta(path, set_index=False)
 
+    if verbose: print(f'setup.sample_sprot: Beginning SwissProt down-sampling. Approximately {size} sequences being sampled without replacement from a pool of {len(data)}.')
+    
+    # TODO: Probably a less error-prone way to do this. 
     # Read in the embeddings based on the filepath given as input. 
     directory, filename = os.path.split(path)
     embedding_path = os.path.join(directory, filename.split('.')[0] + '_embeddings.csv')
-    embeddings = pd.read_csv(embedding_path, index_col='id')
 
-    idxs = sample_kmeans_clusters(embeddings, size, sec_ids=sec_ids)
-    
+    idxs = sample_kmeans_clusters(pd.read_csv(embedding_path, index_col='id'), size)
+    data = data.iloc[idxs]
+
+    if verbose: print(f'setup.sample_sprot: {len(data)} sequences successfully sampled from SwissProt using K-Means clustering.')
+    if verbose: print(f'setup.sample_sprot: Scanning down-sampled sequences for selenoproteins.')
+
+    idxs = []
+    for i in tqdm(data.index, desc='setup.sample_sprot'):
+        if 'U' in data['seq'][i]:
+            idxs.append(i)
+    data = data.drop(idxs, axis=0)
+    if verbose: print(f'setup.sample_sprot: {len(idxs)} selenoproteins detected and removed from down-sampled SwissProt data.')
+
     # Filter the data, and write the filtered data as a FASTA file. 
-    pd_to_fasta(data.iloc[idxs], path=out_path)
+    pd_to_fasta(data.set_index('id'), path=out_path)
 
 
 def add_embeddings(data, emb_path=None):
@@ -122,12 +135,14 @@ def add_embeddings(data, emb_path=None):
     return data
 
 
-def add_labels(data, sec_ids=None):
+def add_labels(data, verbose=True):
     '''Add labels to the data stored at path. The labels are either 1 or 0, indicating
      whether or not the gene present in the dataset is a selenoprotein.'''
 
-    labels = [1 if id_ in sec_ids else 0 for id_ in data.index]
+    labels = [1 if '[' in id_ else 0 for id_ in data.index]
     data['label'] = labels
+
+    if verbose: print(f'setup.add_labels: Labeled {np.sum(labels)} selenoproteins out of {len(data)} total sequences.')
 
     return data
 
@@ -143,16 +158,15 @@ def train_test_val_split(path, train_size=0.8, verbose=True):
     test_size = (len(data) - train_size) // 2
     val_size = len(data) - train_size - test_size
 
-    assert train_size + test_size + val_size == len(data), 'All subsets should sum to the total length of the dataset.'
-    assert (train_size > val_size) and (val_size >= test_size), f'Expected size order is train_size > val_size >= test_size. Sizes are train_size={train_size}, val_size={val_size}, test_size={test_size}.'
+    assert train_size + test_size + val_size == len(data), 'setup.train_test_val_split: All subsets should sum to the total length of the dataset.'
+    assert (train_size > val_size) and (val_size >= test_size), f'setup.train_test_val_split: Expected size order is train_size > val_size >= test_size. Sizes are train_size={train_size}, val_size={val_size}, test_size={test_size}.'
 
     # Run CD-HIT on the data stored at the given path. 
-    clusters = get_homology_clusters(path)
+    clusters = get_homology_clusters(path, l=1)
     # assert len(clusters) == len(data), f'Information for {len(clusters)} sequences was returned. Expected {len(data)} entries.'
 
     # First want to split away the training data. 
     remainder, train_ids = split_by_homology(clusters, size=len(data) - train_size)
-
 
     # Filter the remaining clusters, and split into validation and test sets. 
     clusters = clusters[np.isin(clusters.index, remainder)]
@@ -214,27 +228,11 @@ def split_by_homology(clusters, size=None):
     return tuple(ids)
 
 
-def pd_from_clstr(path):
-    '''Convert a .clstr file string to a pandas DataFrame. The resulting 
-    DataFrame maps cluster label to gene ID.'''
-
-    # Read in the cluster file as a string. 
-    clstr = read(path)
-    df = {'id':[], 'cluster':[]}
-    # The start of each new cluster is marked with a line like ">Cluster [num]"
-    clusters = re.split(r'^>.*', clstr, flags=re.MULTILINE)
-    # Split on the newline. 
-    for i, cluster in enumerate(clusters):
-        ids = [get_id(x) for x in cluster.split('\n') if x != '']
-        df['id'] += ids
-        df['cluster'] += [i] * len(ids)
-
-    return pd.DataFrame(df).set_index('id')
-
-
-def get_homology_clusters(path, c=0.8):
+def get_homology_clusters(path, c=0.8, l=1, n=2):
     '''Run CD-HIT on the FASTA file stored in the input path, generating the
     homology-based sequence similarity clusters.'''
+
+    # assert (min([len(seq) for seq in fasta_seqs(path)])) > l, 'Minimum sequence length {l + 2} is longer than the shortest sequence.'
 
     cmd = '/home/prichter/cd-hit-v4.8.1-2019-0228/cd-hit'
     directory, filename = os.path.split(path)
@@ -248,7 +246,7 @@ def get_homology_clusters(path, c=0.8):
     if not os.path.isfile(f):
 
         # Run the CD-HIT command on data stored in the input path. 
-        subprocess.run(f"{cmd} -i {path} -o {o} -c {c}", shell=True)
+        subprocess.run(f"{cmd} -i {path} -o {o} -c {c} -l {l} -n {n}", shell=True)
 
         # Remove the output file containing the representative sequences. 
         subprocess.run(f'rm {o}', shell=True)
@@ -256,32 +254,40 @@ def get_homology_clusters(path, c=0.8):
 
     df = pd_from_clstr(f)
     
+    # assert len(df) == fasta_size(path), f'setup.get_homology_clusters: Number of elements loaded from the .clstr {(len(df))} file does not match the number of sequences in the original FASTA file ({fasta_size(path)}).'
+
     return df
+
+
+def get_cdhit_throw_away_sequences(clstr_path, fasta_path):
+    '''Seem to be having an issue where CD-HIT is throwing away a subset of the sequences in the 
+    clustered FASTA file. This function is my attempt to figure out why.'''
+
+    # Read in the sequences and IDs from the FASTA file. 
+    fasta_df = pd_from_fasta(fasta_path)
+    # Get the IDs that CD-HIT did not throw away. 
+    clstr_df = pd_from_clstr(clstr_path)
+
+    throw_away_sequences = fasta_df[~np.isin(fasta_df.index, clstr_df.index)]
+    return throw_away_sequences
+
 
 # TODO: Flesh this out in a way that's more user-friendly and easier to debug.
 
-def generate_detect_data(verbose=False):
+def setup_detect_data(verbose=True):
     '''Creates a dataset for the detection classification task, which involves determining
     whether a protein, truncated or not, is a selenoprotein. The data consists of truncated and
     non-truncated selenoproteins, as well as a number of normal full-length proteins equal to all 
     selenoproteins.'''
 
-    truncate_sec(path=join(DATA_DIR, 'sec.fasta'), out_path=join(DETECT_DATA_DIR, 'sec_trunc.fasta'), first_sec_only=True)
-    # Make sure to use IDs of truncated proteins. 
-    sec_ids = fasta_ids(join(DETECT_DATA_DIR, 'sec_trunc.fasta'))
-
-    # Get the number of truncated selenoproteins. 
-    sec_size = fasta_size(join(DATA_DIR, 'sec.fasta')) 
-
-    # Get the number of truncated selenoproteins. 
-    sec_size = fasta_size(join(DATA_DIR, 'sec.fasta')) 
-
-    sample_sprot(join(DATA_DIR, 'sprot.fasta'), out_path=join(DETECT_DATA_DIR, 'sprot.fasta'), size=100000 - sec_size, sec_ids=sec_ids)
+    # truncate_sec(path=join(DATA_DIR, 'sec.fasta'), out_path=join(DETECT_DATA_DIR, 'sec_trunc.fasta'), first_sec_only=True)
     
-    fasta_concatenate([join(DETECT_DATA_DIR, 'sec_trunc.fasta'), join(DETECT_DATA_DIR, 'sprot.fasta')], out_path=join(DETECT_DATA_DIR, 'all.fasta'))
-    sample_sprot(join(DATA_DIR, 'sprot.fasta'), out_path=join(DETECT_DATA_DIR, 'sprot.fasta'), size=100000 - sec_size, sec_ids=sec_ids)
+    # # Get the number of truncated selenoproteins. 
+    # sec_size = fasta_size(join(DATA_DIR, 'sec.fasta')) 
+
+    # sample_sprot(join(DATA_DIR, 'sprot.fasta'), out_path=join(DETECT_DATA_DIR, 'sprot.fasta'), size=100000 - sec_size)
     
-    fasta_concatenate([join(DETECT_DATA_DIR, 'sec_trunc.fasta'), join(DETECT_DATA_DIR, 'sprot.fasta')], out_path=join(DETECT_DATA_DIR, 'all.fasta'))
+    # fasta_concatenate([join(DETECT_DATA_DIR, 'sec_trunc.fasta'), join(DETECT_DATA_DIR, 'sprot.fasta')], out_path=join(DETECT_DATA_DIR, 'all.fasta'), verbose=verbose)
 
     # train_data, test_data, and val_data should have sequence information. 
     train_data, test_data, val_data = train_test_val_split(join(DETECT_DATA_DIR, 'all.fasta'))
@@ -289,15 +295,15 @@ def generate_detect_data(verbose=False):
     # Add labels and embeddings to the data, and write to the file.
     for data, filename in zip([train_data, test_data, val_data], ['train.csv', 'test.csv', 'val.csv']):
         data = add_embeddings(data, emb_path=join(DATA_DIR, 'embeddings.csv'))
-        data = add_labels(data, sec_ids=sec_ids)
+        data = add_labels(data)
         data.to_csv(join(DETECT_DATA_DIR, filename))
 
 
 if __name__ == '__main__':
 
     # csv_concatenate([join(DATA_DIR, 'sec_trunc_embeddings.csv'), join(DATA_DIR, 'sprot_embeddings.csv')], out_path=join(DATA_DIR, 'embeddings.csv'))
-    generate_detect_data()
-
+    setup_detect_data(verbose=True)
+    # get_cdhit_throw_away_sequences(join(DETECT_DATA_DIR, 'all.clstr'), join(DETECT_DATA_DIR, 'all.fasta'))
 
 
 

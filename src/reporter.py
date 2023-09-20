@@ -3,6 +3,7 @@
 import numpy as np
 import pandas as pd
 import pickle
+import sklearn
 
 
 def check_df(df):
@@ -25,8 +26,12 @@ class Reporter():
 
     def __init__(self, epochs=None, lr=None, bce_loss_weight=None):
 
-        self.loss_metrics = ['val_losses', 'train_losses', 'test_losses']
-        self.acc_metrics = ['val_acc', 'train_acc', 'test_acc']
+        # Metrics will be added as methods are called.
+        self.loss_metrics = {}
+        self.acc_metrics = {}
+
+        # Contains tuples (tn, fp, fn, tp)
+        self.confusion_matrices = []
 
         self.active = False
         
@@ -34,15 +39,16 @@ class Reporter():
         self.lr = lr
         self.bce_loss_weight = bce_loss_weight
 
-        self.val_losses, self.val_accs = [], []
-        self.train_losses, self.train_accs = [], []
 
         # TODO: Add stuff for test losses. 
+
+        # To be populated later...
+        self.batches = None
+        self.batches_per_epoch = None
 
     def check_active(self):
         '''Check if the Reporter is active.'''
         assert self.active, 'Reporter object must be active to add metrics.'
-
 
     def open(self):
         self.active = True
@@ -50,7 +56,8 @@ class Reporter():
     def close(self):
         self.active = False
         # Now that logging is complete, load the number of batches which have been processed, if any. 
-        self.batches = len(self.train_losses)
+        if 'train_losses' in self.loss_metrics:
+            self.batches = len(self.loss_metrics['train_losses'])
     
     def set_batches_per_epoch(self, batches_per_epoch):
         check_type(batches_per_epoch, int)
@@ -59,14 +66,18 @@ class Reporter():
     def add_train_loss(self, loss):
         '''Add a train_loss to the internal list.'''
         self.check_active()
-        # The input loss is expected to be a tensor, so make sure to convert to a float. 
-        self.train_losses.append(loss.item())
+        check_type(loss.item(), float)
+        if 'train_losses' not in self.loss_metrics:
+            self.loss_metrics['train_losses'] = []
+        self.loss_metrics['train_losses'].append(loss.item())
 
     def add_train_acc(self, acc):
         '''Add a train_acc to the internal list.'''
         self.check_active()
         check_type(acc, float)
-        self.train_accs.append(acc)
+        if 'train_accs' not in self.acc_metrics:
+            self.acc_metrics['train_accs'] = []
+        self.acc_metrics['train_accs'].append(acc)
 
     def add_train_metrics(self, loss, acc):
         self.add_train_loss(loss)
@@ -75,36 +86,60 @@ class Reporter():
     def add_val_loss(self, loss):
         '''Add a val_loss to the internal list.'''
         self.check_active()
-        # The input loss is expected to be a tensor, so make sure to convert to a float. 
-        self.val_losses.append(loss.item())
+        check_type(loss.item(), float)
+        if 'val_losses' not in self.loss_metrics:
+            self.loss_metrics['val_losses'] = []
+        self.loss_metrics['val_losses'].append(loss.item())
 
     def add_val_acc(self, acc):
         '''Add a val_acc to the internal list.'''
         self.check_active()
         check_type(acc, float)
-        self.val_accs.append(acc)
+        if 'val_accs' not in self.acc_metrics:
+            self.acc_metrics['val_accs'] = []
+        self.acc_metrics['val_accs'].append(acc)
 
     def add_val_metrics(self, loss, acc):
         self.add_val_loss(loss)
         self.add_val_acc(acc)
 
-    # def add_test_loss(self, test_loss):
-    #     '''Add a test_loss to the internal list.'''
-    #     self.check_active()
-    #     # The input loss is expected to be a tensor, so make sure to convert to a float. 
-    #     self.test_loss.append(test_loss.item())
+    def add_test_loss(self, loss):
+        '''Add a train_loss to the internal list.'''
+        self.check_active()
+        check_type(loss.item(), float)
+        if 'test_losses' not in self.loss_metrics:
+            self.loss_metrics['test_losses'] = []
+        self.loss_metrics['train_losses'].append(loss.item())
 
-    # def add_test_acc(self, test_acc):
-    #     '''Add a test_acc to the internal list.'''
-    #     self.check_active()build_loss_df(info, pool=pool)
-    #     # The input loss is probably a tensor, so make sure to convert to a float. 
-    #     assert type(test_acc) == float
-    #     self.test_acc.append(test_acc)
+    def add_test_acc(self, acc):
+        '''Add a train_acc to the internal list.'''
+        self.check_active()
+        check_type(acc, float)
+        if 'test_accs' not in self.acc_metrics:
+            self.acc_metrics['test_accs'] = []
+        self.acc_metrics['test_accs'].append(acc)
+
+    def add_test_metrics(self, loss, acc):
+        self.add_test_loss(loss)
+        self.add_test_acc(acc)
 
     def get_epoch_batches(self):
         '''Get the batch numbers where each new epoch begins.'''
+        assert self.batches_per_epoch is not None, 'batches_per_epoch attribute has not been set.'
         step = self.batches_per_epoch
         return [i for i in range(step, self.batches+step, step)]
+    
+    def add_confusion_matrix(self, tn:int, fp:int, fn:int, tp:int) -> None:
+        '''Add new confusion matrix data to the internal list.'''
+        self.check_active()
+        self.confusion_matrices.append((tn, fp, fn, tp))
+
+    def get_confusion_matrix(self) -> tuple:
+        '''Return the first confusion matrix stored in the internal list.'''
+        if len(self.confusion_matrices) > 1:
+            print(f'There are {len(self.confusion_matrices)} stored in the Reporter object. Returning the first entry.')
+        assert len(self.confusion_matrices) > 0, 'No confusion matrices stored in the Reporter.'
+        return self.confusion_matrices[0]
 
     def _get_info(self, metrics, verbose=False):
         '''Use the information returned by the train function to construct a DataFrame for plotting loss.'''
@@ -112,14 +147,13 @@ class Reporter():
         # Make sure the reporter object is no longer actively being logged to. 
         assert not self.active
 
-        df = {'batch':[], 'loss':[], 'metric':[]}
+        df = {'batch':[], 'value':[], 'metric':[]}
 
-        for metric in self.loss_metrics:
+        for metric, data in metrics.items():
             # First add the unpooled train data to the DataFrame dirctionary. 
-            if len(self.__getattr__(metric)) > 0:
-                df['loss'] += self.__getattr__(metric)
-                df['metric'] += [metric] * len(self.__getattr__(metric))
-
+            if len(data) > 0:
+                df['value'] += data
+                df['metric'] += [metric] * len(data)
                 # Only train metrics are computed for each batch. 
                 if 'train' in metric:
                     df['batch'] += [i for i in range(self.batches)]
@@ -135,7 +169,7 @@ class Reporter():
     def get_loss_info(self, verbose=False):
         return self._get_info(metrics=self.loss_metrics, verbose=verbose)
 
-    def get_loss_info(self, verbose=False):
-        return self._get_info(metrics=self.acc_metrics, verbose=verbose)
+    def get_acc_info(self, verbose=False):
+        return self._get_info(metrics=self.acc_metrics.keys(), verbose=verbose)
 
 
