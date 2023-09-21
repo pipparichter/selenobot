@@ -6,6 +6,7 @@ import pickle
 import sklearn
 
 
+
 def check_df(df):
     '''Quick little function for checking DataFrames under construction.'''
     msg = 'plot.check_df: Column lengths are mismatched, ' + ' '.join(f'len({key})={len(val)}' for key, val in df.items())
@@ -109,7 +110,7 @@ class Reporter():
         check_type(loss.item(), float)
         if 'test_losses' not in self.loss_metrics:
             self.loss_metrics['test_losses'] = []
-        self.loss_metrics['train_losses'].append(loss.item())
+        self.loss_metrics['test_losses'].append(loss.item())
 
     def add_test_acc(self, acc):
         '''Add a train_acc to the internal list.'''
@@ -162,7 +163,7 @@ class Reporter():
 
             check_df(df)
 
-            if verbose: print(f'Successfully added {metric} information to DataFrame.')
+            if verbose: print(f'reporter.Reporter._geSuccessfully added {metric} information to DataFrame.')
 
         return pd.DataFrame(df)
 
@@ -170,6 +171,16 @@ class Reporter():
         return self._get_info(metrics=self.loss_metrics, verbose=verbose)
 
     def get_acc_info(self, verbose=False):
-        return self._get_info(metrics=self.acc_metrics.keys(), verbose=verbose)
+        return self._get_info(metrics=self.acc_metrics, verbose=verbose)
+
+    # TODO: Should probably make similar accessors for each metric. 
+    def get_test_losses(self):
+        '''Return the test loss list from the reporter object.'''
+        assert 'test_losses' in self.loss_metrics, 'No test_loss has been recorded.'
+        assert len(self.loss_metrics['test_losses']) > 0, 'No test_loss has been recorded.'
+
+        return self.loss_metrics['test_losses']
+        
+
 
 

@@ -18,6 +18,7 @@ import torcheval
 # import torchmetrics
 import sklearn.metrics
 from reporter import Reporter
+import skopt 
 
 import warnings
 warnings.simplefilter('ignore')
@@ -56,7 +57,7 @@ def get_balanced_accuracy(outputs:torch.Tensor, targets:torch.Tensor, threshold:
     score.'''
     outputs = apply_threshold(outputs, threshold=threshold)
     # Compute balanced accuracy using a builtin sklearn function. 
-    return balanced_accuracy_score(outputs.detach().numpy(), targets.detach().numpy())
+    return sklearn.metrics.balanced_accuracy_score(outputs.detach().numpy(), targets.detach().numpy())
 
 
 # Why use the torchmetrics package instead of the usual?
@@ -124,10 +125,12 @@ class Classifier(torch.nn.Module):
         outputs, targets = self.predict(dataloader)
         test_loss = loss_func(outputs, targets)
         test_acc = get_balanced_accuracy(outputs, targets, threshold=threshold)
+        reporter.add_test_metrics(test_loss, test_acc)
 
         # Compute the confusion matrix information. 
-        (tn, fp, fn, tp) = sklearn.metrics.confusion_matrix(outputs, targets)
-        reporter.add_confusion_matrix((tn, fp, fn, tp))
+        outputs = apply_threshold(outputs, threshold=threshold) # Make sure to apply threshold to output data first. 
+        (tn, fp, fn, tp) = np.ravel(sklearn.metrics.confusion_matrix(outputs.detach().numpy(), targets.detach().numpy()))
+        reporter.add_confusion_matrix(tn, fp, fn, tp)
 
         reporter.close()
         return reporter
@@ -161,7 +164,7 @@ class Classifier(torch.nn.Module):
         reporter.open()
 
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
-        pbar = tqdm(range(epochs), desc='classifiers.Classifier.train_')
+        pbar = tqdm(range(epochs), desc='classifiers.Classifier.train_', leave=False) # disable=(not verbose))
 
         for epoch in pbar:
 
@@ -182,9 +185,9 @@ class Classifier(torch.nn.Module):
                 outputs, targets = self(**batch)
                 train_loss = loss_func(outputs, targets)
                 train_acc = get_balanced_accuracy(outputs, targets, threshold=threshold)
-                reporter.add_train_metrics(loss, acc)
+                reporter.add_train_metrics(train_loss, train_acc)
 
-                loss.backward()
+                train_loss.backward()
                 optimizer.step() 
                 optimizer.zero_grad()
 
@@ -206,7 +209,7 @@ class Classifier(torch.nn.Module):
 
 class EmbeddingClassifier(Classifier):
     '''A classifier which works on embedding data.'''
-    def __init__(self, latent_dim, dropout=0):
+    def __init__(self, latent_dim=1024, dropout=0):
         # Latent dimension should be 1024. 
         hidden_dim = 512
 
@@ -299,6 +302,39 @@ class AacClassifier(Classifier):
             targets = label.to(logits.dtype)
 
         return outputs, targets
+
+
+
+def optimize_hyperparameters(
+        dataloader:torch.utils.data.DataLoader, 
+        val:torch.utils.data.DataLoader, 
+        model:Classifier=EmbeddingClassifier(), 
+        n_calls:int=50,
+        verbose:bool=True, 
+        epochs:int=5) -> list: # -> skopt.OptimizeResult:
+
+    # Probably keep the weights as integers, at least for now. 
+    search_space = [skopt.space.Integer(1, 10000, name='bce_loss_weight')]
+
+    # Create the objective function. Decorator allows named arguments to be inferred from search space. 
+    @skopt.utils.use_named_args(dimensions=search_space)
+    def objective(bce_loss_weight=None):
+        # if verbose: print(f'classifiers.optimize_hyperparameters: Testing bce_loss_weight={bce_loss_weight}.')
+        model.fit(dataloader, epochs=epochs, lr=0.01, bce_loss_weight=bce_loss_weight, threshold=0.5)
+        
+        # Evaluate the performance of the fitted model on the data.
+        reporter = model.test(val, bce_loss_weight=bce_loss_weight, threshold=0.5)
+        test_loss = reporter.get_test_losses()[0] # Get the test loss following evaluation on the data. 
+        if verbose: print(f'classifiers.optimize_hyperparameters: Recorded a test loss of {np.round(test_loss, 2)} with bce_loss_weight={bce_loss_weight}.')
+        return test_loss
+    
+    # We are using loss, so acceptable to just minimize the output of the objective function. 
+    result = skopt.gp_minimize(objective, search_space)
+    return result.x
+
+
+def get_roc_info():
+    pass
 
 
 

@@ -1,6 +1,3 @@
-'''
-Plotting utilities for the ProTex tool. 
-'''
 import sys
 sys.path.append('/home/prichter/Documents/selenobot/src/')
 import matplotlib.pyplot as plt
@@ -10,6 +7,7 @@ import pandas as pd
 import sklearn
 import matplotlib as mpl
 import sklearn
+import reporter
 
 import utils
 from tqdm import tqdm
@@ -18,10 +16,6 @@ cmap = mpl.colormaps['Pastel2']
 palette = 'Set2'
 
 # TODO: Might be worth making an info object for plotting results of training. 
-
-
-
-
 
 
 # TODO: Thinking about switching this over to plot from file paths. 
@@ -71,7 +65,7 @@ def plot_train_test_val_split(
         plt.savefig(path, format='png')
 
 
-def plot_model_training(reporter, path=None): # include=['train_loss', 'pooled_train_loss', 'val_loss']):
+def plot_model_training(reporter:reporter.Reporter, path=None): # include=['train_loss', 'pooled_train_loss', 'val_loss']):
     '''Plots information provided in the Reporter object returned by the train_ model method.'''
 
     # fig, axes = plt.subplots(2, figsize=(12, 10), sharex=True)
@@ -106,9 +100,10 @@ def plot_model_training(reporter, path=None): # include=['train_loss', 'pooled_t
 
 
 
-def plot_confusion_matrix(reporter:Reporter, path:str=None):
+def plot_confusion_matrix(reporter:reporter.Reporter, path:str=None):
     ''''''
     # Confusion matrix function takes y_predicted and y_true as inputs, which is exactly the output of the predict method.
+    pass
 
 
 
