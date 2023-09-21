@@ -314,19 +314,23 @@ def optimize_hyperparameters(
         epochs:int=5) -> list: # -> skopt.OptimizeResult:
 
     # Probably keep the weights as integers, at least for now. 
-    search_space = [skopt.space.Integer(1, 10000, name='bce_loss_weight')]
+    search_space = [skopt.space.Integer(1, 1000000, name='bce_loss_weight')]
 
+    # NOTE: Can't use val_loss (unless I normalize it or something) because it's always better with loss_weight=1.
+    
     # Create the objective function. Decorator allows named arguments to be inferred from search space. 
     @skopt.utils.use_named_args(dimensions=search_space)
     def objective(bce_loss_weight=None):
         # if verbose: print(f'classifiers.optimize_hyperparameters: Testing bce_loss_weight={bce_loss_weight}.')
+        model.reset()
         model.fit(dataloader, epochs=epochs, lr=0.01, bce_loss_weight=bce_loss_weight, threshold=0.5)
         
         # Evaluate the performance of the fitted model on the data.
         reporter = model.test(val, bce_loss_weight=bce_loss_weight, threshold=0.5)
-        test_loss = reporter.get_test_losses()[0] # Get the test loss following evaluation on the data. 
-        if verbose: print(f'classifiers.optimize_hyperparameters: Recorded a test loss of {np.round(test_loss, 2)} with bce_loss_weight={bce_loss_weight}.')
-        return test_loss
+        test_acc = reporter.get_test_accs()[0] # Get the test loss following evaluation on the data. 
+        # if verbose: print(f'classifiers.optimize_hyperparameters: Recorded a test loss of {np.round(test_loss, 2)} with bce_loss_weight={bce_loss_weight}.')
+        if verbose: print(f'classifiers.optimize_hyperparameters: Recorded a test accuracy of {np.round(test_acc, 2)} with bce_loss_weight={bce_loss_weight}.')
+        return -test_acc # Return negative so as not to minimize accuracy/
     
     # We are using loss, so acceptable to just minimize the output of the objective function. 
     result = skopt.gp_minimize(objective, search_space)

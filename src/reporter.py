@@ -5,7 +5,7 @@ import pandas as pd
 import pickle
 import sklearn
 
-
+# TODO: Get rid of some of the redundancy in this section. 
 
 def check_df(df):
     '''Quick little function for checking DataFrames under construction.'''
@@ -180,6 +180,14 @@ class Reporter():
         assert len(self.loss_metrics['test_losses']) > 0, 'No test_loss has been recorded.'
 
         return self.loss_metrics['test_losses']
+
+    # TODO: Should probably make similar accessors for each metric. 
+    def get_test_accs(self):
+        '''Return the test accuracy list from the reporter object.'''
+        assert 'test_accs' in self.acc_metrics, 'No test_acc has been recorded.'
+        assert len(self.acc_metrics['test_accs']) > 0, 'No test_loss has been recorded.'
+
+        return self.acc_metrics['test_accs']
         
 
 
