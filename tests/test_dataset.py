@@ -12,6 +12,8 @@ sys.path.append('/home/prichter/Documents/selenobot/')
 import dataset
 import utils
 
+import torch
+
 # NOTE: DATA_DIR is specific to a problem (detect, extend, etc.)
 DATA_DIR = '/home/prichter/Documents/selenobot/data/uniprot_2023_03/detect'
 filenames = ['train.csv', 'val.csv', 'test.csv']
@@ -57,7 +59,18 @@ class TestDataset(unittest.TestCase):
                         assert label == 1, f'Label returned by DataLoader does not match expected label 1 based on the gene ID {id_} in {filename}.'
                     else:
                         assert label == 0, f'Label returned by DataLoader does not match expected label 1 based on the gene ID {id_} in {filename}.'
+    
+    def test_dataset_all_indices_covered_by_balanced_batch_sampler(self):
 
+        for filename in filenames:
+            n = utils.csv_size(os.path.join(DATA_DIR, filename)) # Size of the original dataset. 
+
+            # Balance set to true ensures that the custom dataloader is used. 
+            dataloader = dataset.get_dataloader(os.path.join(DATA_DIR, filename), balance=True)
+            idxs = [batch['idx'] for batch in dataloader] # Should be a list of tensors. 
+            idxs = torch.unique(torch.cat(idxs, axis=0))
+
+            assert len(idxs) == n, f'{len(idxs)} unique indices returned by BalancedBatchSampler do not cover the entire dataset of size {n}.'
 
 
 if __name__ == '__main__':

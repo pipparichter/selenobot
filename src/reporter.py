@@ -32,7 +32,7 @@ class Reporter():
         self.acc_metrics = {}
 
         # Contains tuples (tn, fp, fn, tp)
-        self.confusion_matrices = []
+        self.confusion_matrix = None
 
         self.active = False
         
@@ -64,21 +64,28 @@ class Reporter():
         check_type(batches_per_epoch, int)
         self.batches_per_epoch = batches_per_epoch
 
+    def __add(self, value:float=None, metric:str=None, group:dict=None):
+        '''Add a value under the specified metric in the internal list given by 
+        the 'group' keyword argument.
+        
+        args:
+            - value: The loss or value accuracy to add to the instance. 
+            - metric: The name of the metric which the value belongs to. 
+            - group: The group (either self.loss_metrics or self.acc_metrics) which the metric belongs to. 
+        '''
+        self.check_active() # Can only add to the reporter when the instance is active. 
+        check_type(value, float)
+        if metric not in group:
+            group[metric] = []
+        group[metric].append(value)
+
     def add_train_loss(self, loss):
         '''Add a train_loss to the internal list.'''
-        self.check_active()
-        check_type(loss.item(), float)
-        if 'train_losses' not in self.loss_metrics:
-            self.loss_metrics['train_losses'] = []
-        self.loss_metrics['train_losses'].append(loss.item())
+        self.__add(value=loss.item(), metric='train_losses', group=self.loss_metrics)
 
     def add_train_acc(self, acc):
         '''Add a train_acc to the internal list.'''
-        self.check_active()
-        check_type(acc, float)
-        if 'train_accs' not in self.acc_metrics:
-            self.acc_metrics['train_accs'] = []
-        self.acc_metrics['train_accs'].append(acc)
+        self.__add(value=acc, metric='train_accs', group=self.acc_metrics)
 
     def add_train_metrics(self, loss, acc):
         self.add_train_loss(loss)
@@ -86,19 +93,11 @@ class Reporter():
 
     def add_val_loss(self, loss):
         '''Add a val_loss to the internal list.'''
-        self.check_active()
-        check_type(loss.item(), float)
-        if 'val_losses' not in self.loss_metrics:
-            self.loss_metrics['val_losses'] = []
-        self.loss_metrics['val_losses'].append(loss.item())
+        self.__add(value=loss.item(), metric='val_losses', group=self.loss_metrics)
 
     def add_val_acc(self, acc):
         '''Add a val_acc to the internal list.'''
-        self.check_active()
-        check_type(acc, float)
-        if 'val_accs' not in self.acc_metrics:
-            self.acc_metrics['val_accs'] = []
-        self.acc_metrics['val_accs'].append(acc)
+        self.__add(value=acc, metric='val_accs', group=self.acc_metrics)
 
     def add_val_metrics(self, loss, acc):
         self.add_val_loss(loss)
@@ -106,19 +105,11 @@ class Reporter():
 
     def add_test_loss(self, loss):
         '''Add a train_loss to the internal list.'''
-        self.check_active()
-        check_type(loss.item(), float)
-        if 'test_losses' not in self.loss_metrics:
-            self.loss_metrics['test_losses'] = []
-        self.loss_metrics['test_losses'].append(loss.item())
+        self.__add(value=loss.item(), metric='test_losses', group=self.loss_metrics)
 
     def add_test_acc(self, acc):
         '''Add a train_acc to the internal list.'''
-        self.check_active()
-        check_type(acc, float)
-        if 'test_accs' not in self.acc_metrics:
-            self.acc_metrics['test_accs'] = []
-        self.acc_metrics['test_accs'].append(acc)
+        self.__add(value=acc, metric='test_accs', group=self.acc_metrics)
 
     def add_test_metrics(self, loss, acc):
         self.add_test_loss(loss)
@@ -133,14 +124,12 @@ class Reporter():
     def add_confusion_matrix(self, tn:int, fp:int, fn:int, tp:int) -> None:
         '''Add new confusion matrix data to the internal list.'''
         self.check_active()
-        self.confusion_matrices.append((tn, fp, fn, tp))
+        self.confusion_matrix = (tn, fp, fn, tp)
 
     def get_confusion_matrix(self) -> tuple:
-        '''Return the first confusion matrix stored in the internal list.'''
-        if len(self.confusion_matrices) > 1:
-            print(f'There are {len(self.confusion_matrices)} stored in the Reporter object. Returning the first entry.')
-        assert len(self.confusion_matrices) > 0, 'No confusion matrices stored in the Reporter.'
-        return self.confusion_matrices[0]
+        '''Return confusion matrix stored as an attribute.'''
+        assert self.confusion_matrix is not None, 'reporter.Reporter.get_confusion_matrix: No confusion matrix has been logged.'
+        return self.confusion_matrix
 
     def _get_info(self, metrics, verbose=False):
         '''Use the information returned by the train function to construct a DataFrame for plotting loss.'''
@@ -184,11 +173,24 @@ class Reporter():
     # TODO: Should probably make similar accessors for each metric. 
     def get_test_accs(self):
         '''Return the test accuracy list from the reporter object.'''
-        assert 'test_accs' in self.acc_metrics, 'No test_acc has been recorded.'
-        assert len(self.acc_metrics['test_accs']) > 0, 'No test_loss has been recorded.'
+        assert 'test_accs' in self.acc_metrics, 'reporter.Reporter.get_test_accs: No test_acc has been recorded.'
+        assert len(self.acc_metrics['test_accs']) > 0, 'reporter.Reporter.get_test_accs: No test_loss has been recorded.'
 
         return self.acc_metrics['test_accs']
-        
+ 
+    def get_false_positive_rate(self):
+        '''Calculate the false positive rate.'''
+        tn, fp, fn, tp = self.get_confusion_matrix()
+        fpr = fp / (fp + tn)
 
+        return fpr
+ 
+    def get_true_positive_rate(self):
+        '''Calculate the true positive rate.'''
+        tn, fp, fn, tp = self.get_confusion_matrix()
+        tpr = tp / (tp + fn)
+        
+        return tpr
+  
 
 

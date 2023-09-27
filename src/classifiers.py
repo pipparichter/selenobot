@@ -104,21 +104,19 @@ class Classifier(torch.nn.Module):
     def test(self, 
         dataloader:torch.utils.data.DataLoader, 
         bce_loss_weight:float=1.0, 
-        threshold:float=0.5, 
-        reporter:Reporter=None) -> Reporter:
+        threshold:float=0.5) -> Reporter:
+        # reporter:Reporter=None) -> Reporter:
         '''Evaluate the classifier model on the data specified by the DataLoader
 
         args:
             - dataloader: The DataLoader object containing the training data. 
             - bce_loss_weight: The weight to be passed into the WeightedBCELoss constructor.
             - threshold: The threshold above which (inclusive) a classification is considered a '1.' 
-            - reporter: An existing reporter to which to add test information. 
         ''' 
         # Instantiate the loss function object with the specified weight. 
         loss_func = WeightedBCELoss(weight=bce_loss_weight)
         
-        if reporter is None:
-            reporter = Reporter() # Instantiate a Reporter for storing collected data. 
+        reporter = Reporter() # Instantiate a Reporter for storing collected data. 
         reporter.open()
 
         # NOTE: threshold should be None here!
@@ -142,7 +140,8 @@ class Classifier(torch.nn.Module):
         epochs:int=300, 
         lr:float=0.01, 
         bce_loss_weight:float=1.0, 
-        threshold:float=0.5) -> Reporter:
+        threshold:float=0.5,
+        verbose:bool=True) -> Reporter:
         '''Train the classifier model on the data specified by the DataLoader
 
         args:
@@ -152,6 +151,7 @@ class Classifier(torch.nn.Module):
             - lr: The learning rate. 
             - bce_loss_weight: The weight to be passed into the WeightedBCELoss constructor.
             - threshold: The threshold above which (inclusive) a classification is considered a '1.' 
+            - verbose: Whether or not to display a progress bar while training
         '''
 
         # Instantiate the loss function object with the specified weight. 
@@ -164,7 +164,7 @@ class Classifier(torch.nn.Module):
         reporter.open()
 
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
-        pbar = tqdm(range(epochs), desc='classifiers.Classifier.train_', leave=False) # disable=(not verbose))
+        pbar = tqdm(range(epochs), desc='classifiers.Classifier.train_', disable=(not verbose)) # disable=(not verbose))
 
         for epoch in pbar:
 
@@ -253,16 +253,28 @@ class AacClassifier(Classifier):
     '''The "stupid" approach to selenoprotein detection. Simply uses amino acid content 
     to predict whether or not something is a selenoprotein. This should not work well.'''
 
-    def __init__(self, weight=1):
+    # NOTE: We DO NOT want U in the vocabulary. It's basically like building a label into 
+    # unlabeled data. 
+    def __init__(self, weight=1, dropout=0, aas='ARNDCQEGHILKMFPOSTWYVBZXJ'):
         
         super(AacClassifier, self).__init__(weight=weight)
 
-        aas = 'ARNDCQEGHILKMFPOSUTWYVBZXJ'
+        # aas = 'ARNDCQEGHILKMFPOSUTWYVBZXJ'
         latent_dim = len(aas) # The AAC embedding space is 22(?)-dimensional. 
         self.aa_to_int_map = {aas[i]: i + 1 for i in range(len(aas))}
 
+        hidden_dim = 8
+
+        # self.classifier = torch.nn.Sequential(
+        #     torch.nn.Linear(latent_dim, 1),
+        #     torch.nn.Sigmoid())
+
+        # Subbing in Josh's classification head. 
         self.classifier = torch.nn.Sequential(
-            torch.nn.Linear(latent_dim, 1),
+            torch.nn.Linear(latent_dim, 8),
+            torch.nn.ReLU(),
+            torch.nn.Dropout(p=dropout),
+            torch.nn.Linear(hidden_dim, 1),
             torch.nn.Sigmoid())
 
         self.init_weights()
@@ -273,8 +285,10 @@ class AacClassifier(Classifier):
  
     def tokenize(self, seq):
         '''Embed a single sequence using amino acid content.''' 
+        assert np.all([aa in self.aa_to_int_map for aa in seq]), 'classifiers.AacClassifier.tokenize: Some amino acids in the input sequences are not present in the amino-acid-to-integer map.'
 
         # Map each amino acid to an integer using the internal map. 
+        # seq = np.array([self.aa_to_int_map[aa] for aa in seq])
         seq = np.array([self.aa_to_int_map[aa] for aa in seq])
         
         emb = np.zeros(shape=(len(seq), len(self.aa_to_int_map)))
@@ -314,7 +328,7 @@ def optimize_hyperparameters(
         epochs:int=5) -> list: # -> skopt.OptimizeResult:
 
     # Probably keep the weights as integers, at least for now. 
-    search_space = [skopt.space.Integer(1, 1000000, name='bce_loss_weight')]
+    search_space = [skopt.space.Real(1, 10, name='bce_loss_weight')]
 
     # NOTE: Can't use val_loss (unless I normalize it or something) because it's always better with loss_weight=1.
     
@@ -323,13 +337,13 @@ def optimize_hyperparameters(
     def objective(bce_loss_weight=None):
         # if verbose: print(f'classifiers.optimize_hyperparameters: Testing bce_loss_weight={bce_loss_weight}.')
         model.reset()
-        model.fit(dataloader, epochs=epochs, lr=0.01, bce_loss_weight=bce_loss_weight, threshold=0.5)
+        model.fit(dataloader, verbose=False, epochs=epochs, lr=0.01, bce_loss_weight=bce_loss_weight, threshold=0.5)
         
         # Evaluate the performance of the fitted model on the data.
         reporter = model.test(val, bce_loss_weight=bce_loss_weight, threshold=0.5)
         test_acc = reporter.get_test_accs()[0] # Get the test loss following evaluation on the data. 
         # if verbose: print(f'classifiers.optimize_hyperparameters: Recorded a test loss of {np.round(test_loss, 2)} with bce_loss_weight={bce_loss_weight}.')
-        if verbose: print(f'classifiers.optimize_hyperparameters: Recorded a test accuracy of {np.round(test_acc, 2)} with bce_loss_weight={bce_loss_weight}.')
+        if verbose: print(f'\r\r\rclassifiers.optimize_hyperparameters: Recorded a test accuracy of {np.round(test_acc, 2)} with bce_loss_weight={bce_loss_weight}.')
         return -test_acc # Return negative so as not to minimize accuracy/
     
     # We are using loss, so acceptable to just minimize the output of the objective function. 
@@ -337,9 +351,23 @@ def optimize_hyperparameters(
     return result.x
 
 
-def get_roc_info():
-    pass
+# NOTE: For ROC curve, do we need to re-train the model for each threshold? It seems like yes
+def get_roc_data(model:Classifier, dataloader:torch.utils.data.DataLoader, params:dict={}) -> Reporter:
+    '''Generates data for plotting an ROC curve by varying the threshold (i.e. the value below which output
+    logits are set to zero).
+    
+    args:
+        - model: A TRAINED classifier to apply the input data to. 
+        - dataloader: A dataloader to use to evaluate the model. Should contain the testing data. 
+        - params: Keyword parameters to pass into the Classifier.test method
+    '''
+    thresholds = np.arange(0, 1.1, 0.1)
+    reporters = []
 
+    for threshold in thresholds:
+        reporters.append(model.test(dataloader, reporter=reporter, **params))
+
+    return thresholds, reporter
 
 
 

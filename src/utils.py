@@ -59,6 +59,11 @@ def csv_labels(path):
     return np.ravel(df.values.astype(np.int32))
 
 
+def csv_size(path):
+    '''Get the number of entries in a FASTA file.'''
+    return len(csv_ids(path))
+
+
 def fasta_seqs(path):
     '''Extract all amino acid sequences stored in a FASTA file.'''
     # Read in the FASTA file as a string. 

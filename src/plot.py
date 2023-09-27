@@ -65,11 +65,11 @@ def plot_train_test_val_split(
         plt.savefig(path, format='png')
 
 
-def plot_model_training(reporter:reporter.Reporter, path=None): # include=['train_loss', 'pooled_train_loss', 'val_loss']):
+def plot_train_reporter(reporter:reporter.Reporter, path=None): # include=['train_loss', 'pooled_train_loss', 'val_loss']):
     '''Plots information provided in the Reporter object returned by the train_ model method.'''
 
     # fig, axes = plt.subplots(2, figsize=(12, 10), sharex=True)
-    fig, axes = plt.subplots(2, figsize=(20, 10), sharex=True)
+    fig, axes = plt.subplots(2, figsize=(16, 10), sharex=True)
 
     # Seems as though model performance (as inficated by train loss) may vary substantially
     # between batches with and without a selenoprotein present. Might be helpful to label with this in mind. 
@@ -100,17 +100,28 @@ def plot_model_training(reporter:reporter.Reporter, path=None): # include=['trai
 
 
 
-def plot_confusion_matrix(reporter:reporter.Reporter, path:str=None):
-    ''''''
+def plot_confusion_matrix(reporter:reporter.Reporter, path:str=None, title:str='plot_confusion_matrix') -> None:
+    '''Plots a confusion matrix using a reporter object generated using the '''
     # Confusion matrix function takes y_predicted and y_true as inputs, which is exactly the output of the predict method.
-    pass
+    fig, ax = plt.subplots(1)
 
+    # Extract the confusion matrix from the reporter object. 
+    (tn, fp, fn, tp) = reporter.get_confusion_matrix()
+    # Convert the heatmap to a pandas DataFrame for the sake of labels. 
 
+    labels = [[f'true negative ({tn})', f'false positive ({fp})'], [f'false negative ({fn})', f'true positive ({tp})']]
+    # (tn, fp, fn, tp)
+    sns.heatmap([[tn, fp], [fn, tp]], fmt='', annot=labels, ax=ax, color='seagreen')
+
+    ax.set_title(title)
+    
+    if path is not None:
+        fig.save(path, format='png')
 
 
 def plot_homology_clusters(clstr_path:str=None, fasta_path:str=None, path:str=None) -> None:
     '''Plot information relating to CD-HIT performance on the data. 
-    
+    Ty
     args:
         - clstr_path: The path to the clstr file produced by the program. 
         - fasta_path: The path to the FASTA file from which the program generated clusters. 
@@ -191,6 +202,16 @@ def plot_homology_clusters(clstr_path:str=None, fasta_path:str=None, path:str=No
         plt.savefig(path, format='png')
 
 
+# ROC curve is created by varying the threshold used to make predictions. 
 
-def plot_roc_curve():
-    pass
+def plot_roc_curve(thresholds:list, reporters:list, path:str=None, title:str='plot.plot_roc_curve') -> None:
+    '''Plot the ROC curve using a Reporter object which contains confusion matrix
+    information for a variety of thresholds. 
+
+    '''
+
+    fig, ax = plt.subplots()
+
+    # First need to organize the information into a DataFrame for plotting. 
+    data = {'thresholds':thresholds, 'true_positive_rate':[r.get_true_positive_rate() for r in reporters], 'false_positive_rate':[r.get_false_positive_rate() for r in reporters]}
+    data = pd.DataFrame(data)
