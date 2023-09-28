@@ -48,7 +48,7 @@ class WeightedBCELoss(torch.nn.Module):
 def apply_threshold(outputs:torch.Tensor, threshold:float=0.5) -> torch.Tensor:
     '''Apply a threshold to model outputs to convert them to binary classification.'''
     # If no threshold is specified, then just return the outputs. 
-    assert type(threshold) == float, 'classifiers.apply_threshold: Specified threshold must be a float.'
+    # assert type(threshold) == float, 'classifiers.apply_threshold: Specified threshold must be a float.'
     return  torch.where(outputs < threshold, 0, 1)
 
 
@@ -127,7 +127,15 @@ class Classifier(torch.nn.Module):
 
         # Compute the confusion matrix information. 
         outputs = apply_threshold(outputs, threshold=threshold) # Make sure to apply threshold to output data first. 
-        (tn, fp, fn, tp) = np.ravel(sklearn.metrics.confusion_matrix(outputs.detach().numpy(), targets.detach().numpy()))
+
+        # NOTE: There seems to be a case in the EmbeddingClassifier when one of the outputs is actually 1 (so is missed by the threshold, which
+        # is a non-inclusive upper bound). Because this rarely happens, I think it is OK. 
+        # if threshold == 1: # If the threshold is one, everything should be classified as 0.
+        #     assert np.all(outputs.detach().numpy() == 0), 'classifiers.Classifier.test: When threshold=1, not all outputs are 0.'
+        # if threshold == 0: # If the threshold is one, everything should be classified as 1. ]
+        #     assert np.all(outputs.detach().numpy() == 1), 'classifiers.Classifier.test: When threshold=0, not all outputs are 1.'
+
+        (tn, fp, fn, tp) = sklearn.metrics.confusion_matrix(targets.detach().numpy(), outputs.detach().numpy()).ravel()
         reporter.add_confusion_matrix(tn, fp, fn, tp)
 
         reporter.close()
@@ -168,7 +176,7 @@ class Classifier(torch.nn.Module):
 
         for epoch in pbar:
 
-            # If a validation dataset is specified, evaliate. 
+            # If a validation dataset is specified, evaluate. 
             # NOTE: If I try to do this with every batch, it takes forever.  
             if val is not None:
                 # NOTE: Threshold should be None here. 
@@ -191,8 +199,15 @@ class Classifier(torch.nn.Module):
                 optimizer.step() 
                 optimizer.zero_grad()
 
-            pbar.update()
-
+        # Record validation loss and accuracy one more time. 
+        if val is not None:
+            # NOTE: Threshold should be None here. 
+            outputs, targets = self.predict(val)
+            val_loss = loss_func(outputs, targets)
+            val_acc = get_balanced_accuracy(outputs, targets, threshold=threshold)
+            reporter.add_val_metrics(val_loss, val_acc)
+            pbar.set_postfix({'val_acc':np.round(val_acc, 2)})
+            
         reporter.close()
         pbar.close()
         
@@ -352,7 +367,7 @@ def optimize_hyperparameters(
 
 
 # NOTE: For ROC curve, do we need to re-train the model for each threshold? It seems like yes
-def get_roc_data(model:Classifier, dataloader:torch.utils.data.DataLoader, params:dict={}) -> Reporter:
+def get_roc_data(model:Classifier, dataloader:torch.utils.data.DataLoader, params:dict={}) -> tuple:
     '''Generates data for plotting an ROC curve by varying the threshold (i.e. the value below which output
     logits are set to zero).
     
@@ -365,9 +380,9 @@ def get_roc_data(model:Classifier, dataloader:torch.utils.data.DataLoader, param
     reporters = []
 
     for threshold in thresholds:
-        reporters.append(model.test(dataloader, reporter=reporter, **params))
+        reporters.append(model.test(dataloader, threshold=threshold, **params))
 
-    return thresholds, reporter
+    return thresholds, reporters
 
 
 

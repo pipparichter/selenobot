@@ -119,7 +119,7 @@ class Reporter():
         '''Get the batch numbers where each new epoch begins.'''
         assert self.batches_per_epoch is not None, 'batches_per_epoch attribute has not been set.'
         step = self.batches_per_epoch
-        return [i for i in range(step, self.batches+step, step)]
+        return [i for i in range(0, self.batches + step, step)]
     
     def add_confusion_matrix(self, tn:int, fp:int, fn:int, tp:int) -> None:
         '''Add new confusion matrix data to the internal list.'''

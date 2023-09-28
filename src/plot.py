@@ -12,8 +12,6 @@ import reporter
 import utils
 from tqdm import tqdm
 
-cmap = mpl.colormaps['Pastel2']
-palette = 'Set2'
 
 # TODO: Might be worth making an info object for plotting results of training. 
 
@@ -52,7 +50,7 @@ def plot_train_test_val_split(
     data['test'] = np.array([len(s) for s in test_data['seq']])
     data['val'] = np.array([len(s) for s in val_data['seq']])
 
-    sns.histplot(data=data, ax=axes[-1], legend=True, stat='count', multiple='dodge', bins=50, palette='Pastel2', ec=None)
+    sns.histplot(data=data, ax=axes[-1], legend=True, stat='count', multiple='dodge', bins=50, palette=sns.light_palette('seagreen', n_colors=3), ec=None)
     axes[-1].set_yscale('log')
     axes[-1].set_xlabel('lengths')
     axes[-1].set_ylabel('log(count)')
@@ -80,8 +78,8 @@ def plot_train_reporter(reporter:reporter.Reporter, path=None): # include=['trai
     loss_df = reporter.get_loss_info()
     acc_df = reporter.get_acc_info()
 
-    sns.lineplot(data=loss_df, y='value', x='batch', hue='metric', ax=axes[0], palette=palette)
-    sns.lineplot(data=acc_df, y='value', x='batch', hue='metric', ax=axes[1], palette=palette)
+    sns.lineplot(data=loss_df, y='value', x='batch', hue='metric', ax=axes[0], palette=sns.color_palette('GnBu', n_colors=2))
+    sns.lineplot(data=acc_df, y='value', x='batch', hue='metric', ax=axes[1], palette=sns.color_palette('GnBu', n_colors=2))
 
     axes[0].set_title(f"Weighted BCE loss (weight={reporter.bce_loss_weight})")
     axes[0].set_yscale('log')
@@ -100,7 +98,7 @@ def plot_train_reporter(reporter:reporter.Reporter, path=None): # include=['trai
 
 
 
-def plot_confusion_matrix(reporter:reporter.Reporter, path:str=None, title:str='plot_confusion_matrix') -> None:
+def plot_confusion_matrix(reporter:reporter.Reporter, path:str=None, title:str='plot.plot_confusion_matrix') -> None:
     '''Plots a confusion matrix using a reporter object generated using the '''
     # Confusion matrix function takes y_predicted and y_true as inputs, which is exactly the output of the predict method.
     fig, ax = plt.subplots(1)
@@ -111,9 +109,11 @@ def plot_confusion_matrix(reporter:reporter.Reporter, path:str=None, title:str='
 
     labels = [[f'true negative ({tn})', f'false positive ({fp})'], [f'false negative ({fn})', f'true positive ({tp})']]
     # (tn, fp, fn, tp)
-    sns.heatmap([[tn, fp], [fn, tp]], fmt='', annot=labels, ax=ax, color='seagreen')
+    sns.heatmap([[tn, fp], [fn, tp]], fmt='', annot=labels, ax=ax, cmap=mpl.colormaps['GnBu'])
 
     ax.set_title(title)
+    ax.set_xticklabels([])
+    ax.set_yticklabels([])
     
     if path is not None:
         fig.save(path, format='png')
@@ -214,4 +214,15 @@ def plot_roc_curve(thresholds:list, reporters:list, path:str=None, title:str='pl
 
     # First need to organize the information into a DataFrame for plotting. 
     data = {'thresholds':thresholds, 'true_positive_rate':[r.get_true_positive_rate() for r in reporters], 'false_positive_rate':[r.get_false_positive_rate() for r in reporters]}
-    data = pd.DataFrame(data)
+    # Not totally sure why I am getting NaNs here...
+    data = pd.DataFrame(data) # .fillna(0)
+
+    # NOTE: Threshold is an upper bound, so when threshold is 1, everything should be classified as 0. When threshold
+    # is zero, everything should be classified as 1.
+
+    sns.lineplot(data=data, y='true_positive_rate', x='false_positive_rate', ax=ax, color='seagreen')
+
+    ax.set_title(title)
+
+    if path is not None:
+        pls.savefig(path)
