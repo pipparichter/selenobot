@@ -382,7 +382,7 @@ def get_roc_data(model:Classifier, dataloader:torch.utils.data.DataLoader, param
     for threshold in thresholds:
         reporters.append(model.test(dataloader, threshold=threshold, **params))
 
-    return thresholds, reporters
+    return reporters
 
 
 
