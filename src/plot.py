@@ -17,12 +17,24 @@ from typing import NoReturn, Tuple, List
 # Some specs to make sure everything is in line with Nature Micro requirements. 
 DPI = 500
 TITLE_FONT_SIZE = 7
-LABEL_FONT_SIZE = 5
+LABEL_FONT_SIZE = 7
+
 
 
 # TODO: Might be worth making an info object for plotting results of training. 
 
 # TODO: Need to decide on a color scheme. Will probably go with blues. 
+
+def set_fontsize(ax:plt.Axes, legend=True) -> NoReturn:
+    ax.set_ylabel(ax.yaxis.get_label().get_text(), fontsize=LABEL_FONT_SIZE)
+    ax.set_xlabel(ax.xaxis.get_label().get_text(), fontsize=LABEL_FONT_SIZE)
+    ax.set_xticklabels(ax.xaxis.get_ticklabels(), fontsize=LABEL_FONT_SIZE)
+    ax.set_yticklabels(ax.yaxis.get_ticklabels(), fontsize=LABEL_FONT_SIZE)
+    ax.set_title(ax.get_title(), fontsize=TITLE_FONT_SIZE)
+    
+    if legend:
+        ax.legend(fontsize=LABEL_FONT_SIZE)
+
 
 def get_palette(n_colors:int):
     '''Get the color palette from the matplotlib Blues colorset.'''
@@ -50,18 +62,25 @@ def plot_train_test_val_split(
     # Things we care about are length distributions, as well as
     # proportion of negative and positive instances (and selenoproteins, for that matter)
 
-    fig, ax = plt.subplots(1) #, figsize=(15, 10))
+    fig, ax = plt.subplots(1, figsize=(6, 5)) #, figsize=(15, 10))
 
     plot_data = {'dataset':['train', 'test', 'val']}
     plot_data['truncated'] = [np.sum([1 if '[' in row.Index else 0 for row in data.itertuples()]) for data in [train_data, test_data, val_data]] 
     plot_data['full_length'] = [len(data) - count for data, count in zip([train_data, test_data, val_data], plot_data['truncated'])]
 
     plot_data = pd.DataFrame(plot_data).set_index('dataset')
-    plot_data.plot(kind='bar', stacked=True, ax=ax, color=['cornflowerblue', 'lightsteelblue'])
+    plot_data.plot(kind='bar', ax=ax, color=['cornflowerblue', 'lightsteelblue'], edgecolor='black', linewidth=0.5)
 
-    ax.set_title(title, fontsize=TITLE_FONT_SIZE)
+    sizes = [len(train_data), len(test_data), len(val_data)]
+    for container in ax.containers:
+        ax.bar_label(container, labels=[f'{np.round(100 * x/y, 1)}%' for x, y in zip(container.datavalues, sizes)], fontsize=LABEL_FONT_SIZE)
+
+    # Make sure all the labels look how I want, and are the correct size. 
+    ax.set_title(title)
     ax.set_ylabel('count')
+    ax.set_xlabel('') # Remove the x label.
 
+    ax.legend(fontsize=LABEL_FONT_SIZE)
 
     # # Establish the subplots. First and second axes are pie charts, the third are length distributions. 
     # axes = [plt.subplot(2, 3, 1), plt.subplot(2, 3, 2),plt.subplot(2, 3, 3), plt.subplot(2, 3, (4, 6))]
@@ -91,7 +110,7 @@ def plot_train_test_val_split(
         plt.savefig(path, format='png', dpi=DPI)
 
 
-def plot_train_curve(reporter:reporter.Reporter, path:str=None, title:str='plot.plot_train_curve') -> NoReturn: 
+def plot_train_curve(reporter:reporter.Reporter, path:str=None, title:str='plot.plot_train_curve', pool=True) -> NoReturn: 
     '''Plots information provided in the Reporter object returned by the train_ model method.
     
     args:
@@ -102,16 +121,20 @@ def plot_train_curve(reporter:reporter.Reporter, path:str=None, title:str='plot.
 
     fig, ax = plt.subplots(1)
     
-    # Add horizontal lines indicating epochs. 
-    ax.vlines(reporter.get_epoch_batches(), *ax.get_ylim(), linestyles='dotted', color='LightGray')
-    sns.lineplot(data=reporter.get_loss_info(), y='value', x='batch', hue='metric', ax=ax, palette=get_palette(2))
+    # # Add horizontal lines indicating epochs. 
+    # ax.vlines(reporter.get_epoch_batches(), *ax.get_ylim(), linestyles='dotted', color='LightGray')
+    x = 'batch' if not pool else 'epoch'
+    sns.lineplot(data=reporter.get_loss_info(pool=pool), y='value', x=x, hue='metric', ax=ax, palette=get_palette(2))
     
     ax.legend().set_title('') # Turn off legend title because it looks crowded. 
 
-    ax.set_title(title, fontsize=TITLE_FONT_SIZE)
+    # Make sure all labels are the right size. 
+    ax.set_title(title)
     ax.set_yscale('log')
     ax.set_ylabel('log(loss)')
-    
+
+    set_fontsize(ax)
+
     # fig, axes = plt.subplots(2, figsize=(16, 10), sharex=True)
     
     # # NOTE: Don't need to plot accuracy on the training curve. 
@@ -161,9 +184,10 @@ def plot_confusion_matrix(reporter:reporter.Reporter, path:str=None, title:str='
         labels = [[f'TN ({tn})', f'FP ({fp})'], [f'FN ({fn})', f'TP ({tp})']]
 
     # (tn, fp, fn, tp)
-    sns.heatmap([[tn, fp], [fn, tp]], fmt='', annot=labels, ax=ax, cmap=mpl.colormaps['Blues'], cbar=cbar,  linewidths=0.5, linecolor='black')
+    annot_kws = {'fontsize':LABEL_FONT_SIZE}
+    sns.heatmap([[tn, fp], [fn, tp]], fmt='', annot=labels, annot_kws=annot_kws, ax=ax, cmap=mpl.colormaps['Blues'], cbar=False, linewidths=0.5, linecolor='black')
 
-    ax.set_title(title, fontsize=TITLE_FONT_SIZE)
+    ax.set_title(title)
 
     ax.set_xticks([])
     ax.set_yticks([])
@@ -171,6 +195,9 @@ def plot_confusion_matrix(reporter:reporter.Reporter, path:str=None, title:str='
     # Make the lines around the confusion matrix visible. 
     for _, spine in ax.spines.items():
         spine.set_visible(True)
+
+    # Make sure all fonts are correct. 
+    set_fontsize(ax, legend=False)
     
     if path is not None:
         fig.save(path, format='png', dpi=DPI)
@@ -289,15 +316,18 @@ def plot_roc_curve(
     # NOTE: Threshold is an upper bound, so when threshold is 1, everything should be classified as 0. When threshold
     # is zero, everything should be classified as 1.
 
-    sns.lineplot(data=data, y='true_positive_rate', x='false_positive_rate', ax=ax, color='cornflowerblue')
+    sns.lineplot(data=data, y='true_positive_rate', x='false_positive_rate', ax=ax, color='cornflowerblue', legend=None)
 
     if add_confusion_matrix:
         # Inset axes in the plot showing the confusion matrix. Should be in the bottom right corner. 
         # NOTE: (0,0) is bottom left and (1,1) is top right of the axes. This is the pixel coordinate system of the display. (0,0) is the bottom left and (width, height) is the top right of display in pixels.
-        axins = ax.inset_axes([0.4, 0.1, 0.5, 0.5]) #, edgecolor='black')
-        plot_confusion_matrix(reporters[4], title='', ax=axins)
+        axins = ax.inset_axes([0.5, 0.1, 0.4, 0.5]) #, edgecolor='black')
+        plot_confusion_matrix(reporters[3], title='', ax=axins)
 
-    ax.set_title(title, fontsize=TITLE_FONT_SIZE)
+    ax.set_title(title)
+
+    # Make sure font sizes are correct. 
+    set_fontsize(ax, legend=False)
 
     if path is not None:
         pls.savefig(path, format='png', dpi=DPI)
@@ -320,12 +350,19 @@ def plot_roc_curve_comparison(
     '''
     fig, ax = plt.subplots(1)
 
-    for t, r in zip(thresholds, reporters):
-        plot_roc_curve(t, r, add_confusion_matrix=False, title='',  ax=ax, path=None)
+    # The first set of reporters specified should be the baseline. 
+    plot_roc_curve(reporters[0], add_confusion_matrix=False, title='', ax=ax, path=None)
+    # Add the inset confusion matrix for the non-baseline ROC curve. 
+    plot_roc_curve(reporters[1], add_confusion_matrix=True, title='', ax=ax, path=None)
 
-    ax.set_title(title, fontsize=TITLE_FONT_SIZE)
+    # Should be two lines on the plot, and the first should be the baseline. 
+    ax.lines[0].set_linestyle('--')
+    ax.lines[0].set_color('gray')
 
-    ax.legend(labels, fontsize=LABEL_FONT_SIZE).set_title('')
+    ax.set_title(title)
+
+    # Make sure font sizes are correct. 
+    set_fontsize(ax)
 
     if path is not None:
         pls.savefig(path, format='png', dpi=DPI)

@@ -40,7 +40,6 @@ class Reporter():
         self.lr = lr
         self.bce_loss_weight = bce_loss_weight
 
-
         # TODO: Add stuff for test losses. 
 
         # To be populated later...
@@ -131,6 +130,35 @@ class Reporter():
         assert self.confusion_matrix is not None, 'reporter.Reporter.get_confusion_matrix: No confusion matrix has been logged.'
         return self.confusion_matrix
 
+    def _get_info_pooled(self, metrics, verbose=False):
+        '''Use the information returned by the train function to construct a DataFrame for plotting loss. Pools
+        the training loss over epochs.'''
+
+        # Make sure the reporter object is no longer actively being logged to. 
+        assert not self.active
+        assert self.batches_per_epoch is not None, 'Reporter.__get_info_pooled: batches_per_epoch has not been set.'
+        
+        df = {'epoch':[], 'value':[], 'metric':[]}
+
+        for metric, data in metrics.items():
+            # First add the unpooled train data to the DataFrame dictionary. 
+            if len(data) > 0:
+                df['epoch'] += [i for i in range(self.epochs)]
+                df['metric'] += [metric] * self.epochs
+                # If it is a train metric, pool the values. 
+                if 'train' in metric:
+                    df['value'] += [np.mean(data[i:i + self.batches_per_epoch]) for i in range(0, len(data), self.batches_per_epoch)]
+                else:
+                    # Because I calculate validation loss at the beginning of each epoch, plus after the last epoch, I have one extra value.
+                    # Remove the end loss calculation to account for this. 
+                    df['value'] += data[:-1]
+
+            check_df(df)
+
+            if verbose: print(f'reporter.Reporter._get_info: Successfully added {metric} information to DataFrame.')
+
+        return pd.DataFrame(df)
+
     def _get_info(self, metrics, verbose=False):
         '''Use the information returned by the train function to construct a DataFrame for plotting loss.'''
 
@@ -152,12 +180,16 @@ class Reporter():
 
             check_df(df)
 
-            if verbose: print(f'reporter.Reporter._geSuccessfully added {metric} information to DataFrame.')
+            if verbose: print(f'reporter.Reporter._get_info: Successfully added {metric} information to DataFrame.')
 
         return pd.DataFrame(df)
 
-    def get_loss_info(self, verbose=False):
-        return self._get_info(metrics=self.loss_metrics, verbose=verbose)
+    def get_loss_info(self, verbose:bool=False, pool:bool=True) -> pd.DataFrame:
+        '''Return a DataFrame containing loss information for plotting a training curve.'''
+        if pool:
+            return self._get_info_pooled(metrics=self.loss_metrics, verbose=verbose)
+        else:
+            return self._get_info(metrics=self.loss_metrics, verbose=verbose)
 
     def get_acc_info(self, verbose=False):
         return self._get_info(metrics=self.acc_metrics, verbose=verbose)
