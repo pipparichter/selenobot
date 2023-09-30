@@ -1,0 +1,15 @@
+README.md
+setup.py
+selenobot/__init__.py
+selenobot/setup-data.py
+selenobot.egg-info/PKG-INFO
+selenobot.egg-info/SOURCES.txt
+selenobot.egg-info/dependency_links.txt
+selenobot.egg-info/top_level.txt
+selenobot/src/__init__.py
+selenobot/src/classifiers.py
+selenobot/src/dataset.py
+selenobot/src/embedders.py
+selenobot/src/plot.py
+selenobot/src/reporter.py
+selenobot/src/utils.py
