@@ -13,8 +13,6 @@ from tqdm import tqdm
 import numpy as np
 import pandas as pd
 import torch.nn.functional
-import torcheval
-# from torcheval.metrics.functional import binary_accuracy
 # import torchmetrics
 import sklearn.metrics
 from reporter import Reporter

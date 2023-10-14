@@ -1,6 +1,7 @@
 import sys
 sys.path.append('/home/prichter/Documents/selenobot/src/')
 import matplotlib.pyplot as plt
+import matplotlib
 import seaborn as sns
 import numpy as np
 import pandas as pd
@@ -8,11 +9,18 @@ import sklearn
 import matplotlib as mpl
 import sklearn
 import reporter
+import re
 
 import utils
 from tqdm import tqdm
 
-from typing import NoReturn, Tuple, List
+from typing import NoReturn, Tuple, List, Dict
+
+import ete3
+import PyQt5
+from ete3 import NodeStyle
+# from Bio import Phylo
+import io
 
 # Some specs to make sure everything is in line with Nature Micro requirements. 
 DPI = 500
@@ -203,90 +211,210 @@ def plot_confusion_matrix(reporter:reporter.Reporter, path:str=None, title:str='
         fig.save(path, format='png', dpi=DPI)
 
 
-# def plot_homology_clusters(clstr_path:str=None, fasta_path:str=None, path:str=None) -> None:
-#     '''Plot information relating to CD-HIT performance on the data. 
-#     Ty
-#     args:
-#         - clstr_path: The path to the clstr file produced by the program. 
-#         - fasta_path: The path to the FASTA file from which the program generated clusters. 
-#         - c: Percent similarity, one of the inputs to CD-HIT. 
-#         - l: Minimum sequence length, one of the inputs to CD-HIT. 
-#         - n: Word length, one of the inputs to CD-HIT. 
-#         - path: The path to which the file should be written. If None, the figure is not saved. 
-#     '''
-#     plt.figure(figsize=(18, 12))
-#     # Set a title for the entire figure. 
-#     # plt.suptitle('Homology cluster information')
+def rgb_to_hex(r, g, b):
+    '''Convert a red, blue, and green value (the output of map.to_rgba) to a hex string.'''
+    # First need to put each value into hexadecimal. 
+    return '#' + '%02x%02x%02x' % (r, g, b)
+
+
+def get_taxonomy_to_sec_content_map(gtdb_data, genome_id_to_taxonomy_map:Dict[str, str]=None):
+    '''Use GTDB taxomonomy to combine different families and plot average selenoprotein content
+    across labeled members.
+
+    args:
+        - gtdb_data 
+
+    '''
+    assert genome_id_to_taxonomy_map is not None, 'plot.get_class_to_sec_content: A dictionary mapping genome ID to class name must be specified.'
     
-#     # Establish the subplots. plot on the first row is a cluster size distribution, and the two plots below are scatterplots.
-#     axes = [plt.subplot(2, 2, (1, 2)), plt.subplot(2, 2, 3), plt.subplot(2, 2, 4)]
+    # Get a list of all possible taxonomical categories at the specified level. 
+    keys = np.unique([t for t in  genome_id_to_taxonomy_map.values()])
+    taxonomy_to_sec_content_map = {t:[] for t in keys}
 
-#     plot_data = {'label':[], 'sec_content':[], 'mean_length':[], 'cluster_size':[]}
+    for row in gtdb_data.itertuples():
+        # Get the relevant taxonomy. 
+        try: # Try to extract the specified taxonomic label. 
+            taxonomy = genome_id_to_taxonomy_map.get(row.Index, None)     
+            sec_content = row.total_hits / row.total_genes
+            taxonomy_to_sec_content_map[taxonomy].append(sec_content)
+        except KeyError: # If the taxonomy is not found, move on to the next iteration. 
+            continue
 
-#     clstr_data = utils.pd_from_clstr(clstr_path) # Read in the clstr information.
-#     # clstr_data = utils.pd_from_clstr(clstr_path)[:100] # Read in the clstr information.
-#     fasta_data = utils.pd_from_fasta(fasta_path)
-
-#     for label, data in tqdm(clstr_data.groupby('cluster'), desc='plot.plot_homology_clusters'):
-
-#         # Worried that grabbing the sequences from FASTA might be excessively slow.  
-#         idxs = np.where(np.isin(fasta_data.index, data.index))[0]
-#         seqs = fasta_data.iloc[idxs]['seq'].values
-
-#         size = len(data) # Get the length of the cluster. 
-#         sec_content = len([id_ for id_ in data.index if '[' in id_]) / size
-
-#         mean_length = np.mean([len(seq) for seq in seqs])
+    # Take the average of each sec content list. 
+    # Possibly will need to make sure that we are not trying to take the mean of an empty list.
+    return {t:0 if np.isnan(np.mean(s)) else np.mean(s) for t, s in taxonomy_to_sec_content_map.items()}
 
 
-#         plot_data['label'].append(label)
-#         plot_data['cluster_size'].append(size)
-#         plot_data['sec_content'].append(np.round(sec_content, 1))
-#         plot_data['mean_length'].append(mean_length)
+def get_genome_id_to_taxonomy_map(taxonomy_data:pd.DataFrame, level:str='class') -> Dict[str, str]:
+    '''Processes a taxonomy file, converting it into a dictionary mapping genome ID
+    to the name of the family to which the genome belongs.
 
-#     # First deal with plots on the first row. 
+    args:
+        - taxonomy_data: Contains two columns, genome_id and taxonomy. The taxonomy column contains
+            strings with each taxonomical level separated by semicolons. 
+        - level: The taxonomic level for which to accumulate data. 
+    '''
+    # Collect information into a dictionary mapping 
+    genome_id_to_taxonomy_map = {}
+    for row in taxonomy_data.itertuples():
+        try:
+            genome_id_to_taxonomy_map[row.genome_id] = parse_taxonomy(row.taxonomy)[level]
+        except KeyError:
+            print(f'plot.get_genome_id_to_taxonomy_map: Genome {genome_id} does not have specified taxonomy data.')
+            continue
 
-#     # Plot on the top distribution of cluster size. 
-#     sns.histplot(data=plot_data['cluster_size'], ax=axes[0], legend=False, bins=100, color='seagreen')#, c='seagreen')
-#     axes[0].set_xlabel('cluster_size')
-#     axes[0].set_yscale('log')
-#     axes[0].set_ylabel('log(count)')
-#     axes[0].set_title('Cluster size distribution')
-
-#     # Minimum cluster size for displaying on the scatterplots. 
-#     min_cluster_size = 2
-#     # min_cluster_size_filter = 
-
-#     # Additional plots to show how selenoprotein content and sequence length are represented over clusters. 
-#     plot_data = pd.DataFrame(plot_data)
-
-#     # Want to bin the data to make hues look nicer. 
-#     min_mean_length, max_mean_length = min(plot_data['mean_length']), max(plot_data['mean_length'])
-#     # mean_length_step = (max_mean_length - min_mean_length) // 10
-#     # bins =  np.concatenate([np.arange(0, max_mean_length, 250), np.array([max_mean_length])])
-#     bins =  np.arange(0, max_mean_length, 500)
-#     bin_labels = ['< 500'] + [f'{int(bins[i])} < length < {int(bins[i + 1])}' for i in range(1, len(bins) - 2)] + [f' > {int(bins[-1])}'] 
-#     plot_data['mean_length'] = pd.cut(plot_data['mean_length'], bins=bins) # , labels=bin_labels)
-
-#     # cmap = sns.light_palette("seagreen", as_cmap=True).resampled(len(bin_labels))# (np.arange(len(bin_labels)))
-
-#     sns.scatterplot(data=plot_data, x='label', y='cluster_size', hue='mean_length', ax=axes[1], s=6, edgecolor=None, palette=sns.light_palette('seagreen', n_colors=len(bin_labels)), legend='auto')
-#     axes[1].set_title('Mean sequence length across clusters')
-#     axes[1].set_yscale('log')
-#     axes[1].set_ylabel('log(cluster_size)')
-#     axes[1].legend(labels=bin_labels)
-
-#     sns.scatterplot(data=plot_data, x='label', y='cluster_size', hue='sec_content', ax=axes[2], s=6, edgecolor=None, palette=sns.light_palette('seagreen', n_colors=11), legend='auto')
-#     axes[2].set_title('Selenoprotein content across clusters')
-#     axes[2].set_yscale('log')
-#     axes[2].set_ylabel('log(cluster_size)')
-
-#     plt.tight_layout()
-#     if path is not None:
-#         plt.savefig(path, format='png')
+    return genome_id_to_taxonomy_map
 
 
-# ROC curve is created by varying the threshold used to make predictions. 
+def parse_taxonomy(taxonomy:str) -> Dict[str, str]:
+    '''Extract information from a taxonomy string.'''
+
+    m = {'o':'order', 'd':'domain', 'p':'phylum', 'c':'class', 'f':'family', 'g':'genus', 's':'species'}
+
+    parsed_taxonomy = {}
+    # Split taxonomy string along the semicolon...
+    for x in taxonomy.strip().split(';'):
+        f, data = x.split('__')
+        parsed_taxonomy[m[f]] = data
+    
+    return parsed_taxonomy # Return None if flag is not found in the taxonomy string. 
+
+    
+
+# def label_nodes_with_taxonomy(tree, genome_id_to_family_map=None):
+def label_nodes_with_taxonomy(tree:ete3.Tree, genome_id_to_taxonomy_map:Dict[str, str]=None) -> NoReturn:
+    '''Label all nodes in a tree with their family. Labels according to the specified taxonomic level.
+    
+    args:
+        - tree: A Tree object with unlabeled nodes. 
+        - genome_id_to_taxonomy_map: A map co
+    '''
+    
+    assert genome_id_to_taxonomy_map is not None, 'plot.get_class_to_sec_content: A dictionary mapping genome ID to class name must be specified.'
+
+    for leaf in tree.get_leaves():
+        # family = genome_id_to_family_map[node.name]
+        taxonomy = genome_id_to_taxonomy_map[leaf.name]
+        leaf.add_features(taxonomy=taxonomy)
+
+
+
+
+def is_leaf(node):
+    '''Function for collapsing the tree according to taxonomy.'''
+    # If a node is monophyletic for the taxonomy, then it is a leaf.
+    leaves = node.get_leaves()
+    taxonomy = leaves[0].taxonomy
+    if np.all([taxonomy == l.taxonomy for l in leaves]):
+        node.name = taxonomy
+        return True
+    else:
+        return False
+
+
+# def merge_nodes_by_family(tree:ete3.Tree, families=List[str], genome_id_to_family_map:Dict[str,str]=None) -> ete3.Tree :
+def merge_nodes_by_taxonomy(tree:ete3.Tree, classes=List[str], genome_id_to_taxonomy_map:Dict[str,str]=None) -> ete3.Tree :
+    '''Takes a tree as input, and merges all the nodes so that there is only one node for
+    a particular family.'''
+
+    # Annotate all nodes with stored taxonomical data. 
+    label_nodes_with_taxonomy(tree, genome_id_to_taxonomy_map=genome_id_to_taxonomy_map)
+    return ete3.Tree(tree.write(is_leaf_fn=is_leaf), format=1, quoted_node_names=True)
+
+
+def plot_gtdb_tree(
+        tree_path:str, 
+        gtdb_data:pd.DataFrame, 
+        taxonomy_path:str=None, 
+        level:str='class',
+        sec_content_threshold:float=None,
+        path:str=None, 
+        show_sec_content:bool=True,
+        font_size:int=15, 
+        margin:int=10) -> NoReturn:
+    '''Phylogenetic tree from the GTDB database with selenoprotein content coded as a color. 
+    Selenoprotein content is given as total selenoproteins divided by total genes.'''
+
+    # assert path is not None, 'plot.plot_gtdb_tree: An output path must be specified.'
+    assert taxonomy_path is not None, 'plot.plot_gtdb_tree: Path to taxonomy file must be specified.'
+    
+    # Ready in te taxonomy data. 
+    taxonomy_data = pd.read_csv(taxonomy_path, names=['genome_id', 'taxonomy'], delimiter='\t')
+
+    # Read in the tree data from the file. Should be in paranthetical format. 
+    with open(tree_path, 'r') as f:
+        tree_data = f.read()
+
+
+    genome_id_to_taxonomy_map = get_genome_id_to_taxonomy_map(taxonomy_data, level=level)
+    taxonomy_to_sec_content_map = get_taxonomy_to_sec_content_map(gtdb_data, genome_id_to_taxonomy_map=genome_id_to_taxonomy_map)
+
+    
+    print(f'plot.plot_gtdb_tree: {len(np.unique(list(genome_id_to_taxonomy_map.values())))} {level} represented in taxonomy_to_sec_content_map.')
+    
+    tree = ete3.Tree(tree_data, format=1, quoted_node_names=True) 
+    tree = merge_nodes_by_taxonomy(tree, genome_id_to_taxonomy_map=genome_id_to_taxonomy_map)
+
+    # Create a normalized colormap for coloring the nodes. 
+    cmap = matplotlib.colormaps['Blues']
+    all_sec_contents = gtdb_data['total_hits'].values / gtdb_data['total_genes'].values
+    norm = matplotlib.colors.Normalize(vmin=min(list(taxonomy_to_sec_content_map.values())), vmax=max(list(taxonomy_to_sec_content_map.values())))
+    m = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
+
+    # Color the merged tree according to sec_content.
+    for node in tree.traverse():
+        
+        # Make sure the node bubbles aren't visible -- maybe a cleaner way to do this. 
+        node_style = ete3.NodeStyle()
+        node_style['size'] = 0
+        node_style['hz_line_width'] = 2
+        node_style['hz_line_width'] = 2
+        node.set_style(node_style)
+
+        if node.is_leaf():
+
+            sec_content = np.round(taxonomy_to_sec_content_map[node.name], 2)
+
+            # If a sec_content threshold is specified, remove all leaves which do not meet the threshold.
+            if sec_content_threshold is not None:
+                if sec_content < sec_content_threshold:
+                    node.delete()
+                    continue
+
+            label = node.name + f' ({sec_content})' if show_sec_content else node.name
+
+            r, g, b, _ = m.to_rgba(sec_content, bytes=True) # Set bytes=True to get values between 0 and 255. 
+            if (r > 200 )or (g > 200) or (b > 200): # I think a reasonable test for if the background is dark?
+                font_color = '#000000'
+            else:
+                font_color = '#FFFFFF'
+
+            
+            face = ete3.TextFace(text=label, ftype='arial', fgcolor=font_color, fsize=font_size)
+            face.background.color = rgb_to_hex(r, g, b)
+            face.border.type = 0 # Make the border solid. 
+            face.border.width = 1
+            face.penwidth = 2
+            face.margin_left = margin
+            face.margin_right = margin
+            face.margin_top = margin
+            face.margin_bottom = margin
+
+            # ete3.add_face_to_node(face, node, aligned=True, column=0) # Not sure what the column parameter does. 
+            node.add_face(face, column=0) # , position='aligned')
+
+    tree_style = ete3.TreeStyle()
+
+    tree_style.mode = 'c'
+    tree_style.arc_start = -180 # 0 degrees = 3 o'clock
+    tree_style.arc_span = 180
+    tree_style.show_leaf_name = False
+    tree_style.show_scale = False
+
+    print(f'plot.plot_gtdb_tree: {len(tree.get_leaves())} leaves in final tree.')
+
+    tree.render(path, tree_style=tree_style)
+
 
 def plot_roc_curve(
         reporters:List[reporter.Reporter], 
@@ -330,7 +458,7 @@ def plot_roc_curve(
     set_fontsize(ax, legend=False)
 
     if path is not None:
-        pls.savefig(path, format='png', dpi=DPI)
+        fig.savefig(path, format='png', dpi=DPI)
 
 
 
@@ -365,4 +493,5 @@ def plot_roc_curve_comparison(
     set_fontsize(ax)
 
     if path is not None:
-        pls.savefig(path, format='png', dpi=DPI)
+        fig.savefig(path, format='png', dpi=DPI)
+
