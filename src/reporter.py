@@ -1,13 +1,11 @@
 '''Defining a class used to more easily manage data reporting on the performance of a Classifier.'''
+from typing import List, NoReturn, Tuple
 
 import numpy as np
 import pandas as pd
-import pickle
-import sklearn
 
-# TODO: Get rid of some of the redundancy in this section. 
 
-def check_df(df):
+def check_df(df:pd.DataFrame) -> NoReturn:
     '''Quick little function for checking DataFrames under construction.'''
     msg = 'plot.check_df: Column lengths are mismatched, ' + ' '.join(f'len({key})={len(val)}' for key, val in df.items())
     # assert (len(df['batch']) == len(df['loss'])) and (len(df['loss']) == len(df['label'])), msg
@@ -15,17 +13,10 @@ def check_df(df):
     length = len(list(df.values())[0])
     assert np.all([len(df[key]) == length for key in df.keys()]), msg
 
-
-def check_type(x, t):
-    pass
-    # assert type(x) is not None, 'Input value is None.'
-    # assert type(x) == t, f'Expected type {repr(t)}, got {repr(type(x))}.'
-
-
 class Reporter():
     '''A class for storing information associated with model performance.'''
 
-    def __init__(self, epochs=None, lr=None, bce_loss_weight=None):
+    def __init__(self, epochs:int=None, lr:float=None, bce_loss_weight:float=None):
 
         # Metrics will be added as methods are called.
         self.loss_metrics = {}
@@ -33,14 +24,10 @@ class Reporter():
 
         # Contains tuples (tn, fp, fn, tp)
         self.confusion_matrix = None
-
         self.active = False
-        
         self.epochs = epochs
         self.lr = lr
-        self.bce_loss_weight = bce_loss_weight
-
-        # TODO: Add stuff for test losses. 
+        self.bce_loss_weight = bce_loss_weight 
 
         # To be populated later...
         self.batches = None
@@ -48,19 +35,21 @@ class Reporter():
 
     def check_active(self):
         '''Check if the Reporter is active.'''
-        assert self.active, 'Reporter object must be active to add metrics.'
+        assert self.active, 'reporter.Reporter.check_active: Reporter object must be active to add metrics.'
 
     def open(self):
+        '''Open the Reporter object, meaning accuracies or losses can be added.'''
         self.active = True
 
     def close(self):
+        '''Close the Reporter object, meaning no more accuracies or losses can be added.'''
         self.active = False
         # Now that logging is complete, load the number of batches which have been processed, if any. 
         if 'train_losses' in self.loss_metrics:
             self.batches = len(self.loss_metrics['train_losses'])
     
     def set_batches_per_epoch(self, batches_per_epoch):
-        check_type(batches_per_epoch, int)
+        '''Set the batches_per_epoch attribute.'''
         self.batches_per_epoch = batches_per_epoch
 
     def __add(self, value:float=None, metric:str=None, group:dict=None):
@@ -73,7 +62,6 @@ class Reporter():
             - group: The group (either self.loss_metrics or self.acc_metrics) which the metric belongs to. 
         '''
         self.check_active() # Can only add to the reporter when the instance is active. 
-        check_type(value, float)
         if metric not in group:
             group[metric] = []
         group[metric].append(value)
@@ -116,9 +104,9 @@ class Reporter():
 
     def get_epoch_batches(self):
         '''Get the batch numbers where each new epoch begins.'''
-        assert self.batches_per_epoch is not None, 'batches_per_epoch attribute has not been set.'
+        assert self.batches_per_epoch is not None, 'reporter.Reporter.get_epoch_batches: batches_per_epoch attribute has not been set.'
         step = self.batches_per_epoch
-        return [i for i in range(0, self.batches + step, step)]
+        return list(range(0, self.batches + step, step))
     
     def add_confusion_matrix(self, tn:int, fp:int, fn:int, tp:int) -> None:
         '''Add new confusion matrix data to the internal list.'''
@@ -133,11 +121,9 @@ class Reporter():
     def _get_info_pooled(self, metrics, verbose=False):
         '''Use the information returned by the train function to construct a DataFrame for plotting loss. Pools
         the training loss over epochs.'''
-
         # Make sure the reporter object is no longer actively being logged to. 
         assert not self.active
         assert self.batches_per_epoch is not None, 'Reporter.__get_info_pooled: batches_per_epoch has not been set.'
-        
         df = {'epoch':[], 'value':[], 'metric':[]}
 
         for metric, data in metrics.items():
@@ -159,7 +145,7 @@ class Reporter():
 
         return pd.DataFrame(df)
 
-    def _get_info(self, metrics, verbose=False):
+    def _get_info(self, metrics:List[float], verbose:bool=False) -> pd.DataFrame:
         '''Use the information returned by the train function to construct a DataFrame for plotting loss.'''
 
         # Make sure the reporter object is no longer actively being logged to. 
@@ -191,36 +177,49 @@ class Reporter():
         else:
             return self._get_info(metrics=self.loss_metrics, verbose=verbose)
 
-    def get_acc_info(self, verbose=False):
-        return self._get_info(metrics=self.acc_metrics, verbose=verbose)
-
-    def get_test_losses(self):
+    def get_test_losses(self) -> List[float]:
         '''Return the test loss list from the reporter object.'''
         assert 'test_losses' in self.loss_metrics, 'No test_loss has been recorded.'
         assert len(self.loss_metrics['test_losses']) > 0, 'No test_loss has been recorded.'
-
         return self.loss_metrics['test_losses']
 
-    def get_test_accs(self):
+    def get_test_accs(self) -> List[float]:
         '''Return the test accuracy list from the reporter object.'''
         assert 'test_accs' in self.acc_metrics, 'reporter.Reporter.get_test_accs: No test_acc has been recorded.'
         assert len(self.acc_metrics['test_accs']) > 0, 'reporter.Reporter.get_test_accs: No test_loss has been recorded.'
-
         return self.acc_metrics['test_accs']
  
-    def get_false_positive_rate(self):
+    def get_false_positive_rate(self) -> float:
         '''Calculate the false positive rate.'''
-        tn, fp, fn, tp = self.get_confusion_matrix()
+        tn, fp, _, _ = self.get_confusion_matrix()
         fpr = fp / (fp + tn)
-
         return fpr
  
-    def get_true_positive_rate(self):
+    def get_true_positive_rate(self) -> float:
         '''Calculate the true positive rate.'''
-        tn, fp, fn, tp = self.get_confusion_matrix()
+        _, _, fn, tp = self.get_confusion_matrix()
         tpr = tp / (tp + fn)
-        
         return tpr
+
+    def get_precision(self) -> float:
+        '''Calculate the precision.'''
+        _, fp, _, tp = self.get_confusion_matrix()
+        if fp + tp == 0:
+            precision = 1
+        else:
+            precision = tp / (fp + tp)
+
+        return precision
+
+    def get_recall(self) -> float:
+        '''Calculate the recall.'''
+        _, _, fn, tp = self.get_confusion_matrix()
+        if tp + fn == 0:
+            recall = 1
+        else:
+            recall = tp / (tp + fn)
+            
+        return recall
   
 
 

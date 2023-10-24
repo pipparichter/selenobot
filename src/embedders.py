@@ -51,7 +51,7 @@ class LengthEmbedder():
 
 class AacEmbedder(Embedder):
 
-    def __init__(self): 
+    def __init__(self):
         '''Initializes an AacEmbedder object.'''
         super(AacEmbedder, self).__init__()
 

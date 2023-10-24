@@ -1,20 +1,12 @@
-'''This file contains definitions for different Datasets, all of which inherit from the 
-torch.utils.data.Dataset class (and are therefore compatible with a Dataloader)'''
-
+'''This file contains definitions for a Dataset object, and other associated functions.''' 
+import random
 import pandas as pd
 import numpy as np
 import torch
-import h5py
-import os
-import torch
 from torch.utils.data import DataLoader
-from utils import pd_from_fasta
-import random
 from tqdm import tqdm
-
-# Importing my own modules. 
 import embedders
-import utils
+from typing import List, NoReturn
 
 # device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -22,8 +14,7 @@ def get_dataloader(
         path:str, 
         batch_size:int=1024, 
         balance:bool=False, 
-        embedder:str=None,
-        verbose:bool=True) -> DataLoader:
+        embedder:str=None) -> DataLoader:
     '''Create a DataLoader from a CSV of embedding data.
     
     args:
@@ -81,13 +72,11 @@ class Dataset(torch.utils.data.Dataset):
     def __init__(self, data):
         '''Initializes an EmbeddingDataset from a pandas DataFrame containing
         embeddings and labels.'''
-
-        # Makes sense to store the embeddings as a separate array. 
-        # Make sure the type of the tensor is the same as model weights. 
+        # Makes sense to store the embeddings as a separate array.
+        # Make sure the type of the tensor is the same as model weights.
         self.embeddings_ = torch.from_numpy(data.drop(columns=['label', 'seq']).values).type(torch.float32)
         self.labels_ = torch.from_numpy(data['label'].values).type(torch.float32)
         self.ids_ = data.index
-
         self.latent_dim = self.embeddings_.shape[-1]
         self.length = len(data)
 
@@ -105,13 +94,13 @@ class Dataset(torch.utils.data.Dataset):
         assert 'label' in data.columns, 'dataset.Dataset.from_csv: Column label is not in data file.'
         return Dataset(data)
 
-    def get_positive_idxs(self, shuffle=True) -> list:
+    def get_positive_idxs(self, shuffle=True) -> List[int]:
         idxs = list(np.where([']' in id for id in self.ids_])[0])
         if shuffle:
             random.shuffle(idxs)
         return idxs
 
-    def get_negative_idxs(self, shuffle=True) ->list:
+    def get_negative_idxs(self, shuffle=True) -> List[int]:
         idxs = list(np.where([']' not in id for id in self.ids_])[0])
         if shuffle:
             random.shuffle(idxs)
@@ -124,6 +113,7 @@ class BalancedBatchSampler(torch.utils.data.BatchSampler):
 
     def __init__(self, data_source, batch_size=None,  percent_positive_instances=0.25):
         
+        super(BalancedBatchSampler, self).__init__()
 
         num_pos_per_batch = int(batch_size * percent_positive_instances)
         num_neg_per_batch = batch_size - num_pos_per_batch

@@ -4,7 +4,7 @@ selenoprotein or non-selenoprotein.
 '''
 from reporter import Reporter
 from tqdm import tqdm
-from typing import Optional, NoReturn, Tuple
+from typing import Optional, NoReturn, Tuple, List
 
 import sys
 import torch
@@ -287,20 +287,24 @@ def optimize_hyperparameters(
 
 
 # NOTE: For ROC curve, do we need to re-train the model for each threshold? It seems like yes
-def get_roc_data(model:Classifier, dataloader:torch.utils.data.DataLoader, params:dict={}) -> tuple:
+def test_thresholds(
+    model:Classifier,
+    dataloader:torch.utils.data.DataLoader,
+    thresholds:List[float]=None) -> List[Reporter]:
     '''Generates data for plotting an ROC curve by varying the threshold (i.e. the value below which output
     logits are set to zero).
     
     args:
         - model: A TRAINED classifier to apply the input data to. 
         - dataloader: A dataloader to use to evaluate the model. Should contain the testing data. 
-        - params: Keyword parameters to pass into the Classifier.test method
+        - thresholds: The thresholds on which to evaluate model performance. 
     '''
-    thresholds = np.arange(0, 1.1, 0.1)
     reporters = []
+    assert thresholds is not None, 'plot.test_thresholds: A list of threshold values must be specified.'
 
     for threshold in thresholds:
-        reporters.append(model.test(dataloader, threshold=threshold, **params))
+        # bce_loss_weight defaults to 1, but may be specified here.
+        reporters.append(model.test(dataloader, threshold=threshold))
 
     return reporters
 

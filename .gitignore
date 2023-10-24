@@ -4,6 +4,7 @@
 **/*.clstr
 **/*.h5
 **/*.pkl
+**/*.pickle
 **/*.tree
 **/*.tsv
 data/ 
