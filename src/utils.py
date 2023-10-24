@@ -12,8 +12,11 @@ def write(text, path):
         with open(path, 'w') as f:
             f.write(text)
 
-def read(path):
+def read(path, format='fasta'):
     '''Reads the information contained in a text file into a string.'''
+    if format == 'fasta':
+        assert path.split('.')[-1] == 'fasta', 'utils.read: Expected a FASTA file as input.'
+    
     with open(path, 'r') as f:
         text = f.read()
     return text
@@ -22,7 +25,6 @@ def read(path):
 def clear(path):
     '''Clear the contents of the file found at the path.'''
     open(path, 'w').close()
-
 
 
 def get_id(head):

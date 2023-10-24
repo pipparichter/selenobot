@@ -1,7 +1,5 @@
-'''
-This file contains definitions for different Datasets, all of which inherit from the 
-torch.utils.data.Dataset class (and are therefore compatible with a Dataloader)
-'''
+'''This file contains definitions for different Datasets, all of which inherit from the 
+torch.utils.data.Dataset class (and are therefore compatible with a Dataloader)'''
 
 import pandas as pd
 import numpy as np
@@ -14,31 +12,64 @@ from utils import pd_from_fasta
 import random
 from tqdm import tqdm
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+# Importing my own modules. 
+import embedders
+import utils
 
+# device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 def get_dataloader(
         path:str, 
         batch_size:int=1024, 
         balance:bool=False, 
-        percent_positive_instances:float=0.25, 
+        embedder:str=None,
         verbose:bool=True) -> DataLoader:
     '''Create a DataLoader from a CSV of embedding data.
     
     args:
-        - path (str): The path to the CSV file where the data is stored. 
-        - batch_size (int or None): Batch size of the DataLoader. If None, no batches are used. 
+        - path: The path to the CSV file where the data is stored. 
+        - batch_size: Batch size of the DataLoader. If None, no batches are used. 
+        - balance: Whether or not to ensure that each batch is balanced for positive or negative cases.
+        - embedder: A string specifying the embedder to apply to the data. 
+        - verbose: Whether or not to print various updates during runtime.  
     '''
-    dataset = Dataset.from_csv(path)
+    if embedder is None: # If no embedder is specified, just load in data from the file. 
+        dataset = Dataset.from_csv(path)
+    else:
+        if embedder == 'aac':
+            embedder = embedders.AacEmbedder()
+        elif embedder == 'length':
+            embedder = embedders.LengthEmbedder()
+        elif embedder == 'plm':
+            raise Exception('TODO')
+        else:
+            raise Exception('dataset.get_dataloader: Invalid embedding method given.')
+        
+        # It makes more sense to pass in a path to the __.csv files, which have embedding information, as well as the sequences. 
+        seqs = np.ravel(pd.read_csv(path, usecols=['seq']).values)
+        ids = np.ravel(pd.read_csv(path, usecols=['id']).values)
+        labels = np.ravel(pd.read_csv(path, usecols=['label']).values)
+
+        # Embed the sequence data. 
+        embeddings = embedder(seqs)
+
+        # Collect all the information into a pandas DataFrame. 
+        data = pd.DataFrame(embeddings)
+        # Add other information to the DataFrame. 
+        data['seq'] = seqs
+        data['id'] = ids
+        data['label'] = labels
+        data = data.set_index('id')
+
+        dataset = Dataset(data)
      
     # If the batch size is None, load the entire Dataset at once. 
-    if batch_size is None:
-        batch_size = len(dataset)
+    batch_size = len(dataset) if batch_size is None else batch_size
 
     if balance:
         # Providing batch_sampler will override batch_size, shuffle, sampler, and drop_last altogether. 
         # It is meant to define exactly the batch elements and their content.
-        batch_sampler = BalancedBatchSampler(dataset, batch_size=batch_size, percent_positive_instances=percent_positive_instances)
+        batch_sampler = BalancedBatchSampler(dataset, batch_size=batch_size, percent_positive_instances=0.25)
         return DataLoader(dataset, batch_sampler=batch_sampler)
     else:
         return DataLoader(dataset, shuffle=True, batch_size=batch_size)
@@ -56,7 +87,6 @@ class Dataset(torch.utils.data.Dataset):
         self.embeddings_ = torch.from_numpy(data.drop(columns=['label', 'seq']).values).type(torch.float32)
         self.labels_ = torch.from_numpy(data['label'].values).type(torch.float32)
         self.ids_ = data.index
-        self.sequences_ = np.array(data['seq'])
 
         self.latent_dim = self.embeddings_.shape[-1]
         self.length = len(data)
@@ -66,11 +96,13 @@ class Dataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         '''Returns an item from the Dataset. Also returns the underlying index for testing purposes.'''
-        return {'label':self.labels_[idx], 'emb':self.embeddings_[idx], 'id':self.ids_[idx], 'seq':self.sequences_[idx], 'idx':idx}
+        return {'label':self.labels_[idx], 'emb':self.embeddings_[idx], 'id':self.ids_[idx], 'idx':idx}
 
     def from_csv(path):
-        '''Load an EmbeddingDataset object from a CSV file.'''
+        '''Load an Dataset object from a CSV file.'''
         data = pd.read_csv(path, index_col='id')
+        assert 'seq' in data.columns, 'dataset.Dataset.from_csv: Column seq is not in data file.'
+        assert 'label' in data.columns, 'dataset.Dataset.from_csv: Column label is not in data file.'
         return Dataset(data)
 
     def get_positive_idxs(self, shuffle=True) -> list:
@@ -159,8 +191,6 @@ class BalancedBatchSampler(torch.utils.data.BatchSampler):
     # Not sure if this should be the number of batches, or the number of elements.
     def __len__(self):
         return self.num_batches
-
-
 
     # def from_csv(path, ids=None):
     #     '''Load an EmbeddingDataset object from a CSV file.'''

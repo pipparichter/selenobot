@@ -3,9 +3,12 @@
 **/*.zip
 **/*.clstr
 **/*.h5
-env/
+**/*.pkl
+**/*.tree
+**/*.tsv
+data/ 
+
 .data
 .vscode/
-*.pickle
 **/.ipynb_checkpoints/
 **/__pycache__

@@ -194,7 +194,6 @@ class Reporter():
     def get_acc_info(self, verbose=False):
         return self._get_info(metrics=self.acc_metrics, verbose=verbose)
 
-    # TODO: Should probably make similar accessors for each metric. 
     def get_test_losses(self):
         '''Return the test loss list from the reporter object.'''
         assert 'test_losses' in self.loss_metrics, 'No test_loss has been recorded.'
@@ -202,7 +201,6 @@ class Reporter():
 
         return self.loss_metrics['test_losses']
 
-    # TODO: Should probably make similar accessors for each metric. 
     def get_test_accs(self):
         '''Return the test accuracy list from the reporter object.'''
         assert 'test_accs' in self.acc_metrics, 'reporter.Reporter.get_test_accs: No test_acc has been recorded.'
