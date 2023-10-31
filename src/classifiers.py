@@ -61,7 +61,6 @@ class Classifier(torch.nn.Module):
     '''Class defining the binary classification head.'''
 
     def __init__(self, 
-        bce_loss_weight:float=1,
         hidden_dim:int=512,
         latent_dim:int=1024,
         dropout:float=0):
@@ -310,32 +309,32 @@ def test_thresholds(
 
 
 
-def classifier_run_on_gtdb(gtdb_path):
+# def classifier_run_on_gtdb(gtdb_path):
 
-    results = {}
-    for genome, row in annotations.iterrows():
-        EmbeddingMatrix = getEmbedding(row.embedding_file)
-        #break
-        labels = classifier(torch.tensor(EmbeddingMatrix.values)).numpy().T[0]
+#     results = {}
+#     for genome, row in annotations.iterrows():
+#         EmbeddingMatrix = getEmbedding(row.embedding_file)
+#         #break
+#         labels = classifier(torch.tensor(EmbeddingMatrix.values)).numpy().T[0]
         
-        results = pd.DataFrame({"gene": EmbeddingMatrix.index,  "genome": genome, "selenoprotein": labels})
-        results["gene"] = results['gene'].apply(lambda x: x.split(" ")[0])
-        annots = pd.read_csv(row.annotation_file, sep="\t", skiprows=[1]).dropna()
-        annots["gene name"] = annots["gene name"].apply(lambda x: x.replace(".", "_"))
-        annots = annots.set_index("gene name")
-        hits = results[results.selenoprotein > 0.5]
-        hits_with_annotation = hits.set_index("gene").join(annots)
-        ko_map = hits_with_annotation.dropna().groupby("KO").count()["genome"].to_dict()
+#         results = pd.DataFrame({"gene": EmbeddingMatrix.index,  "genome": genome, "selenoprotein": labels})
+#         results["gene"] = results['gene'].apply(lambda x: x.split(" ")[0])
+#         annots = pd.read_csv(row.annotation_file, sep="\t", skiprows=[1]).dropna()
+#         annots["gene name"] = annots["gene name"].apply(lambda x: x.replace(".", "_"))
+#         annots = annots.set_index("gene name")
+#         hits = results[results.selenoprotein > 0.5]
+#         hits_with_annotation = hits.set_index("gene").join(annots)
+#         ko_map = hits_with_annotation.dropna().groupby("KO").count()["genome"].to_dict()
         
-        # Record the required details
-        results_dict[genome] = {
-            "total_hits": len(hits),
-            "hits_with_annotation": len(hits_with_annotation.dropna()),
-            "total_genes": EmbeddingMatrix.shape[0],
-            "total_genes_with_annotation": len(annots),
-            "hits_with_annotation": ko_map,
-            "seld_copy_num":len(annots[annots.KO == "K01008"])
-        }
+#         # Record the required details
+#         results_dict[genome] = {
+#             "total_hits": len(hits),
+#             "hits_with_annotation": len(hits_with_annotation.dropna()),
+#             "total_genes": EmbeddingMatrix.shape[0],
+#             "total_genes_with_annotation": len(annots),
+#             "hits_with_annotation": ko_map,
+#             "seld_copy_num":len(annots[annots.KO == "K01008"])
+#         }
 
 
 # class NextTokenClassifier(Classifier):

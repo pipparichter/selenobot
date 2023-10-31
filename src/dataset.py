@@ -4,75 +4,59 @@ import pandas as pd
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
-from tqdm import tqdm
 import embedders
 from typing import List, NoReturn
 
 # device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
+PLM_LATENT_DIM = 1024 # Dimension of the PLM latent space.
+
 def get_dataloader(
         path:str, 
-        batch_size:int=1024, 
-        balance:bool=False, 
+        batch_size:int=1024,
         embedder:str=None) -> DataLoader:
     '''Create a DataLoader from a CSV of embedding data.
     
     args:
         - path: The path to the CSV file where the data is stored. 
         - batch_size: Batch size of the DataLoader. If None, no batches are used. 
-        - balance: Whether or not to ensure that each batch is balanced for positive or negative cases.
         - embedder: A string specifying the embedder to apply to the data. 
-        - verbose: Whether or not to print various updates during runtime.  
     '''
-    if embedder is None: # If no embedder is specified, just load in data from the file. 
-        dataset = Dataset.from_csv(path)
-    else:
-        if embedder == 'aac':
-            embedder = embedders.AacEmbedder()
-        elif embedder == 'length':
-            embedder = embedders.LengthEmbedder()
-        elif embedder == 'plm':
-            raise Exception('TODO')
-        else:
-            raise Exception('dataset.get_dataloader: Invalid embedding method given.')
-        
-        # It makes more sense to pass in a path to the __.csv files, which have embedding information, as well as the sequences. 
-        seqs = np.ravel(pd.read_csv(path, usecols=['seq']).values)
-        ids = np.ravel(pd.read_csv(path, usecols=['id']).values)
-        labels = np.ravel(pd.read_csv(path, usecols=['label']).values)
-
-        # Embed the sequence data. 
-        embeddings = embedder(seqs)
-
-        # Collect all the information into a pandas DataFrame. 
-        data = pd.DataFrame(embeddings)
-        # Add other information to the DataFrame. 
-        data['seq'] = seqs
-        data['id'] = ids
-        data['label'] = labels
-        data = data.set_index('id')
-
-        dataset = Dataset(data)
-     
-    # If the batch size is None, load the entire Dataset at once. 
-    batch_size = len(dataset) if batch_size is None else batch_size
-
-    if balance:
-        # Providing batch_sampler will override batch_size, shuffle, sampler, and drop_last altogether. 
-        # It is meant to define exactly the batch elements and their content.
-        batch_sampler = BalancedBatchSampler(dataset, batch_size=batch_size, percent_positive_instances=0.25)
-        return DataLoader(dataset, batch_sampler=batch_sampler)
-    else:
-        return DataLoader(dataset, shuffle=True, batch_size=batch_size)
-
-
-# Because this implements __getitem__, it is a map-style dataset. 
-class Dataset(torch.utils.data.Dataset):
+    f = 'dataset.get_dataloader'
     
-    def __init__(self, data):
-        '''Initializes an EmbeddingDataset from a pandas DataFrame containing
-        embeddings and labels.'''
-        # Makes sense to store the embeddings as a separate array.
+    data = pd.read_csv(path, usecols=['seq', 'id', 'label'])
+    if embedder == 'aac':
+        embeddings = embedders.AacEmbedder()(list(data['seq'].values))
+    elif embedder == 'length':
+        embeddings = embedders.LengthEmbedder()(list(data['seq'].values))
+    elif embedder == 'plm': # For PLM embeddings, assume embeddings are in the file. 
+        embeddings = pd.read_csv(path, usecols=[str(i) for i in range(PLM_LATENT_DIM)])
+    else:
+        raise ValueError(f'{f}: Embedder option must be one of aac, plm, or length.')
+
+    # It makes more sense to pass in a path to the __.csv files, which have embedding information, as well as the sequences. 
+    # Collect all the information into a single pandas DataFrame. 
+    data = pd.concat([data, pd.DataFrame(embeddings)], axis=1)
+    data = data.set_index('id')
+
+    dataset = Dataset(data)
+
+    # Providing batch_sampler will override batch_size, shuffle, sampler, and drop_last altogether. 
+    # It is meant to define exactly the batch elements and their content.
+    batch_sampler = BalancedBatchSampler(dataset, batch_size=batch_size, selenoprotein_fraction=0.25)
+    return DataLoader(dataset, batch_sampler=batch_sampler)
+    # return DataLoader(dataset, shuffle=True, batch_size=batch_size)
+
+
+class Dataset(torch.utils.data.Dataset):
+    '''A map-style dataset which provides easy access to sequence, label, and embedding data via the 
+    overloaded __getitem__ method.'''
+    
+    def __init__(self, data:pd.DataFrame):
+        '''Initializes an EmbeddingDataset from a pandas DataFrame containing embeddings and labels.'''
+        assert 'seq' in data.columns, 'dataset.Dataset.__init__: Input DataFrame missing required field seq.' 
+        assert 'label' in data.columns, 'dataset.Dataset.__init__: Input DataFrame missing required field label.' 
+
         # Make sure the type of the tensor is the same as model weights.
         self.embeddings_ = torch.from_numpy(data.drop(columns=['label', 'seq']).values).type(torch.float32)
         self.labels_ = torch.from_numpy(data['label'].values).type(torch.float32)
@@ -87,109 +71,51 @@ class Dataset(torch.utils.data.Dataset):
         '''Returns an item from the Dataset. Also returns the underlying index for testing purposes.'''
         return {'label':self.labels_[idx], 'emb':self.embeddings_[idx], 'id':self.ids_[idx], 'idx':idx}
 
-    def from_csv(path):
-        '''Load an Dataset object from a CSV file.'''
-        data = pd.read_csv(path, index_col='id')
-        assert 'seq' in data.columns, 'dataset.Dataset.from_csv: Column seq is not in data file.'
-        assert 'label' in data.columns, 'dataset.Dataset.from_csv: Column label is not in data file.'
-        return Dataset(data)
-
-    def get_positive_idxs(self, shuffle=True) -> List[int]:
-        idxs = list(np.where([']' in id for id in self.ids_])[0])
-        if shuffle:
-            random.shuffle(idxs)
-        return idxs
-
-    def get_negative_idxs(self, shuffle=True) -> List[int]:
-        idxs = list(np.where([']' not in id for id in self.ids_])[0])
-        if shuffle:
-            random.shuffle(idxs)
-        return idxs
+    def get_selenoprotein_indices(self) -> List[int]:
+        '''Obtains the indices of selenoproteins in the Dataset.'''
+        return list(np.where([']' in id for id in self.ids_])[0])
 
 
 # A BatchSampler should have an __iter__ method which returns the indices of the next batch once called.
 class BalancedBatchSampler(torch.utils.data.BatchSampler):
     '''A Sampler object which ensures that each batch has a similar proportion of selenoproteins to non-selenoproteins.'''
 
-    def __init__(self, data_source, batch_size=None,  percent_positive_instances=0.25):
+    # TODO: Probably add some checks here, unexpected bahavior might occur if things are evenly divisible by batch size, for example.
+    def __init__(self, data_source:Dataset, batch_size:int=None, selenoprotein_fraction:float=0.25): # , shuffle=True):
+        '''Initialize a custom BatchSampler object.'''
+        f = 'dataset.BalancedBatchSampler.__init__'
         
-        super(BalancedBatchSampler, self).__init__()
+        # super(BalancedBatchSampler, self).__init__()
+        sel_idxs = data_source.get_selenoprotein_indices()
+        non_sel_idxs = np.array(list(set(range(len(data_source))) - set(sel_idxs)))
+        num_sel, num_non_sel = len(sel_idxs), len(non_sel_idxs) # Gran initial numbers of these. 
 
-        num_pos_per_batch = int(batch_size * percent_positive_instances)
-        num_neg_per_batch = batch_size - num_pos_per_batch
-
-        pos_idxs, neg_idxs = data_source.get_positive_idxs(shuffle=True), data_source.get_negative_idxs(shuffle=True)
-        num_pos, num_neg = len(pos_idxs), len(neg_idxs)
-
-        pos_info = {'unsampled':set(pos_idxs), 'sampled':set(), 'num_per_batch':num_pos_per_batch, 'num_resampled':0, 'num':num_pos}
-        neg_info = {'unsampled':set(neg_idxs), 'sampled':set(), 'num_per_batch':num_neg_per_batch, 'num_resampled':0, 'num':num_neg}
-
-        # Going to make the assumption that there are more negative than positive instances. 
-        assert num_pos < num_neg, 'classifiers.BalancedBatchSampler.__init__: Expect the number of negative instances to be greater than the number of positive instances.'
-        assert batch_size <= len(data_source), f'classifiers.BalancedBatchSampler.__init__: Specified batch size {batch_size} must not exceed the size of the dataset.'
-   
-        # Want to select a number of batches such that the entirety of both classes is covered. 
-        # (assumed to be the group of negative instances) is covered. 
-        self.num_batches = max(num_neg // num_neg_per_batch, num_pos // num_pos_per_batch) + 1
-        # NOTE: This might sometimes oversample from the dataset, but shouldn't be a big deal. 
-
-        self.batch_size = batch_size
-
-        self.batches = self.get_batches(pos_info, neg_info)
-
-    def get_batches(self, pos_info, neg_info, verbose=True):
-
-        batches = []
-        for i in tqdm(range(self.num_batches), desc='dataset.BalancedBatchSampler.get_batches', leave=True):
-            
-            batch = []
-
-            # Accounting for the instance in which 
-            for info in [pos_info, neg_info]:
-
-                if len(info['unsampled']) < info['num_per_batch']:
-                    # Get the number of indices which are not covered by the unsampled group.
-                    n = info['num_per_batch'] - len(info['unsampled'])
-                    # Re-sampled from the sampled group to accommodate the deficiency. 
-                    info['unsampled'] = info['unsampled'].union(random.sample(list(info['sampled']), n))
-                    info['num_resampled'] += n # Keep track of the number of resampled elements. 
-
-                # NOTE: random.sample is without replacement by default. However, it spits out a list, so need to conert back to a set. 
-                sample = set(random.sample(list(info['unsampled']), info['num_per_batch']))
-                # Update the dictionary by moving the sampled elements to the sampled list. 
-                info['sampled'] = info['sampled'].union(sample - info['sampled']) # Make sure to not add any index which is being re-sampled. Should be handled, because objects are sets. 
-                info['unsampled'] = info['unsampled'] - sample
-                # Add the sample to the batch. 
-                batch += list(sample)
-
-                # Make sure the total number of instances remains fixed. 
-                assert info['num'] == (len(info['sampled']) + len(info['unsampled'])), f'classifiers.BalancedBatchSampler.get_batches: Number of positive indices is inconsistent.'
-
-            # Make sure to shuffle the batch. Othereise, all the positive cases come before the negative, and the curve looks weird. 
-            random.shuffle(batch)
-            assert len(batch) == self.batch_size, f'classifiers.BalancedBatchSampler.get_batches: Batch size {len(batch)} fores not match specified {self.batch_size}.'
-            batches.append(batch)
+        random.shuffle(sel_idxs)
+        random.shuffle(non_sel_idxs)
         
-        if verbose: print(f"classifiers.BalancedBatchSampler.get_batches: {pos_info['num_resampled']} positive instances resampled.")
-        if verbose: print(f"classifiers.BalancedBatchSampler.get_batches: {neg_info['num_resampled']} negative instances resampled.")
+        num_sel_per_batch = int(batch_size * selenoprotein_fraction)
+        num_non_sel_per_batch = batch_size - num_sel_per_batch
 
-        return batches
+        # Number of batches needed to cover the non-selenoproteins. 
+        num_batches = len(non_sel_idxs) // (batch_size - num_sel_per_batch)
+        
+        non_sel_idxs = non_sel_idxs[:num_batches * num_non_sel_per_batch]
+        sel_idxs = np.resize(sel_idxs, num_batches * num_sel_per_batch)
+        # Possibly want to shuffle these again? So later batches don't have the same selenoproteins as earlier ones.
+        np.random.shuffle(sel_idxs)
+
+        # Numpy split expects num_batches to be evenly divisible, and will throw an error otherwise. 
+        sel_batches = np.split(sel_idxs, num_batches)
+        non_sel_batches = np.split(non_sel_idxs, num_batches)
+        
+        self.batches = np.concatenate([sel_batches, non_sel_batches], axis=1)
+        assert self.batches.shape == (num_batches, batch_size), f'{f}: Incorrect batch dimensions. Expected {(num_batches, batch_size)}, but dimensions are {self.batches.shape}.'
+
+        print(f'{f}: Resampled {len(sel_idxs) - num_sel} selenoproteins and removed {num_non_sel - len(non_sel_idxs)} to generate {num_batches} batches of size {batch_size}.')
 
     def __iter__(self):
         return iter(self.batches)
 
     # Not sure if this should be the number of batches, or the number of elements.
     def __len__(self):
-        return self.num_batches
-
-    # def from_csv(path, ids=None):
-    #     '''Load an EmbeddingDataset object from a CSV file.'''
-
-    #     # Load in all the sequences to a DataFrame. 
-    #     data = pd.read_csv(path, index_col='id')
-
-    #     if ids is not None:
-    #         # Use the specified IDs to filter the data. 
-    #         data = data[np.isin(data.index, ids)]
-
-    #     return SequenceDataset(data)
+        return len(self.batches)

@@ -11,6 +11,7 @@ import random
 import subprocess
 import os
 from typing import NoReturn, Dict, List
+import sys
 
 from transformers import T5EncoderModel, T5Tokenizer
 import torch
@@ -26,6 +27,8 @@ UNIPROT_DATA_DIR = '/home/prichter/Documents/selenobot/data/uniprot/'
 MODEL_NAME = 'Rostlab/prot_t5_xl_half_uniref50-enc'
 CD_HIT = '/home/prichter/cd-hit-v4.8.1-2019-0228/cd-hit'
 
+MIN_SEQ_LENGTH = 6
+
 
 def write(text, path):
     '''Writes a string of text to a file.'''
@@ -34,12 +37,9 @@ def write(text, path):
             f.write(text)
 
 
-def read(path, format='fasta'):
+def read(path):
     '''Reads the information contained in a text file into a string.'''
-    if format == 'fasta':
-        assert path.split('.')[-1] == 'fasta', 'utils.read: Expected a FASTA file as input.'
-    
-    with open(path, 'r') as f:
+    with open(path, 'r', encoding='UTF-8') as f:
         text = f.read()
     return text
 
@@ -99,7 +99,7 @@ def fasta_size(path):
     return len(fasta_ids(path))
 
 
-def fasta_concatenate(paths, out_path=None, verbose=True):
+def fasta_concatenate(paths, out_path=None):
     '''Combine the FASTA files specified by the paths. Creates a new file
     containing the combined data.'''
     dfs = [pd_from_fasta(p, set_index=False) for p in paths]
@@ -110,7 +110,8 @@ def fasta_concatenate(paths, out_path=None, verbose=True):
     df = df.drop_duplicates(subset='id')
     df = df.set_index('id')
 
-    if len(df) < n and verbose: print(f'utils.fasta_concatenate: {n - len(df)} duplicates removed upon concatenation.')
+    if len(df) < n:
+        print(f'utils.fasta_concatenate: {n - len(df)} duplicates removed upon concatenation.')
 
     pd_to_fasta(df, path=out_path)
 
@@ -132,7 +133,7 @@ def pd_from_fasta(path, set_index=True):
 def pd_to_fasta(df, path=None, textwidth=80):
     '''Convert a pandas DataFrame containing FASTA data to a FASTA file format.'''
 
-    assert df.index.name == 'id', 'Gene ID must be set as the DataFrame index before writing.'
+    assert df.index.name == 'id', 'setup.pd_to_fasta: Gene ID must be set as the DataFrame index before writing.'
 
     fasta = ''
     for row in tqdm(df.itertuples(), desc='utils.df_to_fasta', total=len(df)):
@@ -147,24 +148,6 @@ def pd_to_fasta(df, path=None, textwidth=80):
     
     # Write the FASTA string to the path-specified file. 
     write(fasta, path=path)
-
-
-def pd_from_clstr(path):
-    '''Convert a .clstr file string to a pandas DataFrame. The resulting 
-    DataFrame maps cluster label to gene ID.'''
-
-    # Read in the cluster file as a string. 
-    clstr = read(path)
-    df = {'id':[], 'cluster':[]}
-    # The start of each new cluster is marked with a line like ">Cluster [num]"
-    clusters = re.split(r'^>.*', clstr, flags=re.MULTILINE)
-    # Split on the newline. 
-    for i, cluster in enumerate(clusters):
-        ids = [get_id(x) for x in cluster.split('\n') if x != '']
-        df['id'] += ids
-        df['cluster'] += [i] * len(ids)
-
-    return pd.DataFrame(df).set_index('id')
 
 
 def embed_batch(
@@ -192,7 +175,7 @@ def embed_batch(
 def setup_plm_embeddings(
     fasta_file_path=None, 
     embeddings_path:str=None,
-    aas_per_batch:int=10000,
+    max_aa_per_batch:int=10000,
     max_seq_per_batch:int=100,
     max_seq_length:int=1000) -> NoReturn:
     '''Generate sequence embeddings of sequences contained in the FASTA file using the PLM specified at the top of the file.
@@ -241,10 +224,10 @@ def setup_plm_embeddings(
         curr_aa_count += row['length']
 
         if len(curr_batch) > max_seq_per_batch or curr_aa_count > max_aa_per_batch:
-            outputs = get_batch_plm_embeddings(batch, model, tokenizer)
+            outputs = embed_batch(curr_batch, model, tokenizer)
 
             if outputs is not None:
-                for seq, emb in zip(batch, embeddings): # Should iterate over each batch output, or the first dimension. 
+                for seq, emb in zip(curr_batch, embeddings): # Should iterate over each batch output, or the first dimension. 
                     emb = emb[:len(seq)].mean(dim=0) # Remove the padding and average over sequence length. 
                     embeddings.append(emb)
 
@@ -272,65 +255,125 @@ def setup_train_test_val(
     args:
         - all_data_path: A path to a FASTA file containing all the UniProt data used for training, testing, etc. the model.
         - all_embeddings_path: A path to a CSV file containing the embeddings of each gene in all_data_path, as well as gene IDs.
-        - train_path: Path to a CSV file to which to write the training data. 
-        - test_path: Path to a CSV file to which to write the testing data. 
-        - val_path: Path to a CSV file to which to write the validation data. 
+        - train_path, test_path, val_path: Paths to the training, test, and validation datasets. 
+        - train_size, test_size, val_size: Sizes of the training, test, and validation datasets. 
     '''
     f = 'setup.setup_train_test_val'
-    assert (train_size > val_size) and (val_size >= test_size), f'{f}: Expected size order is train_size > val_size >= test_size. Sizes are train_size={train_size}, val_size={val_size}, test_size={test_size}.'
+    assert (train_size > test_size) and (test_size >= val_size), f'{f}: Expected size order is train_size > test_size >= val_size.'
 
     # Read in the data, and convert sizes to integers. The index column is gene IDs.
-    all_data = pd_from_fasta(all_data_path, set_index=True)
-
-    # Run CD-HIT on the data stored at the given path. 
-    cluster_data = run_cd_hit(all_data_path, l=1)
-
-    sample_ids, remainder_ids = sample_homology(cluster_data, size=len(data) - train_size)
-    clusters = clusters[np.isin(clusters.index, remainder_ids)]  # Filter the remaining clusters, and split into validation and test sets. 
+    all_data = pd_from_fasta(all_data_path, set_index=False)
+    # This takes too much memory. Will need to do this in chunks. 
+    # all_data = all_data.merge(pd.read_csv(all_embeddings_path), on='id')
+    # print(f'{f}: Successfully added embeddings to the dataset.') 
     
-    assert len(clusters) == len(remainder_ids), f'{f}: After filtering using the remaining indices, len(clusters)={len(clusters)}, which is not equal to len(remainder)={len(remainder)}.'
-    test_ids, val_ids = split_by_homology(clusters, size=test_size)
+    # Run CD-HIT on the data stored at the given path.
+    # cluster_data = run_cd_hit(all_data_path, l=MIN_SEQ_LENGTH - 1, n=5)
+    cluster_data = pd_from_clstr(os.path.join(UNIPROT_DATA_DIR, 'all_data.clstr'))
+
+    # TODO: Switch over to indices rather than columns, which is faster. 
+    # Add the cluster information to the data. 
+    all_data = all_data.merge(cluster_data, on='id')
+    print(f'{f}: Successfully added homology cluster information to the dataset.') 
+
+    all_data, train_data = sample_homology(all_data, size=len(all_data) - train_size)
+    val_data, test_data = sample_homology(all_data, size=val_size)
     
-    assert (len(test_ids) + len(val_ids)) == len(remainder), f'{f}: The sizes of test_ids ({len(test_ids)}) and val_ids {len(test_ids)}) do not account for the entire remainder, which has {len(remainder)} entries.'
-    assert len(np.unique(np.concatenate([train_ids, test_ids, val_ids]))) == len(np.concatenate([train_ids, test_ids, val_ids])), '{f}: Some proteins are represented more than once in the partitioned data.'
+    assert len(np.unique(np.concatenate([train_data.index, test_data.index, val_data.index]))) == len(np.concatenate([train_data.index, test_data.index, val_data.index])), f'{f}: Some proteins are represented more than once in the partitioned data.'
 
-    # Use the obtained IDs to filter the dataset, and return the DataFrames. 
-    train_data, test_data, val_data = data[np.isin(data.index, train_ids)], data[np.isin(data.index, test_ids)], data[np.isin(data.index, val_ids)]
-    # Add embedding information to each DataFrame.
-    train_data = train_data.merge(all_embeddings.path, on='id')
-    return train_data, test_data, val_data
+    for data, path in zip([train_data, test_data, val_data], [train_path, test_path, val_path]):
+        data = data.set_index('id')
+        # Add labels to the DataFrame based on whether or not the gene_id contains a bracket.
+        data['label'] = [1 if '[' in gene_id else 0 for gene_id in data.index]
+        data.to_csv(path)
+        print(f'{f}: Data successfully written to {path}.')
+        add_embeddings_to_file(path, all_embeddings_path)
 
 
-def sample_homology(cluster_data:pd.DataFrame, size:int=None):
+def add_embeddings_to_file(path:str, embeddings_path:str, chunk_size:int=1000):
+    '''Adding embedding information to a CSV file.'''
+    f = 'setup.add_embeddings_to_file'
+
+    embeddings_ids = csv_ids(embeddings_path)
+    reader = pd.read_csv(path, index_col=['id'], chunksize=chunk_size)
+    tmp_file_path = os.path.join(os.path.dirname(path), 'tmp.csv')
+
+    is_first_chunk = True
+    n_chunks = csv_size(path) // chunk_size + 1
+    for chunk in tqdm(reader, desc=f'{f}: adding embeddings to {path}.', total=n_chunks):
+        # Get the indices of the embedding rows corresponding to the data chunk.
+        idxs = np.where(np.isin(embeddings_ids, chunk.index, assume_unique=True))[0] + 1 # Make sure to shift the index up by one to include the header. 
+        idxs = [0] + list(idxs) # Add the header index for merging. 
+
+        chunk = chunk.merge(pd.read_csv(embeddings_path, skiprows=lambda i : i not in idxs), on='id', how='inner')
+
+        # Subtract 1 from len(idxs) to account for the header row.
+        assert len(chunk) == (len(idxs) - 1), f'{f}: Data was lost while merging embedding data.'
+        
+        chunk.to_csv(tmp_file_path, header=is_first_chunk, mode='w' if is_first_chunk else 'a') # Only write the header for the first file. 
+        is_first_chunk = False
+
+    # Replace the old file with tmp. 
+    subprocess.run(f'rm {path}', shell=True, check=True)
+    subprocess.run(f'mv {tmp_file_path} {path}', shell=True, check=True)
+
+
+def sample_homology(data:pd.DataFrame, size:int=None):
     '''Subsample the cluster data such that the entirety of any homology group is contained in the sample. 
-    
+  
     args:
         - cluster_data: A pandas DataFrame mapping the gene ID to cluster number. 
         - size: The size of the first group, which must also be the smaller group. 
     '''
     f = 'setup.sample_homology'
-    assert (len(clusters) - size) >= size, f'The size argument must specify the smaller partition. Provided arguments are len(clusters)={len(lusters)} and size={size}.'
+    assert (len(data) - size) >= size, f'{f}: The size argument must specify the smaller partition. Provided arguments are len(clusters)={len(data)} and size={size}.'
 
-    groups = {'sample':[], 'remainder':[]} # First group is smaller. 
-    clusters = list(sorted(clusters.groupby('cluster'), key=len, reverse=True)) # Sort the clusters in descending order of size. 
+    groups = {'sample':[], 'remainder':[]} # First group is smaller.
+    curr_size = 0 # Keep track of how big the sample is, without concatenating DataFrames just yet. 
+
+    ordered_clusters = data.groupby('cluster').size().sort_values(ascending=False).index # Sort the clusters in descending order of size. 
 
     add_to = 'sample'
-    for _, cluster in tqdm(clusters, desc=f):
+    for cluster in tqdm(ordered_clusters, desc=f):
         # If we check for the larger size, it's basically the same as adding to each group in an alternating way, so we need to check for smaller size first.
-        if add_to == 'sample' and len(groups['sample']) < size:
-            groups['sample'] += list(cluster.index)
+        cluster = data[data.cluster == cluster]
+        if add_to == 'sample' and curr_size < size:
+            groups['sample'].append(cluster)
+            curr_size += len(cluster)
             add_to = 'remainder'
         else:
-            groups['remainder'] += list(cluster.index)
+            groups['remainder'].append(cluster)
             add_to = 'sample'
 
-    assert len(idxs[0]) + len(idxs[1]) == len(clusters), f'{f}: The combined sizes of the partitions ({len(idxs[0]) + len(idxs[1])}) do not add up to the size of the original data ({len(clusters)}).'
-    assert len(idxs[0]) < len(idxs[1]), '{f}: The first set of IDs should be smaller than the second.'
+    sample, remainder = pd.concat(groups['sample']), pd.concat(groups['remainder'])
+    assert len(sample) + len(remainder) == len(data), f"{f}: The combined sizes of the partitions do not add up to the size of the original data."
+    assert len(sample) < len(remainder), f'{f}: The sample DataFrame should be smaller than the remainder DataFrame.'
 
-    return groups['sample'], groups['remainder']
+    print(f'{f}: Collected homology-controlled sample of size {len(sample)} ({np.round(len(sample)/len(data), 2) * 100} percent of the input dataset).')
+    return sample, remainder
 
 
-def run_cd_hit(fasta_file_path:str, c:float=0.8, l:int=1, n:int=2):
+def pd_from_clstr(clstr_file_path):
+    '''Convert a .clstr file string to a pandas DataFrame. The resulting 
+    DataFrame maps cluster label to gene ID.'''
+
+    # Read in the cluster file as a string. 
+    clstr = read(clstr_file_path)
+    df = {'id':[], 'cluster':[]}
+    # The start of each new cluster is marked with a line like ">Cluster [num]"
+    clusters = re.split(r'^>.*', clstr, flags=re.MULTILINE)
+    # Split on the newline. 
+    for i, cluster in enumerate(clusters):
+        ids = [get_id(x) for x in cluster.split('\n') if x != '']
+        df['id'] += ids
+        df['cluster'] += [i] * len(ids)
+
+    df = pd.DataFrame(df) # .set_index('id')
+    df.cluster = df.cluster.astype(int) # This will speed up grouping clusters later on. 
+    return df
+
+
+def run_cd_hit(fasta_file_path:str, c:float=0.8, l:int=1, n:int=2) -> pd.DataFrame:
     '''Run CD-HIT on the FASTA file stored in the input path, generating the homology-based sequence similarity clusters.
     
     args:
@@ -341,16 +384,16 @@ def run_cd_hit(fasta_file_path:str, c:float=0.8, l:int=1, n:int=2):
         - n: Word length (see CD-HIT documentation for more information).
     '''
     # assert (min([len(seq) for seq in fasta_seqs(path)])) > l, 'Minimum sequence length {l + 2} is longer than the shortest sequence.'
-    directory, filename = os.path.split(path)
+    directory, filename = os.path.split(fasta_file_path)
     filename = filename.split('.')[0] # Remove the extension from the filename. 
-    subprocess.run(f"{CD_HIT} -i {fasta_file_path} -o {filename} -c {c} -l {l} -n {n}", shell=True, check=True) # Run CD-HIT.
+    subprocess.run(f"{CD_HIT} -i {fasta_file_path} -o {os.path.join(directory, filename)} -c {c} -l {l} -n {n}", shell=True, check=True) # Run CD-HIT.
     subprocess.run(f'rm {os.path.join(directory, filename)}', shell=True, check=True) # Remove the output file with the cluster reps. 
 
     # Load the clstr data into a DataFrame and return. 
     return pd_from_clstr(os.path.join(directory, filename + '.clstr'))
 
 
-def setup_detect_data(verbose=True):
+def setup_detect():
     '''Creates a dataset for the detection classification task, which involves determining
     whether a protein, truncated or not, is a selenoprotein. The data consists of truncated and
     non-truncated selenoproteins, as well as a number of normal full-length proteins equal to all 
@@ -359,17 +402,17 @@ def setup_detect_data(verbose=True):
     all_data_size = fasta_size(os.path.join(UNIPROT_DATA_DIR, 'all_data.fasta'))
 
     train_size = int(0.8 * all_data_size)
-    test_size = int(0.5 * (all_data_size - train_size))
+    test_size = int(0.6 * (all_data_size - train_size)) # Making sure test_size is larger than val_size.
     val_size = all_data_size - train_size - test_size
     sizes = {'train_size':train_size, 'test_size':test_size, 'val_size':val_size}
 
     # train_data, test_data, and val_data should have sequence information. 
-    train_data, test_data, val_data = train_test_val_split(
+    setup_train_test_val(
         all_data_path=os.path.join(UNIPROT_DATA_DIR, 'all_data.fasta'),
-        all_embeddings_path=os.path.join(DETECT_DATA_DIR, 'all_embeddings.csv'),
+        all_embeddings_path=os.path.join(UNIPROT_DATA_DIR, 'all_embeddings.csv'),
         test_path=os.path.join(DETECT_DATA_DIR, 'test.csv'),
         train_path=os.path.join(DETECT_DATA_DIR, 'train.csv'),
-        val_path=os.path.join(DETECT_DATA_DIR, 'all.fasta'), **sizes)
+        val_path=os.path.join(DETECT_DATA_DIR, 'val.csv'), **sizes)
 
 
 # /data/uniprot -----------------------------------------------------------------------------------------------------------------------------
@@ -387,48 +430,58 @@ def setup_sec_truncated(
         - first_sec_only: Whether or not to truncate at the first selenocystein residue only. If false, truncation is sequential.
     '''
     # Load the selenoproteins into a pandas DataFrame. 
-    df = pd_from_fasta(path, set_index=False)
+    df = pd_from_fasta(sec_path, set_index=False)
 
     df_trunc = {'id':[], 'seq':[]}
     for row in df.itertuples():
-        
-        seq = row['seq'].split('U')
+
+        seq = row.seq.split('U')
 
         if first_sec_only:
-            df_trunc['id'].append(row['id'] + '[1]')
+            df_trunc['id'].append(row.id + '[1]')
             df_trunc['seq'].append(seq[0])
         else:
             # Number of U's in sequence should be one fewer than the length of the split sequence. 
-            df_trunc['id'] += [row['id'] + f'[{i + 1}]' for i in range(len(seq) - 1)]
+            df_trunc['id'] += [row.id + f'[{i + 1}]' for i in range(len(seq) - 1)]
             df_trunc['seq'] += ['U'.join(seq[i:i + 1]) for i in range(len(seq) - 1)]
     
     # Do we want the final DataFrame to also contain un-truncated sequences?
-    df = pd.concat([df, pd.DataFrame(df_trunc)]).set_index('id')
-    pd_to_fasta(df_trunc, path=sec_truncated_path)
+    # df = pd.concat([df, pd.DataFrame(df_trunc)]).set_index('id')
+    df = pd.DataFrame(df_trunc).set_index('id')
+    pd_to_fasta(df, path=sec_truncated_path)
 
 
-def setup_sprot(sprot_path=None):
+def setup_sprot(sprot_path:str=None) -> NoReturn:
     '''Preprocessing for the SwissProt sequence data. Removes all selenoproteins from the SwissProt database.
 
     args:
         - sprot_path: Path to the SwissProt FASTA file.
     '''
+    f = 'setup.set_sprot'
     sprot_data = pd_from_fasta(sprot_path)
     # Remove all sequences containing U (selenoproteins) from the SwissProt file. 
-    sprot_data = sprot_data[~sprot_data['seq'].str.contains('U')]
-    pd_to_fasta(sprot_data, path=sprot_path)
+    selenoproteins = sprot_data['seq'].str.contains('U')
+    if np.sum(selenoproteins) == 0:
+        print(f'{f}: No selenoproteins found in SwissProt.')
+    else:
+        print(f'{f}: {np.sum(selenoproteins)} detected out of {len(sprot_data)} total sequences in SwissProt.')
+        sprot_data = sprot_data[~selenoproteins]
+        assert len(sprot_data) + np.sum(selenoproteins) == fasta_size(sprot_path), f'{f}: Selenoprotein removal unsuccessful.'
+        print(f'{f}: Selenoproteins successfully removed from SwissProt.')
+        # Overwrite the original file. 
+        pd_to_fasta(sprot_data, path=sprot_path)
 
 
-def setup_uniprot_data():
+def setup_uniprot():
     '''Set up all data in the uniprot subdirectory.'''
     
     # Setup the file of truncated selenoproteins. 
     setup_sec_truncated(sec_path=os.path.join(UNIPROT_DATA_DIR, 'sec.fasta'), sec_truncated_path=os.path.join(UNIPROT_DATA_DIR, 'sec_truncated.fasta'))
-    setup_sprot(sprot_path=os.path.join(UNIPROT_DATA_DIR, 'sec_truncated.fasta'))
+    setup_sprot(sprot_path=os.path.join(UNIPROT_DATA_DIR, 'sprot.fasta'))
     
     # Combine all FASTA files required for the project into a single all_data.fasta file. 
-    fasta_concatenate([os.path.join(UNIPROT_DATA_DIR, 'sec_truncated.fasta'), os.path.join(UNIPROT_DATA_DIR, 'sprot_sampled.fasta')], out_path=os.path.join(UNIPROT_DATA_DIR, 'all_data.fasta'))
-    setup_plm_embeddings(fasta_file_path=os.path.join(UNIPROT_DATA_DIR, 'all_data.fasta'), embeddings_path=os.path.join(UNIPROT_DATA_DIR, 'all_embeddings.csv'))
+    fasta_concatenate([os.path.join(UNIPROT_DATA_DIR, 'sec_truncated.fasta'), os.path.join(UNIPROT_DATA_DIR, 'sprot.fasta')], out_path=os.path.join(UNIPROT_DATA_DIR, 'all_data.fasta'))
+    # setup_plm_embeddings(fasta_file_path=os.path.join(UNIPROT_DATA_DIR, 'all_data.fasta'), embeddings_path=os.path.join(UNIPROT_DATA_DIR, 'all_embeddings.csv'))
 
 
 # data/gtdb -------------------------------------------------------------------------------------------------------------
@@ -494,7 +547,6 @@ def setup_metadata(taxonomy_files:Dict[str, str]=None, metadata_files:Dict[str, 
         subprocess.run(f'rm {os.path.join(GTDB_DATA_DIR, file)}', shell=True, check=True)
 
 
-
 def setup_gtdb():
 
     setup_metadata(
@@ -502,12 +554,38 @@ def setup_gtdb():
 
     # Need to create all embeddings. 
 
+# ------------------------------------------------------------------------------------------------------------------------------
+
+def setup_summary(log_file_path=None):
+    
+    if log_file_path is not None: # Write the summary to a log file if specified. 
+        with open(log_file_path, 'w', encoding='UTF-8') as f:
+            sys.stdout = f
+
+    for file in os.listdir(DETECT_DATA_DIR):
+        path = os.path.join(DETECT_DATA_DIR, file)
+        print(f'[{file}]')
+        print('size:', csv_size(path))
+        sec_content = pd.read_csv(path, usecols=['label'])['label'].values.mean()
+        print('selenoprotein content:', np.round(sec_content, 3))
+        print()
+
+    print('[all_data.fasta]')
+    path = os.path.join(UNIPROT_DATA_DIR, 'all_data.fasta')
+    seqs = fasta_seqs(path)
+    ids = fasta_ids(path)
+    print('total sequences:', len(seqs))
+    print('total selenoproteins:', len([i for i in ids if '[' in i]))
+    print(f'sequences of length >= {MIN_SEQ_LENGTH}:', np.sum(np.array([len(s) for s in seqs]) >= MIN_SEQ_LENGTH))
+    print(f'selenoproteins of length >= {MIN_SEQ_LENGTH - 1}:', len([i for i, s in zip(ids, seqs) if '[' in i and len(s) >= MIN_SEQ_LENGTH]))
+    print()
+
 
 if __name__ == '__main__':
-
-    setup_uniprot()
-    setup_detect()
-    setup_gtdb()
+    setup_summary()
+    # setup_uniprot()
+    # setup_detect()
+    # setup_gtdb()
 
 
 # def setup_sprot_sampled(

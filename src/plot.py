@@ -55,7 +55,7 @@ def plot_train_curve(reporter:Reporter, path:str=None, title:str='plot.plot_trai
         '''Function for formatting the tick labels.'''
         tick = str(np.round(x, 2))
         # Only display the tick mark if there is one decimal place of precision after rounding.
-        if len(tick.split('.')[-1]) > 1:
+        if len(tick.rsplit('.', maxsplit=1)[-1]) > 1:
             tick = '' 
         return tick
 
@@ -127,8 +127,6 @@ def plot_selenoprotein_ratio_barplot(gtdb_data, title='plot.plot_selenoprotein_r
     ax.set_yticklabels(np.arange(0, 0.07, 0.01))
     ax.set_xticklabels(ax.get_xticklabels(), rotation=0, ha='right')
 
-    set_fontsize(ax)
-
     # for container in ax.containers:
     #     ax.bar_label(container, labels=[f'{np.round(100 * x, 2)}%' for x in container.datavalues], fontsize=LABEL_FONT_SIZE)
 
@@ -149,7 +147,6 @@ def plot_selenoprotein_ratio_ecdf(gtdb_data, title='plot.plot_selenoprotein_rati
 
     # colors = ['cornflowerblue', 'cadetblue', 'royalblue', 'skyblue', 'steelblue']
     n_colors = len(np.unique(gtdb_data.selD_copy_num)) 
-    palette = get_palette(n_colors=n_colors)
     # colors = ['skyblue', 'steelblue', 'slategray', 'cornflowerblue', 'royalblue']
     legend = []
 
@@ -159,7 +156,7 @@ def plot_selenoprotein_ratio_ecdf(gtdb_data, title='plot.plot_selenoprotein_rati
     for idx, group in gtdb_data.groupby('selD_copy_num'):
         group = group[['selenoprotein_ratio']]
         # Stat is proportion by default. 
-        sns.ecdfplot(ax=ax, data=group, x='selenoprotein_ratio', color=palette[idx])
+        sns.ecdfplot(ax=ax, data=group, x='selenoprotein_ratio', color=sns.color_palette(PALETTE, as_cmap=True)[idx])
         
         label = str(idx)
         if add_mannwhitneyu: 
