@@ -1,5 +1,4 @@
 '''Setting up the data folder for this project.'''
-# import glob
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
@@ -12,6 +11,7 @@ import subprocess
 import os
 from typing import NoReturn, Dict, List
 import sys
+from utils import * 
 
 from transformers import T5EncoderModel, T5Tokenizer
 import torch
@@ -30,212 +30,92 @@ CD_HIT = '/home/prichter/cd-hit-v4.8.1-2019-0228/cd-hit'
 MIN_SEQ_LENGTH = 6
 
 
-def write(text, path):
-    '''Writes a string of text to a file.'''
-    if path is not None:
-        with open(path, 'w') as f:
-            f.write(text)
-
-
-def read(path):
-    '''Reads the information contained in a text file into a string.'''
-    with open(path, 'r', encoding='UTF-8') as f:
-        text = f.read()
-    return text
-
-
-def get_id(head):
-    '''Extract the unique identifier from a FASTA metadata string (the 
-    information on the line preceding the actual sequence). This ID should 
-    be flanked by '|'.
-    '''
-    start_idx = head.find('|') + 1
-    # Cut off any extra stuff preceding the ID, and locate the remaining |.
-    head = head[start_idx:]
-    end_idx = head.find('|')
-    return head[:end_idx]
-
-
-def fasta_ids(path):
-    '''Extract all gene IDs stored in a FASTA file.'''
-    # Read in the FASTA file as a string. 
-    fasta = read(path)
-    # Extract all the IDs from the headers, and return the result. 
-    ids = [get_id(head) for head in re.findall(r'^>.*', fasta, re.MULTILINE)]
-    return np.array(ids)
-
-
-def csv_ids(path):
-    '''Extract all gene IDs stored in a CSV file.'''
-    df = pd.read_csv(path, usecols=['id']) # Only read in the ID values. 
-    return np.ravel(df.values)
-
-
-def csv_labels(path):
-    '''Extract all gene IDs stored in a CSV file.'''
-    df = pd.read_csv(path, usecols=['label']) # Only read in the ID values. 
-    # Seems kind of bonkers that I need to ravel this. 
-    return np.ravel(df.values.astype(np.int32))
-
-
-def csv_size(path):
-    '''Get the number of entries in a FASTA file.'''
-    return len(csv_ids(path))
-
-
-def fasta_seqs(path):
-    '''Extract all amino acid sequences stored in a FASTA file.'''
-    # Read in the FASTA file as a string. 
-    fasta = read(path)
-    seqs = re.split(r'^>.*', fasta, flags=re.MULTILINE)[1:]
-    # Strip all of the newline characters from the amino acid sequences. 
-    seqs = [s.replace('\n', '') for s in seqs]
-    # return np.array(seqs)
-    return seqs
+# def embed_batch(
+#     batch:List[str],
+#     model:torch.nn.Module, 
+#     tokenizer:T5Tokenizer) -> torch.FloatTensor:
+#     '''Embed a single batch, catching any exceptions.
     
+#     args:
+#         - batch: A list of strings, each string being a tokenized sequence. 
+#         - model: The PLM used to generate the embeddings.
+#         - tokenizer: The tokenizer used to convert the input sequence into a padded FloatTensor. 
+#     '''
+#     # Should contain input_ids and attention_mask. Make sure everything's on the GPU. 
+#     inputs = {k:torch.tensor(v).to(device) for k, v in tokenizer(batch, padding=True).items()}
+#     try:
+#         with torch.no_grad():
+#             outputs = model(**inputs)
+#             return outputs
+#     except RuntimeError:
+#         print('setup.get_batch_embedding: RuntimeError during embedding for. Try lowering batch size.')
+#         return None
 
-def fasta_size(path):
-    '''Get the number of entries in a FASTA file.'''
-    return len(fasta_ids(path))
 
-
-def fasta_concatenate(paths, out_path=None):
-    '''Combine the FASTA files specified by the paths. Creates a new file
-    containing the combined data.'''
-    dfs = [pd_from_fasta(p, set_index=False) for p in paths]
-    df = pd.concat(dfs)
+# def setup_plm_embeddings(
+#     fasta_file_path=None, 
+#     embeddings_path:str=None,
+#     max_aa_per_batch:int=10000,
+#     max_seq_per_batch:int=100,
+#     max_seq_length:int=1000) -> NoReturn:
+#     '''Generate sequence embeddings of sequences contained in the FASTA file using the PLM specified at the top of the file.
+#     Adapted from Josh's code, which he adapted from https://github.com/agemagician/ProtTrans/blob/master/Embedding/prott5_embedder.py. 
+#     The parameters of this function are designed to prevent GPU memory errors. 
     
-    # Remove any duplicates following concatenation. 
-    n = len(df)
-    df = df.drop_duplicates(subset='id')
-    df = df.set_index('id')
+#     args:
+#         - fasta_file_path: Path to the FASTA file with the input sequences.
+#         - out_path: Path to which to write the embeddings.
+#         - max_aa_per_batch: The maximum number of amino acid residues in a batch 
+#         - max_seq_per_batch: The maximum number of sequences per batch. 
+#         - max_seq_length: The maximum length of a single sequence, past which we switch to single-sequence processing
+#     '''
+#     # Dictionary to store the embedding data. 
+#     embeddings = []
 
-    if len(df) < n:
-        print(f'utils.fasta_concatenate: {n - len(df)} duplicates removed upon concatenation.')
+#     model = T5EncoderModel.from_pretrained(MODEL_NAME)
+#     model = model.to(device) # Move model to GPU
+#     model = model.eval() # Set model to evaluation model
 
-    pd_to_fasta(df, path=out_path)
+#     tokenizer = T5Tokenizer.from_pretrained(MODEL_NAME, do_lower_case=False)
 
+#     df = pd_from_fasta(fasta_file_path, set_index=False) # Read the sequences into a DataFrame. Don't set the index. 
+#     # Need to make sure not to replace all U's with X's in the original DataFrame. 
+#     df['seq_standard_aa_only'] = df['seq'].str.replace('U', 'X').replace('Z', 'X').replace('O', 'X') # Replace non-standard amino acids with X token. 
 
-def pd_from_fasta(path, set_index=True):
-    '''Load a FASTA file in as a pandas DataFrame.'''
+#     # Order the rows according to sequence length to avoid unnecessary padding. 
+#     df['length'] = df['seq'].str.len()
+#     df = df.sort_values(by='length', ascending=True, ignore_index=True)
 
-    ids = fasta_ids(path)
-    seqs = fasta_seqs(path)
+#     curr_aa_count = 0
+#     curr_batch = []
+#     for row in df.itertuples():
 
-    df = pd.DataFrame({'seq':seqs, 'id':ids})
-    # df = df.astype({'id':str, 'seq':str})
-    if set_index: 
-        df = df.set_index('id')
-    
-    return df
+#         # Switch to single-sequence processing. 
+#         if len(row['seq']) > max_seq_length:
+#             outputs = embed_batch([row['seq_standard_aa_only']], model, tokenizer)
 
+#             if outputs is not None:
+#                 # Add information to the DataFrame. 
+#                 emb = outputs.last_hidden_state[0, :row['length']].mean(dim=0)
+#                 embeddings.append(emb)
+#             continue
 
-def pd_to_fasta(df, path=None, textwidth=80):
-    '''Convert a pandas DataFrame containing FASTA data to a FASTA file format.'''
+#         curr_batch.append(row['seq_standard_aa_only'])
+#         curr_aa_count += row['length']
 
-    assert df.index.name == 'id', 'setup.pd_to_fasta: Gene ID must be set as the DataFrame index before writing.'
+#         if len(curr_batch) > max_seq_per_batch or curr_aa_count > max_aa_per_batch:
+#             outputs = embed_batch(curr_batch, model, tokenizer)
 
-    fasta = ''
-    for row in tqdm(df.itertuples(), desc='utils.df_to_fasta', total=len(df)):
-        fasta += '>|' + str(row.Index) + '|\n'
+#             if outputs is not None:
+#                 for seq, emb in zip(curr_batch, embeddings): # Should iterate over each batch output, or the first dimension. 
+#                     emb = emb[:len(seq)].mean(dim=0) # Remove the padding and average over sequence length. 
+#                     embeddings.append(emb)
 
-        # Split the sequence up into shorter, sixty-character strings.
-        n = len(row.seq)
-        seq = [row.seq[i:min(n, i + textwidth)] for i in range(0, n, textwidth)]
-
-        seq = '\n'.join(seq) + '\n'
-        fasta += seq
-    
-    # Write the FASTA string to the path-specified file. 
-    write(fasta, path=path)
-
-
-def embed_batch(
-    batch:List[str],
-    model:torch.nn.Module, 
-    tokenizer:T5Tokenizer) -> torch.FloatTensor:
-    '''Embed a single batch, catching any exceptions.
-    
-    args:
-        - batch: A list of strings, each string being a tokenized sequence. 
-        - model: The PLM used to generate the embeddings.
-        - tokenizer: The tokenizer used to convert the input sequence into a padded FloatTensor. 
-    '''
-    # Should contain input_ids and attention_mask. Make sure everything's on the GPU. 
-    inputs = {k:torch.tensor(v).to(device) for k, v in tokenizer(batch, padding=True).items()}
-    try:
-        with torch.no_grad():
-            outputs = model(**inputs)
-            return outputs
-    except RuntimeError:
-        print('setup.get_batch_embedding: RuntimeError during embedding for. Try lowering batch size.')
-        return None
-
-
-def setup_plm_embeddings(
-    fasta_file_path=None, 
-    embeddings_path:str=None,
-    max_aa_per_batch:int=10000,
-    max_seq_per_batch:int=100,
-    max_seq_length:int=1000) -> NoReturn:
-    '''Generate sequence embeddings of sequences contained in the FASTA file using the PLM specified at the top of the file.
-    Adapted from Josh's code, which he adapted from https://github.com/agemagician/ProtTrans/blob/master/Embedding/prott5_embedder.py. 
-    The parameters of this function are designed to prevent GPU memory errors. 
-    
-    args:
-        - fasta_file_path: Path to the FASTA file with the input sequences.
-        - out_path: Path to which to write the embeddings.
-        - max_aa_per_batch: The maximum number of amino acid residues in a batch 
-        - max_seq_per_batch: The maximum number of sequences per batch. 
-        - max_seq_length: The maximum length of a single sequence, past which we switch to single-sequence processing
-    '''
-    # Dictionary to store the embedding data. 
-    embeddings = []
-
-    model = T5EncoderModel.from_pretrained(MODEL_NAME)
-    model = model.to(device) # Move model to GPU
-    model = model.eval() # Set model to evaluation model
-
-    tokenizer = T5Tokenizer.from_pretrained(MODEL_NAME, do_lower_case=False)
-
-    df = pd_from_fasta(fasta_file_path, set_index=False) # Read the sequences into a DataFrame. Don't set the index. 
-    # Need to make sure not to replace all U's with X's in the original DataFrame. 
-    df['seq_standard_aa_only'] = df['seq'].str.replace('U', 'X').replace('Z', 'X').replace('O', 'X') # Replace non-standard amino acids with X token. 
-
-    # Order the rows according to sequence length to avoid unnecessary padding. 
-    df['length'] = df['seq'].str.len()
-    df = df.sort_values(by='length', ascending=True, ignore_index=True)
-
-    curr_aa_count = 0
-    curr_batch = []
-    for row in df.itertuples():
-
-        # Switch to single-sequence processing. 
-        if len(row['seq']) > max_seq_length:
-            outputs = embed_batch([row['seq_standard_aa_only']], model, tokenizer)
-
-            if outputs is not None:
-                # Add information to the DataFrame. 
-                emb = outputs.last_hidden_state[0, :row['length']].mean(dim=0)
-                embeddings.append(emb)
-            continue
-
-        curr_batch.append(row['seq_standard_aa_only'])
-        curr_aa_count += row['length']
-
-        if len(curr_batch) > max_seq_per_batch or curr_aa_count > max_aa_per_batch:
-            outputs = embed_batch(curr_batch, model, tokenizer)
-
-            if outputs is not None:
-                for seq, emb in zip(curr_batch, embeddings): # Should iterate over each batch output, or the first dimension. 
-                    emb = emb[:len(seq)].mean(dim=0) # Remove the padding and average over sequence length. 
-                    embeddings.append(emb)
-
-                    curr_batch = []
-                    curr_aa_count = 0
-    # Remove all unnecessary columns before returning.
-    df = pd.DataFrame(torch.cat(embeddings)).astype(float).drop(columns=['seq_standard_aa_only', 'length'])
-    df.to_csv(embeddings_path)
+#                     curr_batch = []
+#                     curr_aa_count = 0
+#     # Remove all unnecessary columns before returning.
+#     df = pd.DataFrame(torch.cat(embeddings)).astype(float).drop(columns=['seq_standard_aa_only', 'length'])
+#     df.to_csv(embeddings_path)
 
 
 # data/detect -----------------------------------------------------------------------------------------------------------------------------------------
@@ -282,10 +162,9 @@ def setup_train_test_val(
     assert len(np.unique(np.concatenate([train_data.index, test_data.index, val_data.index]))) == len(np.concatenate([train_data.index, test_data.index, val_data.index])), f'{f}: Some proteins are represented more than once in the partitioned data.'
 
     for data, path in zip([train_data, test_data, val_data], [train_path, test_path, val_path]):
-        data = data.set_index('id')
         # Add labels to the DataFrame based on whether or not the gene_id contains a bracket.
         data['label'] = [1 if '[' in gene_id else 0 for gene_id in data.index]
-        data.to_csv(path)
+        data.to_csv(path, index=False)
         print(f'{f}: Data successfully written to {path}.')
         add_embeddings_to_file(path, all_embeddings_path)
 
@@ -556,117 +435,8 @@ def setup_gtdb():
 
 # ------------------------------------------------------------------------------------------------------------------------------
 
-def setup_summary(log_file_path=None):
-    
-    if log_file_path is not None: # Write the summary to a log file if specified. 
-        with open(log_file_path, 'w', encoding='UTF-8') as f:
-            sys.stdout = f
-
-    for file in os.listdir(DETECT_DATA_DIR):
-        path = os.path.join(DETECT_DATA_DIR, file)
-        print(f'[{file}]')
-        print('size:', csv_size(path))
-        sec_content = pd.read_csv(path, usecols=['label'])['label'].values.mean()
-        print('selenoprotein content:', np.round(sec_content, 3))
-        print()
-
-    print('[all_data.fasta]')
-    path = os.path.join(UNIPROT_DATA_DIR, 'all_data.fasta')
-    seqs = fasta_seqs(path)
-    ids = fasta_ids(path)
-    print('total sequences:', len(seqs))
-    print('total selenoproteins:', len([i for i in ids if '[' in i]))
-    print(f'sequences of length >= {MIN_SEQ_LENGTH}:', np.sum(np.array([len(s) for s in seqs]) >= MIN_SEQ_LENGTH))
-    print(f'selenoproteins of length >= {MIN_SEQ_LENGTH - 1}:', len([i for i, s in zip(ids, seqs) if '[' in i and len(s) >= MIN_SEQ_LENGTH]))
-    print()
-
-
 if __name__ == '__main__':
-    setup_summary()
+    pass
     # setup_uniprot()
     # setup_detect()
     # setup_gtdb()
-
-
-# def setup_sprot_sampled(
-#     sprot_path:sr=None, 
-#     sprot_sampled_path:str=None, 
-#     size:int=None) -> NoReturn:
-#     '''Filters the SwissProt database by selecting representative proteins. The approach for doing this
-#     is based on K-means clustering the embedding data, and sampling from each cluster.
-
-#     args:
-
-#     '''
-#     f = 'setup.setup_sprot_sampled'
- 
-#     sprot_data = pd_from_fasta(path, set_index=False)
-#     sprot_data = sprot_data[~sprot_data['seq'].str.contains('U')] # Remove all sequences containing selenocysteine.
-#     print(f'{f}: Beginning SwissProt down-sampling. Approximately {size} sequences being sampled without replacement from a pool of {len(sprot_data)}.')
-#     sprot_data = sprot_data.sample(size)
-#     print(f'{f}: {len(data)} sequences successfully sampled from SwissProt using K-Means clustering.')
-#     # Filter the data, and write the filtered data as a FASTA file. 
-#     pd_to_fasta(sprot_data.set_index('id'), path=sprot_sampled_path)
-
-# def setup_sprot_sampled(
-#     sprot_path=None, 
-#     sprot_embeddings_path=None, 
-#     sprot_sampled_path=None, 
-#     size=500000,
-#     n_clusters=500):
-#     '''Filters the SwissProt database by selecting representative proteins. The approach for doing this
-#     is based on K-means clustering the embedding data, and sampling from each cluster.
-
-#     args:
-
-#     '''
-#     f = 'setup.setup_sprot_sampled'
-#     # Read in the FASTA file. 
-#     data = pd_from_fasta(path, set_index=False)
-
-#     if verbose: print(f'{f}: Beginning SwissProt down-sampling. Approximately {size} sequences being sampled without replacement from a pool of {len(data)}.')
-    
-#     # Read in the embeddings based on the filepath given as input. 
-#     directory, filename = os.path.split(path)
-#     embeddings_path = os.path.join(directory, filename.split('.')[0] + '_embeddings.csv')
-
-#     # kmeans = sklearn.cluster.KMeans(n_clusters=n_clusters, n_init='auto')
-#     kmeans = sklearn.cluster.MiniBatchKMeans(n_clusters=n_clusters, n_init='auto')
-#     kmeans.fit(data.values)
-#     data['kmeans'] = kmeans.labels_ # Add kmeans labels to the data. 
-    
-#     # assert np.all(data.groupby('kmeans').size() >= size//n_clusters), f'setup.setup_sprot_sampled: Trying to sample too many elements from a kmeans cluster.'
-#     data = data.groupby('kmeans').sample(size//n_clusters, replace=True)
-#     data = data.drop_duplicates(subset=['id'], ignore_index=True)
-
-#     print(f'{f}: {len(data)} sequences successfully sampled from SwissProt using K-Means clustering.')
-
-#     # Remove all sequences containing selenocysteine. 
-#     data = data[~data['seq'].str.contains('U')]
-
-#     # Filter the data, and write the filtered data as a FASTA file. 
-#     pd_to_fasta(data.set_index('id'), path=sprot_sampled_path)
-
-
-# def h5_to_csv(path, batch_size=100):
-#     '''Convert a data file in HD5 format to a CSV file.'''
-
-#     file_ = h5py.File(path)
-#     keys = list(file_.keys())
-
-#     batches = [keys[i:min(i + batch_size, len(keys))] for i in range(0, len(keys), batch_size)]
-
-#     header = True
-#     for batch in tqdm(batches, desc='h5_to_csv'):
-#         data = np.array([file_[k][()] for k in batch])
-#         df = pd.DataFrame(data)
-#         df['id'] = [get_id(k) for k in batch]
-
-#         # df = df.set_index('id')
-#         df.to_csv(path.split('.')[0] + '.csv', mode='a', header=header)
-
-#         # After the first loop, don't write the headers to the file. 
-#         header = False
-
-#     file_.close()
-

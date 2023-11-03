@@ -1,8 +1,7 @@
-'''
-A generic linear classifier which sorts embedded amino acid sequences into two categories:
-selenoprotein or non-selenoprotein. 
-'''
-from reporter import Reporter
+'''A binary classification head and associated utilities, designed for handling embedding objects.'''
+from dataset import Dataset
+from reporter import TestReporter, TrainReporter
+
 from tqdm import tqdm
 from typing import Optional, NoReturn, Tuple, List
 
@@ -29,8 +28,9 @@ class WeightedBCELoss(torch.nn.Module):
 
     def forward(self, outputs, targets):
         '''Update the internal states keeping track of the loss.'''
-        # reduction specifies the reduction to apply to the output. If 'none', no reduction will
-        #  be applied, if 'mean,' the weighted mean of the output is taken.
+        # Make sure the outputs and targets have the same shape.
+        outputs = outputs.reshape(targets.shape)
+        # reduction specifies the reduction to apply to the output. If 'none', no reduction will be applied, if 'mean,' the weighted mean of the output is taken.
         ce = torch.nn.functional.binary_cross_entropy(outputs, targets, reduction='none')
         # Seems to be generating a weight vector, so that the weight is applied to indices marked with a 1. This
         # should have the effect of increasing the cost of a false negative.
@@ -38,22 +38,15 @@ class WeightedBCELoss(torch.nn.Module):
 
         return (ce * w).mean()
 
-# NOTE: A FloatTensor necessarily contains torch.float32. 
 
-def apply_threshold(outputs:torch.FloatTensor, threshold:float=0.5) -> torch.FloatTensor:
-    '''Apply a threshold to model outputs to convert them to binary classification.'''
-    # If no threshold is specified, then just return the outputs. 
-    # assert type(threshold) == float, 'classifiers.apply_threshold: Specified threshold must be a float.'
-    return  torch.where(outputs < threshold, 0, 1)
-
-
-def get_balanced_accuracy(outputs:torch.Tensor, targets:torch.Tensor, threshold:float=0.5) -> float:
-    '''Applies a threshold to the model outputs, and uses it to compute a balanced accuracy
-    score.'''
-    outputs = apply_threshold(outputs, threshold=threshold)
+def get_balanced_accuracy(
+    outputs:torch.FloatTensor, 
+    targets:torch.FloatTensor, 
+    threshold:float=0.5) -> float:
+    '''Applies a threshold to the model outputs, and uses it to compute a balanced accuracy score.'''
+    outputs = outputs.reshape(targets.shape)
+    outputs = torch.where(outputs < threshold, 0, 1)
     # Compute balanced accuracy using a builtin sklearn function. 
-    # return sklearn.metrics.balanced_accuracy_score(outputs.detach().numpy(), targets.detach().numpy())
-    # sklearn.metrics.balanced_accuracy_score(y_true, y_pred) MAKE SURE THE ORDER IS RIGHT!
     return sklearn.metrics.balanced_accuracy_score(targets.detach().numpy(), outputs.detach().numpy())
 
 
@@ -63,19 +56,21 @@ class Classifier(torch.nn.Module):
     def __init__(self, 
         hidden_dim:int=512,
         latent_dim:int=1024,
-        dropout:float=0):
+        dropout:float=0, 
+        bce_loss_weight:float=1.0):
         '''
-        Initializes the classification head. 
+        Initializes a two-layer linear classification head. 
 
         args:
+            - bce_loss_weight: The weight applied to false negatives. 
+            - hidden_dim: The number of nodes in the second linear layer of the two-layer classifier.
+            - latent_dim: The dimensionality of the input embedding. 
+            - dropout
             - bce_loss_weight
-            - hidden_dim: 
-            - latent_dim: The dimesntionality of the input embedding. 
         '''
         # Initialize the torch Module
         super(Classifier, self).__init__()
 
-        # Subbing in Josh's classification head. 
         self.classifier = torch.nn.Sequential(
             torch.nn.Linear(latent_dim, hidden_dim),
             torch.nn.ReLU(),
@@ -86,6 +81,8 @@ class Classifier(torch.nn.Module):
         self.init_weights()
         self.to(DEVICE)
 
+        self.loss_func = WeightedBCELoss(weight=bce_loss_weight)
+
     def init_weights(self):
         '''Initialize model weights according to which activation is used.'''
         torch.nn.init.kaiming_normal_(self.classifier[0].weight)
@@ -95,56 +92,32 @@ class Classifier(torch.nn.Module):
         '''Reset the model weights according to the weight initialization function.'''
         self.init_weights()
 
-    def forward(self, 
-        label:int=None,
-        emb:torch.FloatTensor=None,
-        id:str=None, 
-        idx:int=None):
+    def forward(self,
+        inputs:torch.FloatTensor,
+        batch_size:int=None, **kwargs):
         '''
-        A forward pass of the Classifier.
-
-        args:
-            - label
-            - emb
-            - id
-            - idx 
-        '''
-        assert emb.dtype == torch.float32, f'classifiers.Classifier.forward: Expected input embedding of type float32, not {emb.dtype}.'
-
-        logits = self.classifier(emb)
-
-        if label is not None:
-            # loss = torch.nn.functional.binary_cross_entropy(torch.reshape(logits, label.size()), label.to(logits.dtype))
-            outputs = torch.reshape(logits, label.size())
-            targets = label.to(logits.dtype)
-
-        return outputs, targets
-
-
-    def predict(self, dataloader:torch.utils.data.DataLoader) -> Tuple[torch.Tensor, torch.Tensor]:
-    # def predict(self, dataloader:torch.utils.data.DataLoader, threshold:float=0.5) -> (torch.Tensor, torch.Tensor):
-        '''Applies the model to a DataLoader, accumulating predictions across batches.
-        Returns the model predictions, as well as the labels of the data.'''
-        self.eval() # Put the model in evaluation mode. 
-
-        outputs, targets = [], []
-        for batch in dataloader:
-            batch_outputs, batch_targets = self(**batch)
-            outputs.append(batch_outputs)
-            targets.append(batch_targets)
-
-        # Concatenate outputs and labels into single tensors.
-        outputs, targets = torch.concat(outputs), torch.concat(targets)
+        A forward pass of the Classifier.'''
+        assert inputs.dtype == torch.float32, f'classifiers.Classifier.forward: Expected input embedding of type torch.float32, not {inputs.dtype}.'
         
-        self.train() # Go ahead and put back in train mode.
+        if batch_size is None:  # If no batches are specified, treat as a single batch. 
+            outputs = self.classifier(inputs) 
+        else:
+            outputs = [self.classifier(batch) for batch in torch.split(inputs, batch_size)]
+            outputs = torch.concat(outputs)
 
-        # Make sure outputs and target have the same datatype.
-        return outputs.to(targets.dtype), targets
+        return outputs
+
+    def get_metrics(self, dataset:Dataset) -> Tuple[float, float, torch.FloatTensor, torch.FloatTensor]:
+        '''Calculate the validation loss and accuracy on an input Dataset'''
+        self.eval()
+        outputs, targets = self(dataset.get_embeddings(), batch_size=32), dataset.get_labels()
+        loss, acc = self.loss_func(outputs, targets), get_balanced_accuracy(outputs, targets)
+        self.train()
+        return loss, acc, outputs, targets
 
     def test(self,
-        dataloader:torch.utils.data.DataLoader,
-        bce_loss_weight:float=1.0,
-        threshold:float=0.5) -> Reporter:
+        test_dataset:torch.utils.data.Dataset,
+        threshold:float=0.5) -> TestReporter:
         # reporter:Reporter=None) -> Reporter:
         '''Evaluate the classifier model on the data specified by the DataLoader
 
@@ -152,105 +125,61 @@ class Classifier(torch.nn.Module):
             - dataloader: The DataLoader object containing the training data. 
             - bce_loss_weight: The weight to be passed into the WeightedBCELoss constructor.
             - threshold: The threshold above which (inclusive) a classification is considered a '1.' 
-        ''' 
-        # Instantiate the loss function object with the specified weight. 
-        loss_func = WeightedBCELoss(weight=bce_loss_weight)
-        
-        reporter = Reporter() # Instantiate a Reporter for storing collected data. 
-        reporter.open()
+        '''         
+        reporter = TestReporter() # Instantiate a Reporter for storing collected data. 
 
-        # NOTE: threshold should be None here!
-        outputs, targets = self.predict(dataloader)
-        test_loss = loss_func(outputs, targets)
-        test_acc = get_balanced_accuracy(outputs, targets, threshold=threshold)
+        test_loss, test_acc, outputs, targets = self.get_metrics(test_dataset)
         reporter.add_test_metrics(test_loss, test_acc)
-
-        # Compute the confusion matrix information. 
-        outputs = apply_threshold(outputs, threshold=threshold) # Make sure to apply threshold to output data first. 
-
+        # Compute the confusion matrix information.
+        outputs = outputs.reshape(targets.shape)
+        outputs = torch.where(outputs < threshold, 0, 1) 
+        # ORDER IS TARGETS, OUTPUTS
         (tn, fp, fn, tp) = sklearn.metrics.confusion_matrix(targets.detach().numpy(), outputs.detach().numpy()).ravel()
         reporter.add_confusion_matrix(tn, fp, fn, tp)
 
-        reporter.close()
         return reporter
 
     def fit(self, 
-        dataloader:torch.utils.data.DataLoader,
-        val:torch.utils.data.DataLoader=None,
+        train_dataloader:torch.utils.data.DataLoader,
+        val_dataset:torch.utils.data.Dataset=None,
         epochs:int=300,
-        lr:float=0.01, 
-        bce_loss_weight:float=1.0,
-        threshold:float=0.5,
-        verbose:bool=True) -> Reporter:
-        '''Train the classifier model on the data specified by the DataLoader
+        lr:float=0.01) -> TrainReporter:
+        '''Train the classifier model on the data specified by the DataLoader.
 
         args:
             - dataloader: The DataLoader object containing the training data. 
-            - val: The DataLoader object containing the validation data. 
+            - val_dataset: The Dataset object containing the validation data. Expected to be a Dataset as defined in datasets.py.
             - epochs: The number of epochs to train for. 
             - lr: The learning rate. 
             - bce_loss_weight: The weight to be passed into the WeightedBCELoss constructor.
-            - threshold: The threshold above which (inclusive) a classification is considered a '1.' 
-            - verbose: Whether or not to display a progress bar while training
         '''
-
-        # Instantiate the loss function object with the specified weight.
-        loss_func = WeightedBCELoss(weight=bce_loss_weight)
-
         self.train() # Put the model in train mode.
 
-        reporter = Reporter(epochs=epochs, lr=lr, bce_loss_weight=bce_loss_weight)
-        reporter.set_batches_per_epoch(len(list(dataloader)))
-        reporter.open()
+        reporter = TrainReporter(epochs=epochs, lr=lr, batches_per_epoch=len(list(train_dataloader)))
 
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
-        pbar = tqdm(range(epochs), desc='classifiers.Classifier.train_', disable=(not verbose))
+        pbar = tqdm(range(epochs), desc='classifiers.Classifier.train_')
+        for _ in pbar:
 
-        for epoch in pbar:
-
-            # If a validation dataset is specified, evaluate. 
-            if val is not None:
-                # NOTE: Threshold should be None here. 
-                outputs, targets = self.predict(val)
-
-                val_loss = loss_func(outputs, targets)
-                val_acc = get_balanced_accuracy(outputs, targets, threshold=threshold)
-                reporter.add_val_metrics(val_loss, val_acc)
-                pbar.set_postfix({'val_acc':np.round(val_acc, 2)})
-
-            for batch in dataloader:
-
+            for batch in train_dataloader:
                 # Evaluate the model on the batch in the training dataloader. 
-                outputs, targets = self(**batch)
-                train_loss = loss_func(outputs, targets)
-                train_acc = get_balanced_accuracy(outputs, targets, threshold=threshold)
+                outputs, targets = self(batch['emb']), batch['label']
+                train_loss, train_acc = self.loss_func(outputs, targets), get_balanced_accuracy(outputs, targets)
                 reporter.add_train_metrics(train_loss, train_acc)
 
                 train_loss.backward()
                 optimizer.step() 
                 optimizer.zero_grad()
 
-        # Record validation loss and accuracy one more time. 
-        if val is not None:
-            # NOTE: Threshold should be None here. 
-            outputs, targets = self.predict(val)
-            val_loss = loss_func(outputs, targets)
-            val_acc = get_balanced_accuracy(outputs, targets, threshold=threshold)
-            reporter.add_val_metrics(val_loss, val_acc)
-            pbar.set_postfix({'val_acc':np.round(val_acc, 2)})
-            
-        reporter.close()
+             # If a validation dataset is specified, evaluate. 
+            if val_dataset is not None:
+                val_loss, val_acc, _, _ = self.get_metrics(val_dataset)
+                reporter.add_val_metrics(val_loss, val_acc)
+                pbar.set_postfix({'val_acc':np.round(val_acc, 2)})
+          
         pbar.close()
         
         return reporter
-
-    def save(self, path):
-        '''Save the model weights'''
-        torch.save(self.state_dict(), path)
-
-    def load(self, path):
-        '''Load model weights'''
-        self.load_state_dict(torch.load(path))
 
 
 def optimize_hyperparameters(
@@ -283,29 +212,6 @@ def optimize_hyperparameters(
     # We are using loss, so acceptable to just minimize the output of the objective function. 
     result = skopt.gp_minimize(objective, search_space)
     return result.x
-
-
-# NOTE: For ROC curve, do we need to re-train the model for each threshold? It seems like yes
-def test_thresholds(
-    model:Classifier,
-    dataloader:torch.utils.data.DataLoader,
-    thresholds:List[float]=None) -> List[Reporter]:
-    '''Generates data for plotting an ROC curve by varying the threshold (i.e. the value below which output
-    logits are set to zero).
-    
-    args:
-        - model: A TRAINED classifier to apply the input data to. 
-        - dataloader: A dataloader to use to evaluate the model. Should contain the testing data. 
-        - thresholds: The thresholds on which to evaluate model performance. 
-    '''
-    reporters = []
-    assert thresholds is not None, 'plot.test_thresholds: A list of threshold values must be specified.'
-
-    for threshold in thresholds:
-        # bce_loss_weight defaults to 1, but may be specified here.
-        reporters.append(model.test(dataloader, threshold=threshold))
-
-    return reporters
 
 
 

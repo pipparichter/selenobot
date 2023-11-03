@@ -7,9 +7,10 @@
 **/*.pickle
 **/*.tree
 **/*.tsv
-data/ 
-
-.data
+**/*.pth
+**/.faa
+**/data/gtdb/**
+**/data/gtdb/
 .vscode/
 **/.ipynb_checkpoints/
 **/__pycache__

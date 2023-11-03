@@ -38,7 +38,7 @@ def plot_train_curve(reporter:Reporter, path:str=None, title:str='plot.plot_trai
     '''
     fig, ax = plt.subplots(1, figsize=FIGSIZE)
 
-    data = reporter.get_loss_info(pool=True)
+    data = reporter.get_loss_info()
     data['metric'] = data['metric'].replace({'val_losses':'validation loss', 'train_losses':'training loss'})
     ax = sns.lineplot(data=data, y='value', x='epoch', hue='metric', ax=ax, palette=PALETTE, style='metric')
     ax.legend().set_title('') # Turn off legend title because it looks crowded. 
@@ -186,7 +186,7 @@ def plot_selenoprotein_ratio_ecdf(gtdb_data, title='plot.plot_selenoprotein_rati
 
     ax.legend(legend, title='selD_copy_num', title_fontsize=LABEL_FONT_SIZE, fontsize=LABEL_FONT_SIZE)
 
-    if path is not None: fig.savefif(path, **savefig_options)
+    if path is not None: fig.savefig(path, **savefig_options)
 
 
 

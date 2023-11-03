@@ -3,65 +3,148 @@ import random
 import pandas as pd
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
+import torch.utils.data
 import embedders
-from typing import List, NoReturn
+from typing import List
+import subprocess
+import time
 
 # device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-PLM_LATENT_DIM = 1024 # Dimension of the PLM latent space.
-
 def get_dataloader(
         path:str, 
-        batch_size:int=1024,
-        embedder:str=None) -> DataLoader:
+        batch_size:int=16,
+        embedder:str=None,
+        selenoprotein_fraction:float=0.5) -> torch.utils.data.DataLoader:
     '''Create a DataLoader from a CSV of embedding data.
     
     args:
         - path: The path to the CSV file where the data is stored. 
-        - batch_size: Batch size of the DataLoader. If None, no batches are used. 
-        - embedder: A string specifying the embedder to apply to the data. 
+        - batch_size: Batch size of the DataLoader.  
+        - embedder: One of length, aac, or plm. Specifies the embedding method used.
+        - selenoprotein_fraction: A number between 0 and 1. Specifies the proportion of selenoproteins in each batch. 
+
     '''
     f = 'dataset.get_dataloader'
-    
-    data = pd.read_csv(path, usecols=['seq', 'id', 'label'])
-    if embedder == 'aac':
-        embeddings = embedders.AacEmbedder()(list(data['seq'].values))
-    elif embedder == 'length':
-        embeddings = embedders.LengthEmbedder()(list(data['seq'].values))
-    elif embedder == 'plm': # For PLM embeddings, assume embeddings are in the file. 
-        embeddings = pd.read_csv(path, usecols=[str(i) for i in range(PLM_LATENT_DIM)])
-    else:
-        raise ValueError(f'{f}: Embedder option must be one of aac, plm, or length.')
-
-    # It makes more sense to pass in a path to the __.csv files, which have embedding information, as well as the sequences. 
-    # Collect all the information into a single pandas DataFrame. 
-    data = pd.concat([data, pd.DataFrame(embeddings)], axis=1)
-    data = data.set_index('id')
-
-    dataset = Dataset(data)
-
+    # Collect all the information into a single pandas DataFrame. Avoid loading all embeddings if not needed.
+    data = pd.read_csv(path, usecols=None if embedder == 'plm' else ['seq', 'label', 'id'])
+    dataset = Dataset(data, embedder=embedder)
     # Providing batch_sampler will override batch_size, shuffle, sampler, and drop_last altogether. 
     # It is meant to define exactly the batch elements and their content.
-    batch_sampler = BalancedBatchSampler(dataset, batch_size=batch_size, selenoprotein_fraction=0.25)
-    return DataLoader(dataset, batch_sampler=batch_sampler)
+    batch_sampler = BalancedBatchSampler(dataset, batch_size=batch_size, selenoprotein_fraction=selenoprotein_fraction)
+    return torch.utils.data.DataLoader(dataset, shuffle=False, batch_sampler=batch_sampler) # , num_workers=1)
     # return DataLoader(dataset, shuffle=True, batch_size=batch_size)
+
+# def get_low_memory_dataloader
+
+
+class LowMemoryDataset(torch.utils.data.Dataset):
+    '''A map-style dataset which avoids loading the entire DataFrame stored in data_path at once. Works
+    well when using high-dimensional embeddings, like PLM embeddings.'''
+
+    def __init__(self, data_path:str):
+        '''Initializes a LowMemoryDataset from a data_path.'''
+        f = 'datasets.LowMemoryDataset.__init__'
+
+        self.data_path = data_path
+        # Executing a bash command is probably faster than readlines, considering how big the file is. 
+        line_count = int(subprocess.run(f'wc -l {data_path}', shell=True, check=True, capture_output=True, text=True).stdout.split()[0])
+        self.length = line_count - 1 # Subtract 1 from the file line count to account for the header row.
+
+        # Read in the columns using a bash command, which is probably faster than pandas.  
+        self.columns = subprocess.run(f'head -1 {data_path}', shell=True, check=True, capture_output=True, text=True).stdout.strip().split(',')
+        assert 'seq' in self.columns, f'{f}: Input DataFrame missing required field seq.'
+        assert 'label' in self.columns, f'{f}: Input DataFrame missing required field label.'
+        assert 'id' in self.columns, f'{f}: Input DataFrame missing required field id.'
+        self.latent_dim = len(self.columns) - 3
+
+    def __len__(self):
+        '''The length of the DataFrame at data_path(does not include the header in the CSV file).'''
+        return self.length
+
+    # def __getitem__(self, idx):
+    #     '''Loads a specific row from the pandas DataFrame stored at self.data_path.'''
+    #     f = 'datasets.LowMemoryDataset.__getitem__'
+
+    #     ti = time.perf_counter()
+    #     skiprows = [i + 1 for i in range(self.length) if (i + 1) != idx] # Make sure not to skip the header row.
+    #     data = pd.read_csv(self.data_path, skiprows=skiprows)
+    #     assert len(data) == 1, f'{f}: {len(data)} rows read from {self.data_path}. Expected 1.'
+        
+    #     item = {col:data[col].item() for col in ['label', 'seq', 'id']}
+    #     item['emb'] = torch.from_numpy(data.drop(columns=['label', 'seq', 'id']).values).to(torch.float32) # Add the embedding.
+    #     tf = time.perf_counter()
+    #     print(f'{f}: Accessed row at index {idx} in {tf - ti}')
+    #     return item
+
+    # def __getitem__(self, idx):
+    #     '''Loads a specific row from the pandas DataFrame stored at self.data_path.'''
+    #     f = 'datasets.LowMemoryDataset.__getitem__'
+    #     ti = time.perf_counter()
+    #     data = subprocess.run(f"sed -ne '{idx + 1}p;{idx + 1}q' {self.data_path}", shell=True, check=True, capture_output=True, text=True).stdout.strip().split(',')
+    #     item = {col:data.pop(self.columns.index(col)) for col in ['label', 'seq', 'id']}
+    #     item['emb'] = torch.FloatTensor([float(i) for i in data]) # Add the embedding.
+    #     tf = time.perf_counter()
+    #     # print(f'{f}: Accessed row at index {idx} in {tf - ti}')
+    #     return item
+
+    def __getitem__(self, idx):
+        '''Loads a specific row from the pandas DataFrame stored at self.data_path.'''
+        f = 'datasets.LowMemoryDataset.__getitem__'
+
+        # ti = time.perf_counter()
+        data = subprocess.run(f"sed -ne '{idx + 1}p;{idx + 1}q' {self.data_path}", shell=True, check=True, capture_output=True, text=True).stdout.strip().split(',')
+        item = {col:data.pop(self.columns.index(col)) for col in ['label', 'seq', 'id', 'cluster']}
+        item['emb'] = torch.FloatTensor([float(i) for i in data]) # Add the embedding.
+        # tf = time.perf_counter()
+        # print(f'{f}: Accessed row at index {idx} in {tf - ti}')
+        return item
+
+    def get_labels(self):
+        '''Accessor for the labels associated with the LowMemoryDataset.'''
+        data = pd.read_csv(self.data_path, usecols=['label']) # Only read in the ID values. 
+        # Seems kind of bonkers that I need to ravel this. 
+        return np.ravel(data['label'].values.astype(np.int32)).astype(np.int32)
+
+    def get_embeddings(self):
+        '''Just in case someone uses a LowMemoryDataset instead of a Dataset by accident. Hopefully gives a more meaningful error message.'''
+        raise RuntimeError('datasets.LowMemoryDataset.get_embeddings: Cannot access all embeddings at once from a LowMemoryDataset. Use a regular Datset.')
+
+    def get_selenoprotein_indices(self) -> List[int]:
+        '''Accessor for the labels associated with the LowMemoryDataset.'''
+        data = pd.read_csv(self.data_path, usecols=['id']) # Only read in the ID values. 
+        return list(np.where([']' in id for id in data['id'].values])[0])
 
 
 class Dataset(torch.utils.data.Dataset):
     '''A map-style dataset which provides easy access to sequence, label, and embedding data via the 
     overloaded __getitem__ method.'''
     
-    def __init__(self, data:pd.DataFrame):
-        '''Initializes an EmbeddingDataset from a pandas DataFrame containing embeddings and labels.'''
-        assert 'seq' in data.columns, 'dataset.Dataset.__init__: Input DataFrame missing required field seq.' 
-        assert 'label' in data.columns, 'dataset.Dataset.__init__: Input DataFrame missing required field label.' 
+    def __init__(self, data:pd.DataFrame, embedder:str=None):
+        '''Initializes a Dataset from a pandas DataFrame containing embeddings and labels.
+        
+        args:
+            - data: A pandas DataFrame loaded from the data/detect subdirectory. 
+            - embedder: One of length, aac, or plm. Specifies the embedding method used.
+        '''
+        f = 'dataset.Dataset.__init__'
+        assert 'seq' in data.columns, f'{f}: Input DataFrame missing required field seq.'
+        assert 'label' in data.columns, f'{f}: Input DataFrame missing required field label.'
+        assert 'id' in data.columns, f'{f}: Input DataFrame missing required field id.'
+
+        if embedder == 'aac':
+            self.embeddings = embedders.AacEmbedder()(list(data['seq'].values))
+        elif embedder == 'length':
+            self.embeddings = embedders.LengthEmbedder()(list(data['seq'].values))
+        elif embedder == 'plm': # For PLM embeddings, assume embeddings are in the file. 
+            self.embeddings = torch.from_numpy(data.drop(columns=['label', 'cluster', 'seq', 'id']).values).to(torch.float32)
+        else:
+            raise ValueError(f'{f}: Embedder option must be one of aac, plm, or length.')
 
         # Make sure the type of the tensor is the same as model weights.
-        self.embeddings_ = torch.from_numpy(data.drop(columns=['label', 'seq']).values).type(torch.float32)
-        self.labels_ = torch.from_numpy(data['label'].values).type(torch.float32)
-        self.ids_ = data.index
-        self.latent_dim = self.embeddings_.shape[-1]
+        self.labels = torch.from_numpy(data['label'].values).type(torch.float32)
+        self.ids = data['id']
+        self.latent_dim = self.embeddings.shape[-1]
         self.length = len(data)
 
     def __len__(self):
@@ -69,11 +152,19 @@ class Dataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         '''Returns an item from the Dataset. Also returns the underlying index for testing purposes.'''
-        return {'label':self.labels_[idx], 'emb':self.embeddings_[idx], 'id':self.ids_[idx], 'idx':idx}
+        return {'label':self.labels[idx], 'emb':self.embeddings[idx], 'id':self.ids[idx], 'idx':idx}
+
+    def get_labels(self):
+        '''Accessor for the labels associated with the Dataset.'''
+        return self.labels
+
+    def get_embeddings(self):
+        '''Accessor function for the embeddings stored in the Dataset.'''
+        return self.embeddings
 
     def get_selenoprotein_indices(self) -> List[int]:
         '''Obtains the indices of selenoproteins in the Dataset.'''
-        return list(np.where([']' in id for id in self.ids_])[0])
+        return list(np.where([']' in id for id in self.ids])[0])
 
 
 # A BatchSampler should have an __iter__ method which returns the indices of the next batch once called.
@@ -86,6 +177,7 @@ class BalancedBatchSampler(torch.utils.data.BatchSampler):
         f = 'dataset.BalancedBatchSampler.__init__'
         
         # super(BalancedBatchSampler, self).__init__()
+        
         sel_idxs = data_source.get_selenoprotein_indices()
         non_sel_idxs = np.array(list(set(range(len(data_source))) - set(sel_idxs)))
         num_sel, num_non_sel = len(sel_idxs), len(non_sel_idxs) # Gran initial numbers of these. 
@@ -111,7 +203,7 @@ class BalancedBatchSampler(torch.utils.data.BatchSampler):
         self.batches = np.concatenate([sel_batches, non_sel_batches], axis=1)
         assert self.batches.shape == (num_batches, batch_size), f'{f}: Incorrect batch dimensions. Expected {(num_batches, batch_size)}, but dimensions are {self.batches.shape}.'
 
-        print(f'{f}: Resampled {len(sel_idxs) - num_sel} selenoproteins and removed {num_non_sel - len(non_sel_idxs)} to generate {num_batches} batches of size {batch_size}.')
+        print(f'{f}: Resampled {len(sel_idxs) - num_sel} selenoproteins and removed {num_non_sel - len(non_sel_idxs)} non-selenoproteins to generate {num_batches} batches of size {batch_size}.')
 
     def __iter__(self):
         return iter(self.batches)

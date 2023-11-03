@@ -39,12 +39,8 @@ class LengthEmbedder():
 
     def __call__(self, data):
         '''Takes a list of amino acid sequences, and produces a PyTorch tensor containing the lengths
-        of each sequence. 
-
-        args:
-            - data: A list of strings, representing amino acid sequences. 
-        '''
-        lengths = [len(seq) for seq in data]
+        of each sequence.'''
+        lengths = [[len(seq)] for seq in data]
         # I think the datatype should be float32, but not totally sure... 
         return torch.Tensor(lengths).to(torch.float32)
 
@@ -57,11 +53,7 @@ class AacEmbedder(Embedder):
 
     def __call__(self, data:List[str]) -> torch.Tensor:
         '''Takes a list of amino acid sequences, and produces a PyTorch tensor containing the lengths
-        of each sequence. 
-
-        args:
-            - data: A list of strings, representing amino acid sequences.
-        '''
+        of each sequence.'''
         # aas = 'ARNDCQEGHILKMFPOSUTWYVBZXJ'
         aas = 'ARNDCQEGHILKMFPOSTWYV'
         aa_to_int_map = {aas[i]: i for i in range(len(aas))}
