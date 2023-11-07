@@ -13,36 +13,20 @@ sys.path.append('/home/prichter/Documents/selenobot/src/')
 import setup 
 import dataset
 
+from utils import fasta_seqs, fasta_ids, pd_from_clstr, csv_ids, fasta_size, csv_size, fasta_ids_with_min_seq_length, fasta_size_with_min_seq_length
+
 FILENAMES = ['train.csv', 'val.csv', 'test.csv']
 
 # TODO: Some selenoproteins will be missing because of hte CD-HIT minimum sequence length. 
 
 # test_[method under test]_[expected behavior]?_when_[preconditions]
 
+NUM_EXPECTED_MISSING = 153 # As concluded in summary.py
+
 class TestSetup(unittest.TestCase):
 
-    # def test_setup_all_sec_proteins_present_when_data_is_partitioned(self):
-    #     '''Test to make sure all selenoproteins are accounted for in the train, test, and validation data.'''
-
-    #     # Read in the selenoprotein ids. 
-    #     ref_sec_ids = setup.fasta_ids(os.path.join(setup.UNIPROT_DATA_DIR, 'sec_truncated.fasta'))
-
-    #     # Collect the sec IDs from the data files. 
-    #     sec_ids = []
-    #     for filename in FILENAMES:
-    #         data = pd.read_csv(os.path.join(setup.DETECT_DATA_DIR, filename), usecols=['id', 'label'])
-    #         data = data[data['label'] == 1] # Locate the IDs labeled as selenproteins. 
-    #         sec_ids.append(data['id'].values)
-        
-    #     sec_ids = np.ravel(np.concatenate(sec_ids))
-        
-    #     assert len(sec_ids) == len(np.unique(sec_ids)), 'Some selenoproteins are counted multiple times in the partitioned data.'
-    #     assert len(np.unique(sec_ids)) >= len(ref_sec_ids), f'There are {len(ref_sec_ids) - len(np.unique(sec_ids))} fewer selenoproteins in the datasets than in the original data.'
-    #     assert np.all(np.isin(ref_sec_ids, sec_ids)), 'Not all of the selenoproteins are represented in the partitioned data.'
-
-    def test_setup_label_is_one_when_sequence_is_truncated(self):
+    def test_label_is_one_when_sequence_is_truncated(self):
         '''Test to make sure all selenoproteins are flagged with a 1 in the label column.'''
-
         for filename in FILENAMES:
             # Can't use the actual sequence, as the U residue has been removed. 
             data = pd.read_csv(os.path.join(setup.DETECT_DATA_DIR, filename), usecols=['id', 'label'])
@@ -50,9 +34,8 @@ class TestSetup(unittest.TestCase):
                 if '[' in row.id:
                     assert row.label == 1, f'The selenoprotein {row.id} is mislabeled as full-length.'
     
-    def test_setup_label_is_zero_when_sequence_is_not_truncated(self):
+    def test_label_is_zero_when_sequence_is_not_truncated(self):
         '''Test to make sure all full-length proteins are flagged with a 0 in the label column.'''
-
         for filename in FILENAMES:
             # Can't use the actual sequence, as the U residue has been removed. 
             data = pd.read_csv(os.path.join(setup.DETECT_DATA_DIR, filename), usecols=['id', 'label'])
@@ -60,29 +43,48 @@ class TestSetup(unittest.TestCase):
                 if '[' not in row.id:
                     assert row.label == 0, f'The full-length protein {row.id} is mislabeled as truncated.'
 
-    def test_setup_all_sec_proteins_represented_after_truncating(self):
+    def test_all_selenoproteins_present_after_setup_sec_trunc(self):
         '''Test to make sure all selenoproteins are present before and after the truncation step.'''
-
-        sec_ids = setup.fasta_ids(os.path.join(setup.UNIPROT_DATA_DIR, 'sec.fasta'))
-        sec_truncated_ids = setup.fasta_ids(os.path.join(setup.UNIPROT_DATA_DIR, 'sec_truncated.fasta'))
+        # Don't need to adress sequence length here, as this is before the CD-HIT step. 
+        sec_ids = fasta_ids(os.path.join(setup.UNIPROT_DATA_DIR, 'sec.fasta'))
+        sec_truncated_ids = fasta_ids(os.path.join(setup.UNIPROT_DATA_DIR, 'sec_truncated.fasta'))
         # Make sure to remove brackets from all the truncated IDs/ 
         for id_ in sec_truncated_ids:
             assert '[1]' in id_, f'Gene ID {id_} is not marked as truncated, but is present in sec_truncated.fasta'
-            id_ = id_[:-3] # Remove the [1] at the end of the ID. 
+            id_ = id_.replace('[1]', '')
             assert id_ in sec_ids, f'Gene ID {id_} is represented in sec.fasta, but not sec_truncated.fasta.'
-    
 
-    # def test_setup_all_proteins_in_all_data_represented_after_partitioning(self):
-    #     '''Test to make sure no sequences were lost when partitioning data into training, testing, and validation sets.'''
+    def test_no_duplicate_proteins_after_concatenating_sec_trunc_and_sprot(self):
+        '''Make sure that, for whatever reason, no duplicate proteins ended up in the all_data.fasta file.'''
+        all_data_ids = fasta_ids(os.path.join(setup.UNIPROT_DATA_DIR, 'all_data.fasta'))
+        assert len(all_data_ids) == len(set(all_data_ids)), f'There are {len(all_data_ids) - len(set(all_data_ids))} duplicate gene IDs are present in all_data.fasta.'
+        # Remove the truncation flags, and make sure no selenoproteins are duplicated. 
+        all_data_ids = [id_.replace('[1]', '') for id_ in all_data_ids]
+        assert len(set(all_data_ids)) == len(all_data_ids), f'There are {len(all_data_ids) - len(set(all_data_ids))} selenoproteins duplicated in all_data.fasta.'
 
-    #     ref_ids = setup.fasta_ids(os.path.join(setup.UNIPROT_DATA_DIR, 'all_data.fasta'))
-    #     ids = [setup.csv_ids(os.path.join(setup.DETECT_DATA_DIR, filename)) for filename in FILENAMES]
-    #     ids = np.ravel(np.concatenate(ids)) # Collect all IDs in a one-dimensional numpy array. 
+    def test_all_proteins_in_all_data_present_after_run_cd_hit(self):
+        '''Make sure everything which meets the minimum sequence length in all_data.fasta makes it into the all_data.clstr file.'''
+        clstr_file_path = os.path.join(setup.UNIPROT_DATA_DIR, 'all_data.clstr')
+        clstr_data = pd_from_clstr(clstr_file_path)
+        clstr_ids = clstr_data['id'].values # There should not be duplicate IDs here. 
+        # Use length as a proxy for equality for the sake of this not taking forever.
 
-    #     assert np.all(np.isin(ref_ids, ids)), 'Proteins present in all_data.fasta are missing in the partitioned data. '
+    def test_size_of_partitioned_data_matches_all_data_after_setup_train_test_val(self):
+        '''Make sure the size of the paritioned data is equal to the size of the original dataset from which it was created.'''
+        all_data_size = fasta_size_with_min_seq_length(os.path.join(setup.UNIPROT_DATA_DIR, 'all_data.fasta'))
+        # Everything in the partitioned data should already meet the minimum sequence length requirements.
+        train_test_val_size = sum([csv_size(os.path.join(setup.DETECT_DATA_DIR, file)) for file in FILENAMES]) + NUM_EXPECTED_MISSING
+        assert all_data_size == train_test_val_size, f'The size of the combined paritioned data is {train_test_val_size}, but expected {all_data_size}.'
 
-
-
+    def test_no_duplicate_proteins_after_train_test_val_split(self):
+        '''Make sure there are no duplicate proteins in the training, testing, and validation sets.'''
+        all_ids = []
+        for file in FILENAMES:
+            ids = fasta_ids(os.path.join(setup.DETECT_DATA_DIR, file))
+            assert len(set(ids)) == len(ids), f'Duplicate gene IDs are present in {file}.'
+            all_ids += ids
+        assert len(set(all_ids)) == len(all_ids), 'Duplicate gene IDs are present across training, test, and validation datasets.'
+        
 
 if __name__ == '__main__':
     unittest.main()

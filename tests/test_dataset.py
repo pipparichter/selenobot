@@ -1,77 +1,89 @@
 '''Tests for the src/dataset.py file.'''
 
 import unittest
-
 import numpy as np
 import pandas as pd
 import os
+import tqdm
 import sys
 sys.path.append('/home/prichter/Documents/selenobot/src/')
 sys.path.append('/home/prichter/Documents/selenobot/')
-
-import dataset
-import utils
+sys.path.append('/home/prichter/Documents/selenobot/data')
 
 import torch
+import dataset
+
+from utils import fasta_ids, csv_ids
 
 # NOTE: DATA_DIR is specific to a problem (detect, extend, etc.)
-DATA_DIR = '/home/prichter/Documents/selenobot/data/uniprot_2023_03/detect'
-filenames = ['train.csv', 'val.csv', 'test.csv']
+UNIPROT_DATA_DIR = '/home/prichter/Documents/selenobot/data/uniprot'
+DETECT_DATA_DIR = '/home/prichter/Documents/selenobot/data/detect'
+TRAIN_PATH = os.path.join(DETECT_DATA_DIR, 'train.csv')
+
+# Keyword arguments to pass into the get_dataloader function for each test. 
+# I just used the length embedder for everything, as these embeddings are the smallest, and all I am testing is Dataloader functionality. 
+BATCH_SIZE = 128
+GET_DATALOADER_KWARGS = {'verbose':False, 'embedder':'length', 'batch_size':BATCH_SIZE}
 
 # test_[method under test]_[expected behavior]?_when_[preconditions]
+
+# Only ever going to use the DataLoader for the training data, so probably just need to test it on that.
 
 class TestDataset(unittest.TestCase):
     '''A series of tests to ensure that the Dataset object is behaving as expected.'''
 
-    def test_dataset_all_ids_present_when_dataloader_created(self):
+    def test_all_proteins_accounted_for_by_dataloader(self):
         '''Make sure all IDs in a file are represented in the DataLoader.'''
-
-        for filename in filenames:
-            ref_ids = utils.csv_ids(os.path.join(DATA_DIR, filename))
-            dataloader = dataset.get_dataloader(os.path.join(DATA_DIR, filename))
+        ref_ids = csv_ids(TRAIN_PATH)
+        dataloader = dataset.get_dataloader(TRAIN_PATH, balance_batches=False, **GET_DATALOADER_KWARGS)
             
-            # Collect all the IDs in the dataloader. 
-            ids = []
-            for batch in dataloader:
-                ids.append(batch['id']) # Should be returing numpy arrays. 
-            ids = np.ravel(np.concatenate(ids))
-            # I don't think sampling should be with replacement. 
-            assert len(np.unique(ids)) == len(ids), 'The same ID is being returned multiple times by the DataLoader.'
-            assert len(np.unique(ids)) == len(ref_ids), f'The IDs returned from the DataLoader do not match those stored in {filename}.'
+        # Collect all the IDs in the dataloader. 
+        ids = [batch['id'] for batch in dataloader]
+        ids = np.unique(np.ravel(np.concatenate(ids)))
+        # I don't think sampling should be with replacement. 
+        assert len(ref_ids) == len(ids), f'Expected {len(ref_ids)} returned by the  DataLoader, but got {len(ids)}.'
 
-    def test_dataset_labels_correct_when_dataloader_created(self):
-        '''Make sure labels returned by the DataLoader match those in the file.'''
-
-        for filename in filenames:
-
-            ref_ids = utils.csv_ids(os.path.join(DATA_DIR, filename))
-            ref_labels = utils.csv_labels(os.path.join(DATA_DIR, filename))
-            id_to_label_map = {ref_ids[i]:ref_labels[i] for i in range(len(ref_ids))}
-
-            dataloader = dataset.get_dataloader(os.path.join(DATA_DIR, filename))
-            
-            # Collect all the IDs in the dataloader. 
-            for batch in dataloader:
-                for id_, label in zip(batch['id'], batch['label']):
-                    assert id_to_label_map[id_] == label, f'Label returned by DataLoader does not match label for {id_} in {filename}.'
-                    # Also double-check to make sure that the gene IDs marked as truncated are labeled correctly.
-                    if '[' in id_:
-                        assert label == 1, f'Label returned by DataLoader does not match expected label 1 based on the gene ID {id_} in {filename}.'
-                    else:
-                        assert label == 0, f'Label returned by DataLoader does not match expected label 1 based on the gene ID {id_} in {filename}.'
+    def test_all_proteins_accounted_for_by_balanced_batch_dataloader(self):
+        '''Make sure all IDs in a file are represented in the DataLoader.'''
+        ref_ids = set(csv_ids(TRAIN_PATH))
+        dataloader = dataset.get_dataloader(TRAIN_PATH, balance_batches=True, **GET_DATALOADER_KWARGS)
+        # Collect all the IDs in the dataloader. 
+        ids = [batch['id'] for batch in dataloader]
+        ids = set(np.concatenate(ids).ravel()) 
+        num_ids = len(ids) + dataloader.dataset.num_removed # Account for the number of IDs removed for divisible batches. 
+        
+        assert len(ref_ids) == num_ids, f'Expected {len(ref_ids)} returned by the balanced batch DataLoader, but got {num_ids}.'
+        
+    def test_balanced_batch_dataloader_yields_correct_selenoprotein_fraction(self):
+        '''Make sure the balanced dataloader is returning the correct number of selenoproteins in each batch.'''
+        for selenoprotein_fraction in np.arange(0.1, 1, 0.1): # Try for a variety of different fractions, just in case. 
+                dataloader = dataset.get_dataloader(TRAIN_PATH, balance_batches=True, selenoprotein_fraction=selenoprotein_fraction, **GET_DATALOADER_KWARGS)
+                for batch in dataloader:
+                    x = len([id_ for id_ in batch['id'] if '[' in id_]) / BATCH_SIZE
+                    assert np.round(x, 1) == np.round(selenoprotein_fraction, 1), f'Expected a selenoprotein fraction of {np.round(selenoprotein_fraction, 1)}, got {np.round(x, 1)}'
     
-    def test_dataset_all_indices_covered_by_balanced_batch_sampler(self):
+    def test_balanced_dataloader_samples_evenly_across_selenoproteins(self):
+        '''Check that selenoproteins are being re-sampled somewhat evenly (not one protein being sampled many times).'''
+        # Don't use sec_ids from sec_truncated.fasta, as we are just looking at the IDs in train.csv.
+        sec_ids = [id_ for id_ in csv_ids(TRAIN_PATH) if '[1]' in id_]
+        num_sec = len(sec_ids) # Total number of selenoproteins. 
 
-        for filename in filenames:
-            n = utils.csv_size(os.path.join(DATA_DIR, filename)) # Size of the original dataset. 
+        for selenoprotein_fraction in np.arange(0.1, 0.5, 0.1): # Try for a variety of different fractions, just in case. 
+            counts = np.zeros(num_sec).astype(int)
+            
+            dataloader = dataset.get_dataloader(TRAIN_PATH, balance_batches=True, selenoprotein_fraction=selenoprotein_fraction, **GET_DATALOADER_KWARGS)
+            # Get all the gene IDs returned by the DataLoader.
+            for batch in dataloader: 
+                counts += np.array([list(batch['id']).count(id_) for id_ in sec_ids])
+            # Contains the probability of observing each resampling count. 
+            expected_resampling = dataloader.dataset.num_resampled / len(sec_ids)
+            # tolerance = 0.5 * expected_resampling # Seems reasonable?
+            tolerance = 5
 
-            # Balance set to true ensures that the custom dataloader is used. 
-            dataloader = dataset.get_dataloader(os.path.join(DATA_DIR, filename), balance=True)
-            idxs = [batch['idx'] for batch in dataloader] # Should be a list of tensors. 
-            idxs = torch.unique(torch.cat(idxs, axis=0))
+            upper_bound, lower_bound = expected_resampling + tolerance, expected_resampling - tolerance
 
-            assert len(idxs) == n, f'{len(idxs)} unique indices returned by BalancedBatchSampler do not cover the entire dataset of size {n}.'
-
+            assert np.all(counts <= upper_bound), f'Resampling of one selenoprotein exceeds upper bound of {np.round(upper_bound, 2)}'
+            assert np.all(counts >= lower_bound), f'Resampling of one selenoprotein is below lower bound of {np.round(lower_bound, 2)}'            
 
 if __name__ == '__main__':
     unittest.main()

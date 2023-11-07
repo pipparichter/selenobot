@@ -68,19 +68,16 @@ class TrainReporter(Reporter):
         self.add_val_loss(loss)
         self.add_val_acc(acc)
 
-    def pool(self):
-        '''Pool the data stored as train_loss and train_acc over epochs.'''
-        train_losses, train_accs =self.loss_metrics['train_loss'], self.acc_metrics['train_acc'] 
-        self.loss_metrics['train_loss'] = [np.mean(train_losses[i:i + self.batches_per_epoch]) for i in range(0, len(train_losses), self.batches_per_epoch)]
-        self.acc_metrics['train_acc'] = [np.mean(train_accs[i:i + self.batches_per_epoch]) for i in range(0, len(train_accs), self.batches_per_epoch)]
+    # def pool(self):
+    #     '''Pool the data stored as train_loss and train_acc over epochs.'''
+    #     train_losses, train_accs =self.loss_metrics['train_loss'], self.acc_metrics['train_acc'] 
+    #     self.loss_metrics['train_loss_pooled'] = [np.mean(train_losses[i:i + self.batches_per_epoch]) for i in range(0, len(train_losses), self.batches_per_epoch)]
+    #     self.acc_metrics['train_acc_pooled'] = [np.mean(train_accs[i:i + self.batches_per_epoch]) for i in range(0, len(train_accs), self.batches_per_epoch)]
 
     def _get_info(self, metrics:Dict[str, List[float]]) -> pd.DataFrame:
         '''Use the information returned by the train function to construct a DataFrame for plotting loss. Pools
         the training loss over epochs.'''
-
-        self.pool() # Pool over epochs.
-        
-        metrics['epoch'] = list(range(self.epochs))
+        metrics['epoch'] = list(range(self.epochs + 1))
         df = pd.DataFrame(metrics)
         df = df.melt(id_vars=['epoch'], value_vars=df.columns, var_name='metric', value_name='value')
 
@@ -89,6 +86,10 @@ class TrainReporter(Reporter):
     def get_loss_info(self) -> pd.DataFrame:
         '''Return a DataFrame containing loss information for plotting a training curve.'''
         return self._get_info(metrics=self.loss_metrics)
+
+    def get_acc_info(self) -> pd.DataFrame:
+        '''Return a DataFrame containing loss information for plotting a training curve.'''
+        return self._get_info(metrics=self.acc_metrics)
 
 
 class TestReporter(Reporter):

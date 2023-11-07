@@ -2,8 +2,6 @@
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-import time
-from datetime import date
 import re
 import sklearn.cluster
 import random
@@ -11,11 +9,11 @@ import subprocess
 import os
 from typing import NoReturn, Dict, List
 import sys
-from utils import * 
-
-from transformers import T5EncoderModel, T5Tokenizer
 import torch
 import time
+
+# from transformers import T5EncoderModel, T5Tokenizer
+from utils import *
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -27,8 +25,9 @@ UNIPROT_DATA_DIR = '/home/prichter/Documents/selenobot/data/uniprot/'
 MODEL_NAME = 'Rostlab/prot_t5_xl_half_uniref50-enc'
 CD_HIT = '/home/prichter/cd-hit-v4.8.1-2019-0228/cd-hit'
 
-MIN_SEQ_LENGTH = 6
-
+# Parameters for CD-HIT clustering. 
+MIN_SEQ_LENGTH = 6 # This is an inclusive lower bound; sequences of length 6 will be present in the dataset 
+WORD_LENGTH = 5
 
 # def embed_batch(
 #     batch:List[str],
@@ -120,7 +119,6 @@ MIN_SEQ_LENGTH = 6
 
 # data/detect -----------------------------------------------------------------------------------------------------------------------------------------
 
-
 def setup_train_test_val(
     all_data_path:str=None,
     all_embeddings_path:str=None,
@@ -129,7 +127,9 @@ def setup_train_test_val(
     val_path:str=None,
     train_size:int=None,
     test_size:int=None,
-    val_size:int=None) -> NoReturn:
+    val_size:int=None,
+    use_existing_clstr_file:bool=True,
+    clstr_file_path:str=os.path.join(UNIPROT_DATA_DIR, 'all_data.clstr')) -> NoReturn:
     '''Splits the data stored in the input path into a train set, test set, and validation set. These sets are disjoint.
     
     args:
@@ -143,13 +143,14 @@ def setup_train_test_val(
 
     # Read in the data, and convert sizes to integers. The index column is gene IDs.
     all_data = pd_from_fasta(all_data_path, set_index=False)
+
     # This takes too much memory. Will need to do this in chunks. 
     # all_data = all_data.merge(pd.read_csv(all_embeddings_path), on='id')
     # print(f'{f}: Successfully added embeddings to the dataset.') 
     
-    # Run CD-HIT on the data stored at the given path.
-    # cluster_data = run_cd_hit(all_data_path, l=MIN_SEQ_LENGTH - 1, n=5)
-    cluster_data = pd_from_clstr(os.path.join(UNIPROT_DATA_DIR, 'all_data.clstr'))
+    # Run CD-HIT on the data stored at the given path, or load an existing clstr_file. .
+    clstr_data = pd_from_clstr(clstr_file_path) if use_existing_clstr_file else run_cd_hit(all_data_path, l=MIN_SEQ_LENGTH - 1, n=5) 
+    clstr_data_size = len(clstr_data)
 
     # TODO: Switch over to indices rather than columns, which is faster. 
     # Add the cluster information to the data. 
@@ -159,7 +160,7 @@ def setup_train_test_val(
     all_data, train_data = sample_homology(all_data, size=len(all_data) - train_size)
     val_data, test_data = sample_homology(all_data, size=val_size)
     
-    assert len(np.unique(np.concatenate([train_data.index, test_data.index, val_data.index]))) == len(np.concatenate([train_data.index, test_data.index, val_data.index])), f'{f}: Some proteins are represented more than once in the partitioned data.'
+    assert len(train_data) + len(val_data) + len(test_data) == len(clstr_data), f'{f}: Expected {clstr_data_size} sequences present after partitioning, but got {len(train_data) + len(val_data) + len(test_data)}.'
 
     for data, path in zip([train_data, test_data, val_data], [train_path, test_path, val_path]):
         # Add labels to the DataFrame based on whether or not the gene_id contains a bracket.
@@ -230,26 +231,6 @@ def sample_homology(data:pd.DataFrame, size:int=None):
 
     print(f'{f}: Collected homology-controlled sample of size {len(sample)} ({np.round(len(sample)/len(data), 2) * 100} percent of the input dataset).')
     return sample, remainder
-
-
-def pd_from_clstr(clstr_file_path):
-    '''Convert a .clstr file string to a pandas DataFrame. The resulting 
-    DataFrame maps cluster label to gene ID.'''
-
-    # Read in the cluster file as a string. 
-    clstr = read(clstr_file_path)
-    df = {'id':[], 'cluster':[]}
-    # The start of each new cluster is marked with a line like ">Cluster [num]"
-    clusters = re.split(r'^>.*', clstr, flags=re.MULTILINE)
-    # Split on the newline. 
-    for i, cluster in enumerate(clusters):
-        ids = [get_id(x) for x in cluster.split('\n') if x != '']
-        df['id'] += ids
-        df['cluster'] += [i] * len(ids)
-
-    df = pd.DataFrame(df) # .set_index('id')
-    df.cluster = df.cluster.astype(int) # This will speed up grouping clusters later on. 
-    return df
 
 
 def run_cd_hit(fasta_file_path:str, c:float=0.8, l:int=1, n:int=2) -> pd.DataFrame:
@@ -436,7 +417,7 @@ def setup_gtdb():
 # ------------------------------------------------------------------------------------------------------------------------------
 
 if __name__ == '__main__':
-    pass
     # setup_uniprot()
     # setup_detect()
-    # setup_gtdb()
+    # setup_gtdb(
+    pass

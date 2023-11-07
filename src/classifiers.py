@@ -66,10 +66,9 @@ class Classifier(torch.nn.Module):
             - hidden_dim: The number of nodes in the second linear layer of the two-layer classifier.
             - latent_dim: The dimensionality of the input embedding. 
             - dropout
-            - bce_loss_weight
         '''
         # Initialize the torch Module
-        super(Classifier, self).__init__()
+        super().__init__()
 
         self.classifier = torch.nn.Sequential(
             torch.nn.Linear(latent_dim, hidden_dim),
@@ -159,27 +158,74 @@ class Classifier(torch.nn.Module):
 
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         pbar = tqdm(range(epochs), desc='classifiers.Classifier.train_')
+
+        # Want to log the initial training and validation metrics.
+        val_loss, val_acc, _, _ = self.get_metrics(val_dataset)
+        train_loss, train_acc, _, _ = self.get_metrics(train_dataloader.dataset)
+        reporter.add_val_metrics(val_loss, val_acc)
+        reporter.add_train_metrics(val_loss, val_acc)
+        pbar.set_postfix({'val_acc':np.round(val_acc, 4), 'train_acc':np.round(train_acc, 4)})
+
         for _ in pbar:
 
+            train_losses, train_accs = [], [] 
             for batch in train_dataloader:
                 # Evaluate the model on the batch in the training dataloader. 
                 outputs, targets = self(batch['emb']), batch['label']
                 train_loss, train_acc = self.loss_func(outputs, targets), get_balanced_accuracy(outputs, targets)
-                reporter.add_train_metrics(train_loss, train_acc)
+                # Accumulate the results over batches.
+                train_losses.append(train_loss.item())
+                train_accs.append(train_acc)
 
                 train_loss.backward()
-                optimizer.step() 
+                optimizer.step()
                 optimizer.zero_grad()
 
-             # If a validation dataset is specified, evaluate. 
-            if val_dataset is not None:
-                val_loss, val_acc, _, _ = self.get_metrics(val_dataset)
-                reporter.add_val_metrics(val_loss, val_acc)
-                pbar.set_postfix({'val_acc':np.round(val_acc, 2)})
-          
+            reporter.add_train_metrics(np.mean(train_losses), np.mean(train_accs))
+            
+            # Evaluate the validation metrics and update the progress bar.
+            val_loss, val_acc, _, _ = self.get_metrics(val_dataset)
+            reporter.add_val_metrics(val_loss, val_acc)
+            
+            pbar.set_postfix({'val_acc':np.round(val_acc, 4), 'train_acc':np.round(np.mean(train_accs), 4)})
+            
         pbar.close()
         
         return reporter
+
+
+class SimpleClassifier(Classifier):
+    '''Class defining a simplified version of the binary classification head.'''
+
+    def __init__(self, 
+        bce_loss_weight:float=1.0,
+        latent_dim:int=1):
+        '''
+        Initializes a single-layer linear classification head. 
+
+        args:
+            - bce_loss_weight: The weight applied to false negatives. 
+            - latent_dim: The dimensionality of the input embedding. 
+        '''
+        # Initialize the torch Module. The classifier attribute will be overridden by the rest of this init function. 
+        super().__init__()
+
+        self.classifier = torch.nn.Sequential(
+            torch.nn.Linear(latent_dim, 1),
+            torch.nn.Sigmoid())
+
+        self.init_weights()
+        self.to(DEVICE)
+
+        self.loss_func = WeightedBCELoss(weight=bce_loss_weight)
+
+    def init_weights(self):
+        '''Initialize model weights according to which activation is used.'''
+        torch.nn.init.kaiming_normal_(self.classifier[0].weight)
+
+    def reset(self):
+        '''Reset the model weights according to the weight initialization function.'''
+        self.init_weights()
 
 
 def optimize_hyperparameters(

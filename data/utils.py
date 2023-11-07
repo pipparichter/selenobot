@@ -2,23 +2,7 @@
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-from typing import NoReturn, Dict, List
-import sys
 import re
-import torch
-import time
-
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-
-DATA_DIR = '/home/prichter/Documents/selenobot/data/'
-DETECT_DATA_DIR = '/home/prichter/Documents/selenobot/data/detect/'
-GTDB_DATA_DIR = '/home/prichter/Documents/selenobot/data/gtdb/'
-UNIPROT_DATA_DIR = '/home/prichter/Documents/selenobot/data/uniprot/'
-
-MODEL_NAME = 'Rostlab/prot_t5_xl_half_uniref50-enc'
-CD_HIT = '/home/prichter/cd-hit-v4.8.1-2019-0228/cd-hit'
-
-MIN_SEQ_LENGTH = 6
 
 
 def write(text, path):
@@ -107,7 +91,7 @@ def fasta_concatenate(paths, out_path=None):
     pd_to_fasta(df, path=out_path)
 
 
-def pd_from_fasta(path, set_index=True):
+def pd_from_fasta(path, set_index=False):
     '''Load a FASTA file in as a pandas DataFrame.'''
 
     ids = fasta_ids(path)
@@ -117,7 +101,6 @@ def pd_from_fasta(path, set_index=True):
     # df = df.astype({'id':str, 'seq':str})
     if set_index: 
         df = df.set_index('id')
-    
     return df
 
 
@@ -139,3 +122,59 @@ def pd_to_fasta(df, path=None, textwidth=80):
     
     # Write the FASTA string to the path-specified file. 
     write(fasta, path=path)
+
+
+def pd_from_clstr(clstr_file_path):
+    '''Convert a .clstr file string to a pandas DataFrame. The resulting DataFrame maps cluster label to gene ID.'''
+    # Read in the cluster file as a string. 
+    clstr = read(clstr_file_path)
+    df = {'id':[], 'cluster':[]}
+    # The start of each new cluster is marked with a line like ">Cluster [num]"
+    clusters = re.split(r'^>.*', clstr, flags=re.MULTILINE)
+    # Split on the newline. 
+    for i, cluster in enumerate(clusters):
+        ids = [get_id(x) for x in cluster.split('\n') if x != '']
+        df['id'] += ids
+        df['cluster'] += [i] * len(ids)
+
+    df = pd.DataFrame(df) # .set_index('id')
+    df.cluster = df.cluster.astype(int) # This will speed up grouping clusters later on. 
+    return df
+
+
+def fasta_ids_with_min_seq_length(fasta_file_path, min_seq_length=6):
+    '''A function for grabbing all gene IDs in a FASTA file for which the corresponding sequences meet the minimum
+    length requirement specified in the setup.py file.'''
+    ids, seqs = fasta_ids(fasta_file_path), fasta_seqs(fasta_file_path)
+    seq_lengths = np.array([len(s) for s in seqs]) 
+    # Filter IDs which do not meet the minimum sequence length requirement. 
+    return ids[seq_lengths >= min_seq_length]
+
+
+def fasta_seqs_with_min_seq_length(fasta_file_path, min_seq_length=6):
+    '''A function for grabbing all gene IDs in a FASTA file for which the corresponding sequences meet the minimum
+    length requirement specified in the setup.py file.'''
+    seqs = fasta_seqs(fasta_file_path)
+    return [s for s in seqs if len(s) >= min_seq_length]
+
+
+def fasta_size_with_min_seq_length(fasta_file_path, min_seq_length=6):
+    '''Get the number of sequenes in a FASTA file which meet the minimum sequence lengh requirement.'''
+    seq_lengths = np.array([len(s) for s in fasta_seqs(fasta_file_path)])
+    return np.sum(seq_lengths >= min_seq_length)
+
+
+def pd_from_fasta_with_min_seq_length(path, set_index=False, min_seq_length=6):
+    '''Load a FASTA file in as a pandas DataFrame.'''
+
+    ids = fasta_ids_with_min_seq_length(path, min_seq_length=min_seq_length)
+    seqs = fasta_seqs_with_min_seq_length(path, min_seq_length=min_seq_length)
+
+    df = pd.DataFrame({'seq':seqs, 'id':ids})
+    # df = df.astype({'id':str, 'seq':str})
+    if set_index: 
+        df = df.set_index('id')
+    return df
+
+
+

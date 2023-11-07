@@ -12,20 +12,14 @@ import pickle
 import numpy as np
 import torch
 
-# data = pd.read_csv(test_path)
-# data = data.loc[:, ~data.columns.str.contains('^Unnamed')]
-# data.to_csv(test_path, index=False)
 
 # Define some key directories. 
 MAIN_DIR = '/home/prichter/Documents/selenobot/'
 DETECT_DATA_DIR = '/home/prichter/Documents/selenobot/data/detect/'
-TRAIN_PATH = os.path.join(DETECT_DATA_DIR, 'train.csv')
-VAL_PATH = os.path.join(DETECT_DATA_DIR, 'val.csv')
+TEST_PATH = os.path.join(DETECT_DATA_DIR, 'test.csv')
 
 
-def train(
-    embedder=None,
-    epochs=None,
+def test(
     latent_dim=None,
     hidden_dim=None,
     selenoprotein_fraction:float=None,
@@ -34,14 +28,15 @@ def train(
     simple_classifier:bool=False):
     '''The main body of the program.'''
 
-
-    train_dataloader = get_dataloader(TRAIN_PATH, balance_batches=True, selenoprotein_fraction=selenoprotein_fraction, batch_size=1024, embedder=embedder)
     if simple_classifier:
         model = SimpleClassifier(latent_dim=latent_dim)
     else:
         model = Classifier(latent_dim=latent_dim, hidden_dim=hidden_dim)
-    
-    train_reporter = model.fit(train_dataloader, val_dataset=Dataset(pd.read_csv(VAL_PATH), embedder=embedder), epochs=epochs, lr=0.001)
+    # Load model weights stored in the path. 
+    model = model.load_state_dict(torch.load(model_weights_path))
+
+    test_dataset = Dataset(TEST_PATH) #  Load in the test dataset.
+    test = model.fit(train_dataloader, val_dataset=Dataset(pd.read_csv(VAL_PATH), embedder=embedder), epochs=epochs, lr=0.001)
     # Save the reporter and model weights. 
     with open(reporter_path, 'wb') as f:
         pickle.dump(train_reporter, f)
@@ -54,10 +49,12 @@ if __name__ == '__main__':
     length_kwargs = {'embedder':'length', 'latent_dim':1, 'hidden_dim':8, 'epochs':10}
     plm_kwargs = {'embedder':'plm', 'latent_dim':1024, 'hidden_dim':512, 'epochs':10}
 
-    for kwargs in [aac_kwargs, length_kwargs, plm_kwargs]:
+    # for kwargs in [aac_kwargs, length_kwargs, plm_kwargs]:
+    for kwargs in [length_kwargs]:
+        kwargs['simple_classifier'] = True
         kwargs['selenoprotein_fraction'] = 0.5
-        kwargs['reporter_path'] = os.path.join(MAIN_DIR, kwargs['embedder'] + '_train_reporter.pkl')
-        kwargs['model_weights_path'] = os.path.join(MAIN_DIR, kwargs['embedder'] + '_model_weights.pth')
+        kwargs['reporter_path'] = os.path.join(MAIN_DIR, kwargs['embedder'] + '_train_reporter_simple.pkl')
+        kwargs['model_weights_path'] = os.path.join(MAIN_DIR, kwargs['embedder'] + '_model_weights_simple.pth')
         train(**kwargs)
 
     # for selenoprotein_fraction in np.arange(0.1, 0.6, 0.1):

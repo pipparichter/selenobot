@@ -28,7 +28,7 @@ plt.rc('axes',  **{'titlesize':TITLE_FONT_SIZE, 'labelsize':LABEL_FONT_SIZE})
 savefig_options = {'format':'png', 'dpi':DPI, 'bbox_inches':'tight'}
 
 
-def plot_train_curve(reporter:Reporter, path:str=None, title:str='plot.plot_train_curve') -> NoReturn:
+def plot_train_curve(reporter:Reporter, path:str=None, title:str='plot.plot_train_curve', logscale:bool=False) -> NoReturn:
     '''Plots information provided in the Reporter object returned by the train_ model method.
     
     args:
@@ -51,17 +51,21 @@ def plot_train_curve(reporter:Reporter, path:str=None, title:str='plot.plot_trai
     # ax.set_yscale('log')
     ax.set_title(title)
 
-    def tick_format(x, pos):
-        '''Function for formatting the tick labels.'''
-        tick = str(np.round(x, 2))
-        # Only display the tick mark if there is one decimal place of precision after rounding.
-        if len(tick.rsplit('.', maxsplit=1)[-1]) > 1:
-            tick = '' 
-        return tick
+    # def tick_format(x, pos):
+    #     '''Function for formatting the tick labels.'''
+    #     tick = str(np.round(x, 2))
+    #     # Only display the tick mark if there is one decimal place of precision after rounding.
+    #     if len(tick.rsplit('.', maxsplit=1)[-1]) > 1:
+    #         tick = '' 
+    #     return tick
 
-    ax.get_yaxis().set_major_formatter(mpl.ticker.FuncFormatter(tick_format))
-    ax.get_yaxis().set_minor_formatter(mpl.ticker.FuncFormatter(tick_format))
-    ax.set_ylabel('loss')
+    # ax.get_yaxis().set_major_formatter(mpl.ticker.FuncFormatter(tick_format))
+    # ax.get_yaxis().set_minor_formatter(mpl.ticker.FuncFormatter(tick_format))
+    if logscale:
+        ax.set_ylabel('log(loss)')
+        plt.yscale('log')
+    else:
+        ax.set_ylabel('loss')
     # plt.ticklabel_format(style='plain', axis='y')
 
     ax.legend(fontsize=LABEL_FONT_SIZE, bbox_to_anchor=(1, 1), loc=1, borderaxespad=0.5)
@@ -107,34 +111,6 @@ def plot_confusion_matrix(reporter:Reporter, path:str=None, title:str='plot.plot
     
     if path is not None: fig.save(path, **savefig_options)
 
-
-def plot_selenoprotein_ratio_barplot(gtdb_data, title='plot.plot_selenoprotein_ratio_barplot', path=None):
-    '''Plots a histogram with selD copy number on the x axis, and the total hits ratio on the y axis.
-    This should help visualize how selD copy and selenoprotein content are connected.'''
-
-    fig, ax = plt.subplots(1)
-    # fig = plt.figure()
-
-    # Probably want to get the average of the selenoprotein_ratio. 
-    plot_data = gtdb_data[['selD_copy_num', 'selenoprotein_ratio']]
-    # plot_data = plot_data.groupby('selD_copy_num', as_index=False).mean()
-    plot_data = plot_data.groupby('selD_copy_num', as_index=True).selenoprotein_ratio.agg([np.mean, np.std])
-
-    # sns.barplot(data, x='selD_copy_num', y='selenoprotein_ratio', ax=ax, color='cornflowerblue')
-    plot_data.plot(kind='bar', y='mean', yerr='std', ax=ax, color='cornflowerblue', edgecolor='black', linewidth=0.5)
-    ax.set_ylabel('selenoprotein_ratio')
-    ax.set_yticks(np.arange(0, 0.07, 0.01))
-    ax.set_yticklabels(np.arange(0, 0.07, 0.01))
-    ax.set_xticklabels(ax.get_xticklabels(), rotation=0, ha='right')
-
-    # for container in ax.containers:
-    #     ax.bar_label(container, labels=[f'{np.round(100 * x, 2)}%' for x in container.datavalues], fontsize=LABEL_FONT_SIZE)
-
-    ax.set_title(title, fontsize=TITLE_FONT_SIZE)
-
-    ax.legend([])
-
-    if path is not None: fig.savefig(path, **savefig_options)
 
 
 def plot_selenoprotein_ratio_ecdf(gtdb_data, title='plot.plot_selenoprotein_ratio_ecdf', path=None, add_mannwhitneyu=True):
@@ -254,3 +230,39 @@ def plot_receiver_operator_curves(
     ax.set_title(title)
 
     if path is not None: fig.savefig(path, **savefig_options)
+
+
+# def plot_model_weights(
+#     model_weights_path:str=None,
+#     path:str=None,
+#     title='plot.plot_model_weights') -> NoReturn:
+
+#     model_weights = torch.
+
+# def plot_selenoprotein_ratio_barplot(gtdb_data, title='plot.plot_selenoprotein_ratio_barplot', path=None):
+#     '''Plots a histogram with selD copy number on the x axis, and the total hits ratio on the y axis.
+#     This should help visualize how selD copy and selenoprotein content are connected.'''
+
+#     fig, ax = plt.subplots(1)
+#     # fig = plt.figure()
+
+#     # Probably want to get the average of the selenoprotein_ratio. 
+#     plot_data = gtdb_data[['selD_copy_num', 'selenoprotein_ratio']]
+#     # plot_data = plot_data.groupby('selD_copy_num', as_index=False).mean()
+#     plot_data = plot_data.groupby('selD_copy_num', as_index=True).selenoprotein_ratio.agg([np.mean, np.std])
+
+#     # sns.barplot(data, x='selD_copy_num', y='selenoprotein_ratio', ax=ax, color='cornflowerblue')
+#     plot_data.plot(kind='bar', y='mean', yerr='std', ax=ax, color='cornflowerblue', edgecolor='black', linewidth=0.5)
+#     ax.set_ylabel('selenoprotein_ratio')
+#     ax.set_yticks(np.arange(0, 0.07, 0.01))
+#     ax.set_yticklabels(np.arange(0, 0.07, 0.01))
+#     ax.set_xticklabels(ax.get_xticklabels(), rotation=0, ha='right')
+
+#     # for container in ax.containers:
+#     #     ax.bar_label(container, labels=[f'{np.round(100 * x, 2)}%' for x in container.datavalues], fontsize=LABEL_FONT_SIZE)
+
+#     ax.set_title(title, fontsize=TITLE_FONT_SIZE)
+
+#     ax.legend([])
+
+#     if path is not None: fig.savefig(path, **savefig_options)
