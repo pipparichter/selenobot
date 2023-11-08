@@ -7,6 +7,6 @@ setup(
     url='https://github.com/pipparichter/selenobot',
     author='Philippa Richter',
     author_email='prichter@caltech.edu',
-    packages=['src'],
-    install_requires=find_packages(exclude=['src']))
+    packages=['selenobot'],
+    install_requires=find_packages(exclude=['selenobot']))
 

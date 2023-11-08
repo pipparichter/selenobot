@@ -4,7 +4,7 @@ import pandas as pd
 import os
 import numpy as np
 import scipy.stats
-from utils import fasta_ids_with_min_seq_length, fasta_ids, fasta_seqs, csv_ids, pd_from_fasta_with_min_seq_length, pd_from_clstr
+from data_utils import fasta_ids_with_min_seq_length, fasta_ids, fasta_seqs, csv_ids, pd_from_fasta_with_min_seq_length, pd_from_clstr
 
 DATA_DIR = '/home/prichter/Documents/selenobot/data/'
 GTDB_DATA_DIR = '/home/prichter/Documents/selenobot/data/gtdb/'

@@ -1,0 +1,17 @@
+README.md
+setup.py
+selenobot/__init__.py
+selenobot/classifiers.py
+selenobot/dataset.py
+selenobot/embedders.py
+selenobot/plot.py
+selenobot/reporter.py
+selenobot/run-classifier.py
+selenobot/tree.py
+selenobot.egg-info/PKG-INFO
+selenobot.egg-info/SOURCES.txt
+selenobot.egg-info/dependency_links.txt
+selenobot.egg-info/top_level.txt
+tests/test_classifiers.py
+tests/test_data_setup.py
+tests/test_dataset.py

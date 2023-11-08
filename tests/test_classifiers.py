@@ -10,7 +10,6 @@ sys.path.append('/home/prichter/Documents/selenobot/src/')
 sys.path.append('/home/prichter/Documents/selenobot/')
 
 import dataset
-import utils
 
 # # NOTE: DATA_DIR is specific to a problem (detect, extend, etc.)
 # DATA_DIR = '/home/prichter/Documents/selenobot/data/uniprot_2023_03/detect'

@@ -13,7 +13,7 @@ sys.path.append('/home/prichter/Documents/selenobot/src/')
 import setup 
 import dataset
 
-from utils import fasta_seqs, fasta_ids, pd_from_clstr, csv_ids, fasta_size, csv_size, fasta_ids_with_min_seq_length, fasta_size_with_min_seq_length
+from data_utils import fasta_seqs, fasta_ids, pd_from_clstr, csv_ids, fasta_size, csv_size, fasta_ids_with_min_seq_length, fasta_size_with_min_seq_length
 
 FILENAMES = ['train.csv', 'val.csv', 'test.csv']
 
@@ -23,7 +23,7 @@ FILENAMES = ['train.csv', 'val.csv', 'test.csv']
 
 NUM_EXPECTED_MISSING = 153 # As concluded in summary.py
 
-class TestSetup(unittest.TestCase):
+class TestDataSetup(unittest.TestCase):
 
     def test_label_is_one_when_sequence_is_truncated(self):
         '''Test to make sure all selenoproteins are flagged with a 1 in the label column.'''
