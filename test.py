@@ -1,9 +1,5 @@
 '''Small script which loads the training data, trains the input model, pickles the resulting reporter object, and saves the model weights. This must be run outside
 the Jupyter notebook, or the kernel crashes.'''
-
-import sys # Not really sure why I need to do this... 
-sys.path.append('/home/prichter/Documents/selenobot/src')
-
 from src.classifiers import Classifier, SimpleClassifier
 from src.dataset import get_dataloader, Dataset
 import os

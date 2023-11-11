@@ -4,7 +4,6 @@ import numpy as np
 from tqdm import tqdm
 import re
 
-
 def write(text, path):
     '''Writes a string of text to a file.'''
     if path is not None:

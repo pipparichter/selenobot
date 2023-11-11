@@ -5,15 +5,10 @@ import numpy as np
 import pandas as pd
 import os
 import tqdm
-import sys
-sys.path.append('/home/prichter/Documents/selenobot/src/')
-sys.path.append('/home/prichter/Documents/selenobot/')
-sys.path.append('/home/prichter/Documents/selenobot/data')
-
 import torch
 import dataset
 
-from utils import fasta_ids, csv_ids
+from data_utils import fasta_ids, csv_ids
 
 # NOTE: DATA_DIR is specific to a problem (detect, extend, etc.)
 UNIPROT_DATA_DIR = '/home/prichter/Documents/selenobot/data/uniprot'

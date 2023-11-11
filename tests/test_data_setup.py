@@ -1,16 +1,10 @@
 '''Tests to make sure the data setup worked as expected.'''
 # pylint: disable=all
 import unittest
-
 import numpy as np
 import pandas as pd
 import os
-import sys
-
-sys.path.append('/home/prichter/Documents/selenobot/data/')
-sys.path.append('/home/prichter/Documents/selenobot/src/')
-
-import setup 
+import data_setup 
 import dataset
 
 from data_utils import fasta_seqs, fasta_ids, pd_from_clstr, csv_ids, fasta_size, csv_size, fasta_ids_with_min_seq_length, fasta_size_with_min_seq_length
@@ -29,7 +23,7 @@ class TestDataSetup(unittest.TestCase):
         '''Test to make sure all selenoproteins are flagged with a 1 in the label column.'''
         for filename in FILENAMES:
             # Can't use the actual sequence, as the U residue has been removed. 
-            data = pd.read_csv(os.path.join(setup.DETECT_DATA_DIR, filename), usecols=['id', 'label'])
+            data = pd.read_csv(os.path.join(data_setup.DETECT_DATA_DIR, filename), usecols=['id', 'label'])
             for row in data.itertuples():
                 if '[' in row.id:
                     assert row.label == 1, f'The selenoprotein {row.id} is mislabeled as full-length.'
@@ -38,7 +32,7 @@ class TestDataSetup(unittest.TestCase):
         '''Test to make sure all full-length proteins are flagged with a 0 in the label column.'''
         for filename in FILENAMES:
             # Can't use the actual sequence, as the U residue has been removed. 
-            data = pd.read_csv(os.path.join(setup.DETECT_DATA_DIR, filename), usecols=['id', 'label'])
+            data = pd.read_csv(os.path.join(data_setup.DETECT_DATA_DIR, filename), usecols=['id', 'label'])
             for row in data.itertuples():
                 if '[' not in row.id:
                     assert row.label == 0, f'The full-length protein {row.id} is mislabeled as truncated.'
@@ -46,8 +40,8 @@ class TestDataSetup(unittest.TestCase):
     def test_all_selenoproteins_present_after_setup_sec_trunc(self):
         '''Test to make sure all selenoproteins are present before and after the truncation step.'''
         # Don't need to adress sequence length here, as this is before the CD-HIT step. 
-        sec_ids = fasta_ids(os.path.join(setup.UNIPROT_DATA_DIR, 'sec.fasta'))
-        sec_truncated_ids = fasta_ids(os.path.join(setup.UNIPROT_DATA_DIR, 'sec_truncated.fasta'))
+        sec_ids = fasta_ids(os.path.join(data_setup.UNIPROT_DATA_DIR, 'sec.fasta'))
+        sec_truncated_ids = fasta_ids(os.path.join(data_setup.UNIPROT_DATA_DIR, 'sec_truncated.fasta'))
         # Make sure to remove brackets from all the truncated IDs/ 
         for id_ in sec_truncated_ids:
             assert '[1]' in id_, f'Gene ID {id_} is not marked as truncated, but is present in sec_truncated.fasta'
@@ -56,7 +50,7 @@ class TestDataSetup(unittest.TestCase):
 
     def test_no_duplicate_proteins_after_concatenating_sec_trunc_and_sprot(self):
         '''Make sure that, for whatever reason, no duplicate proteins ended up in the all_data.fasta file.'''
-        all_data_ids = fasta_ids(os.path.join(setup.UNIPROT_DATA_DIR, 'all_data.fasta'))
+        all_data_ids = fasta_ids(os.path.join(data_setup.UNIPROT_DATA_DIR, 'all_data.fasta'))
         assert len(all_data_ids) == len(set(all_data_ids)), f'There are {len(all_data_ids) - len(set(all_data_ids))} duplicate gene IDs are present in all_data.fasta.'
         # Remove the truncation flags, and make sure no selenoproteins are duplicated. 
         all_data_ids = [id_.replace('[1]', '') for id_ in all_data_ids]
@@ -64,23 +58,23 @@ class TestDataSetup(unittest.TestCase):
 
     def test_all_proteins_in_all_data_present_after_run_cd_hit(self):
         '''Make sure everything which meets the minimum sequence length in all_data.fasta makes it into the all_data.clstr file.'''
-        clstr_file_path = os.path.join(setup.UNIPROT_DATA_DIR, 'all_data.clstr')
+        clstr_file_path = os.path.join(data_setup.UNIPROT_DATA_DIR, 'all_data.clstr')
         clstr_data = pd_from_clstr(clstr_file_path)
         clstr_ids = clstr_data['id'].values # There should not be duplicate IDs here. 
         # Use length as a proxy for equality for the sake of this not taking forever.
 
     def test_size_of_partitioned_data_matches_all_data_after_setup_train_test_val(self):
         '''Make sure the size of the paritioned data is equal to the size of the original dataset from which it was created.'''
-        all_data_size = fasta_size_with_min_seq_length(os.path.join(setup.UNIPROT_DATA_DIR, 'all_data.fasta'))
+        all_data_size = fasta_size_with_min_seq_length(os.path.join(data_setup.UNIPROT_DATA_DIR, 'all_data.fasta'))
         # Everything in the partitioned data should already meet the minimum sequence length requirements.
-        train_test_val_size = sum([csv_size(os.path.join(setup.DETECT_DATA_DIR, file)) for file in FILENAMES]) + NUM_EXPECTED_MISSING
+        train_test_val_size = sum([csv_size(os.path.join(data_setup.DETECT_DATA_DIR, file)) for file in FILENAMES]) + NUM_EXPECTED_MISSING
         assert all_data_size == train_test_val_size, f'The size of the combined paritioned data is {train_test_val_size}, but expected {all_data_size}.'
 
     def test_no_duplicate_proteins_after_train_test_val_split(self):
         '''Make sure there are no duplicate proteins in the training, testing, and validation sets.'''
         all_ids = []
         for file in FILENAMES:
-            ids = fasta_ids(os.path.join(setup.DETECT_DATA_DIR, file))
+            ids = fasta_ids(os.path.join(data_setup.DETECT_DATA_DIR, file))
             assert len(set(ids)) == len(ids), f'Duplicate gene IDs are present in {file}.'
             all_ids += ids
         assert len(set(all_ids)) == len(all_ids), 'Duplicate gene IDs are present across training, test, and validation datasets.'
@@ -90,7 +84,7 @@ if __name__ == '__main__':
     unittest.main()
 
 
-# '''Tests for confirming that all the functions in the src/setup.py directory work as expected.'''
+# '''Tests for confirming that all the functions in the src/data_setup.py directory work as expected.'''
 # import sys
 # sys.path.append('/home/prichter/Documents/selenobot/')
 # sys.path.append('/home/prichter/Documents/selenobot/src/')
@@ -152,22 +146,22 @@ if __name__ == '__main__':
 #     def test_utils_all_sequences_included_when_pd_from_fasta_is_called(self):
 #         '''Check to make sure that the pd_from_fasta function captures all sequences.'''
 #         for test_case in test_cases:
-#             data = setup.pd_from_fasta(test_case['path'])
+#             data = data_setup.pd_from_fasta(test_case['path'])
 #             assert len(data) == test_case['size'], f"Only {len(data)} sequences loaded into the DataFrame, but expected {test_case['size']}."       
     
 #     def test_utils_all_sequences_counted_when_fasta_size_is_called(self):
 #         '''Check to make sure that the pd_from_fasta function captures all sequences.'''
 #         for test_case in test_cases:
-#             size = setup.fasta_size(test_case['path'])
+#             size = data_setup.fasta_size(test_case['path'])
 #             assert size == test_case['size'], f"Only {size} sequences counted, but expected {test_case['size']}."
 
 #     def test_utils_all_sequences_included_when_when_pd_to_fasta_is_called(self):
 #         '''Check to make sure that pd_to_fasta successfully writes all contained sequences to a FASTA file.'''
 #         for test_case in test_cases:
-#             data = setup.pd_from_fasta(test_case['path'])
-#             data = setup.pd_to_fasta(data, test_case['path'] + '.tmp')
+#             data = data_setup.pd_from_fasta(test_case['path'])
+#             data = data_setup.pd_to_fasta(data, test_case['path'] + '.tmp')
 #             # Get the number of entries in the newly-written FASTA file. 
-#             size = setup.fasta_size(test_case['path'] + '.tmp')
+#             size = data_setup.fasta_size(test_case['path'] + '.tmp')
 #             # Delete the temporary FASTA file. 
 #             os.unlink(test_case['path'] + '.tmp')
 

@@ -1,14 +1,9 @@
 '''Tests for the src/classifiers.py file.'''
-
 import unittest
-
 import numpy as np
 import pandas as pd
 import os
 import sys
-sys.path.append('/home/prichter/Documents/selenobot/src/')
-sys.path.append('/home/prichter/Documents/selenobot/')
-
 import dataset
 
 # # NOTE: DATA_DIR is specific to a problem (detect, extend, etc.)
