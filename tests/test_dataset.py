@@ -8,11 +8,10 @@ import tqdm
 import torch
 import dataset
 
-from data_utils import fasta_ids, csv_ids
+from selenobot.utils import fasta_ids, csv_ids, load_config_paths
 
-# NOTE: DATA_DIR is specific to a problem (detect, extend, etc.)
-UNIPROT_DATA_DIR = '/home/prichter/Documents/selenobot/data/uniprot'
-DETECT_DATA_DIR = '/home/prichter/Documents/selenobot/data/detect'
+UNIPROT_DATA_DIR = load_config_paths()['uniprot_data_dir']
+DETECT_DATA_DIR = load_config_paths()['detect_data_dir']
 TRAIN_PATH = os.path.join(DETECT_DATA_DIR, 'train.csv')
 
 # Keyword arguments to pass into the get_dataloader function for each test. 

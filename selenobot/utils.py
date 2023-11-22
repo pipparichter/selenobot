@@ -1,8 +1,42 @@
-'''Utility functions for reading and writing FASTA and CSV files for the setup procedure.'''
+'''Utility functions for reading and writing FASTA and CSV files, amongst other things.'''
 import pandas as pd
 import numpy as np
+import os
 from tqdm import tqdm
 import re
+from typing import Dict
+import configparser
+import pickle
+import subprocess
+
+
+def load_config() -> Dict[str, Dict[str, str]]:
+    '''Loads information from the configuration file as a dictionary. Assumes the 
+    configuration file is in the project root directory.'''
+
+    # Read in the config file, which is in the project root directory. 
+    config = configparser.ConfigParser()
+    # with open('/home/prichter/Documents/find-a-bug/find-a-bug.cfg', 'r', encoding='UTF-8') as f:
+    with open(os.path.join(os.path.dirname(__file__), '../', 'selenobot.cfg'), 'r', encoding='UTF-8') as f:
+        config.read_file(f)
+    return config._sections # This gets everything as a dictionary. 
+
+
+def load_config_setup():
+    '''Loads everything under the setup flag, making sure to cast the relevant CD-HIT parameters
+    to floats or integers, depending. Assumes all parameters are present.'''
+    setup = load_config()['setup']
+    # Cast the non-string parametes to int and float.
+    setup['cdhit_min_seq_length'] = int(setup['cdhit_min_seq_length'])
+    setup['cdhit_word_length'] = int(setup['cdhit_word_length'])
+    setup['cdhit_sequence_similarity'] = float(setup['cdhit_sequence_similarity'])
+    return setup
+
+
+def load_config_paths() -> Dict[str, str]:
+    '''Loads everything under the [paths] heading in the config file as a dictionary.'''
+    return load_config()['paths']
+
 
 def write(text, path):
     '''Writes a string of text to a file.'''
@@ -54,7 +88,9 @@ def csv_labels(path):
 
 def csv_size(path):
     '''Get the number of entries in a FASTA file.'''
-    return len(csv_ids(path))
+    n = subprocess.run(f'wc -l {path}', capture_output=True, text=True, shell=True, check=True).stdout.split()[0]
+    n = int(n) - 1 # Convert text output to an integer and disregard the header row.
+    return n
 
 
 def fasta_seqs(path):
@@ -174,6 +210,96 @@ def pd_from_fasta_with_min_seq_length(path, set_index=False, min_seq_length=6):
     if set_index: 
         df = df.set_index('id')
     return df
+
+
+
+# def embed_batch(
+#     batch:List[str],
+#     model:torch.nn.Module, 
+#     tokenizer:T5Tokenizer) -> torch.FloatTensor:
+#     '''Embed a single batch, catching any exceptions.
+    
+#     args:
+#         - batch: A list of strings, each string being a tokenized sequence. 
+#         - model: The PLM used to generate the embeddings.
+#         - tokenizer: The tokenizer used to convert the input sequence into a padded FloatTensor. 
+#     '''
+#     # Should contain input_ids and attention_mask. Make sure everything's on the GPU. 
+#     inputs = {k:torch.tensor(v).to(device) for k, v in tokenizer(batch, padding=True).items()}
+#     try:
+#         with torch.no_grad():
+#             outputs = model(**inputs)
+#             return outputs
+#     except RuntimeError:
+#         print('setup.get_batch_embedding: RuntimeError during embedding for. Try lowering batch size.')
+#         return None
+
+
+# def setup_plm_embeddings(
+#     fasta_file_path=None, 
+#     embeddings_path:str=None,
+#     max_aa_per_batch:int=10000,
+#     max_seq_per_batch:int=100,
+#     max_seq_length:int=1000) -> NoReturn:
+#     '''Generate sequence embeddings of sequences contained in the FASTA file using the PLM specified at the top of the file.
+#     Adapted from Josh's code, which he adapted from https://github.com/agemagician/ProtTrans/blob/master/Embedding/prott5_embedder.py. 
+#     The parameters of this function are designed to prevent GPU memory errors. 
+    
+#     args:
+#         - fasta_file_path: Path to the FASTA file with the input sequences.
+#         - out_path: Path to which to write the embeddings.
+#         - max_aa_per_batch: The maximum number of amino acid residues in a batch 
+#         - max_seq_per_batch: The maximum number of sequences per batch. 
+#         - max_seq_length: The maximum length of a single sequence, past which we switch to single-sequence processing
+#     '''
+#     # Dictionary to store the embedding data. 
+#     embeddings = []
+
+#     model = T5EncoderModel.from_pretrained(MODEL_NAME)
+#     model = model.to(device) # Move model to GPU
+#     model = model.eval() # Set model to evaluation model
+
+#     tokenizer = T5Tokenizer.from_pretrained(MODEL_NAME, do_lower_case=False)
+
+#     df = pd_from_fasta(fasta_file_path, set_index=False) # Read the sequences into a DataFrame. Don't set the index. 
+#     # Need to make sure not to replace all U's with X's in the original DataFrame. 
+#     df['seq_standard_aa_only'] = df['seq'].str.replace('U', 'X').replace('Z', 'X').replace('O', 'X') # Replace non-standard amino acids with X token. 
+
+#     # Order the rows according to sequence length to avoid unnecessary padding. 
+#     df['length'] = df['seq'].str.len()
+#     df = df.sort_values(by='length', ascending=True, ignore_index=True)
+
+#     curr_aa_count = 0
+#     curr_batch = []
+#     for row in df.itertuples():
+
+#         # Switch to single-sequence processing. 
+#         if len(row['seq']) > max_seq_length:
+#             outputs = embed_batch([row['seq_standard_aa_only']], model, tokenizer)
+
+#             if outputs is not None:
+#                 # Add information to the DataFrame. 
+#                 emb = outputs.last_hidden_state[0, :row['length']].mean(dim=0)
+#                 embeddings.append(emb)
+#             continue
+
+#         curr_batch.append(row['seq_standard_aa_only'])
+#         curr_aa_count += row['length']
+
+#         if len(curr_batch) > max_seq_per_batch or curr_aa_count > max_aa_per_batch:
+#             outputs = embed_batch(curr_batch, model, tokenizer)
+
+#             if outputs is not None:
+#                 for seq, emb in zip(curr_batch, embeddings): # Should iterate over each batch output, or the first dimension. 
+#                     emb = emb[:len(seq)].mean(dim=0) # Remove the padding and average over sequence length. 
+#                     embeddings.append(emb)
+
+#                     curr_batch = []
+#                     curr_aa_count = 0
+#     # Remove all unnecessary columns before returning.
+#     df = pd.DataFrame(torch.cat(embeddings)).astype(float).drop(columns=['seq_standard_aa_only', 'length'])
+#     df.to_csv(embeddings_path)
+
 
 
 

@@ -1,34 +1,30 @@
-'''Plotting utilities.'''
+'''Code used to generate many of the figures for assessing selenobot's training and performance.'''
 
 from typing import NoReturn, Tuple, List, Dict
-
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 import pandas as pd
 import scipy.stats
-
-from reporter import Reporter
+from selenobot.reporter import Reporter
 
 # Some specs to make sure everything is in line with Nature Micro requirements.
-DPI = 500
-TITLE_FONT_SIZE = 10
-LABEL_FONT_SIZE = 10
+TITLE_FONT_SIZE, LABEL_FONT_SIZE = 10, 10
 FIGSIZE = (4, 3)
-FONT = 'Arial'
 PALETTE = 'Set1'
 
 # Set all matplotlib global parameters.
-plt.rc('font', **{'family':'sans-serif', 'sans-serif':[FONT], 'size':LABEL_FONT_SIZE})
+plt.rc('font', **{'family':'sans-serif', 'sans-serif':['Arial'], 'size':LABEL_FONT_SIZE})
 plt.rc('xtick', **{'labelsize':LABEL_FONT_SIZE})
 plt.rc('ytick', **{'labelsize':LABEL_FONT_SIZE})
 plt.rc('axes',  **{'titlesize':TITLE_FONT_SIZE, 'labelsize':LABEL_FONT_SIZE})
+# plt.rc('text',  **{'usetex':True}) # Enable use of LaTeX
 
-savefig_options = {'format':'png', 'dpi':DPI, 'bbox_inches':'tight'}
+SAVEFIG_OPTIONS = {'format':'png', 'dpi':500, 'bbox_inches':'tight'}
 
 
-def plot_train_curve(reporter:Reporter, path:str=None, title:str='plot.plot_train_curve', logscale:bool=False) -> NoReturn:
+def plot_train_curve(reporter:Reporter, path:str=None, title:str='plot.plot_train_curve', logscale:bool=True) -> NoReturn:
     '''Plots information provided in the Reporter object returned by the train_ model method.
     
     args:
@@ -39,7 +35,7 @@ def plot_train_curve(reporter:Reporter, path:str=None, title:str='plot.plot_trai
     fig, ax = plt.subplots(1, figsize=FIGSIZE)
 
     data = reporter.get_loss_info()
-    data['metric'] = data['metric'].replace({'val_losses':'validation loss', 'train_losses':'training loss'})
+    data['metric'] = data['metric'].replace({'val_loss':'validation loss', 'train_loss':'training loss'})
     ax = sns.lineplot(data=data, y='value', x='epoch', hue='metric', ax=ax, palette=PALETTE, style='metric')
     ax.legend().set_title('') # Turn off legend title because it looks crowded. 
 
@@ -51,16 +47,6 @@ def plot_train_curve(reporter:Reporter, path:str=None, title:str='plot.plot_trai
     # ax.set_yscale('log')
     ax.set_title(title)
 
-    # def tick_format(x, pos):
-    #     '''Function for formatting the tick labels.'''
-    #     tick = str(np.round(x, 2))
-    #     # Only display the tick mark if there is one decimal place of precision after rounding.
-    #     if len(tick.rsplit('.', maxsplit=1)[-1]) > 1:
-    #         tick = '' 
-    #     return tick
-
-    # ax.get_yaxis().set_major_formatter(mpl.ticker.FuncFormatter(tick_format))
-    # ax.get_yaxis().set_minor_formatter(mpl.ticker.FuncFormatter(tick_format))
     if logscale:
         ax.set_ylabel('log(loss)')
         plt.yscale('log')
@@ -70,7 +56,7 @@ def plot_train_curve(reporter:Reporter, path:str=None, title:str='plot.plot_trai
 
     ax.legend(fontsize=LABEL_FONT_SIZE, bbox_to_anchor=(1, 1), loc=1, borderaxespad=0.5)
 
-    if path is not None: fig.savefig(path, **savefig_options)
+    if path is not None: fig.savefig(path, **SAVEFIG_OPTIONS)
 
 
 def plot_confusion_matrix(reporter:Reporter, path:str=None, title:str='plot.plot_confusion_matrix', ax:plt.Axes=None) -> NoReturn:
@@ -109,7 +95,7 @@ def plot_confusion_matrix(reporter:Reporter, path:str=None, title:str='plot.plot
     for _, spine in ax.spines.items():
         spine.set_visible(True)
     
-    if path is not None: fig.save(path, **savefig_options)
+    if path is not None: fig.save(path, **SAVEFIG_OPTIONS)
 
 
 
@@ -150,20 +136,16 @@ def plot_selenoprotein_ratio_ecdf(gtdb_data, title='plot.plot_selenoprotein_rati
 
     ax.set_ylabel('proportion')
     ax.set_xlim(0, 0.07)
-    ax.set_title(title, fontsize=TITLE_FONT_SIZE)
-
-    # ax.set_ylabel(ax.yaxis.get_label().get_text(), fontsize=LABEL_FONT_SIZE)
-    # ax.set_xlabel(ax.xaxis.get_label().get_text(), fontsize=LABEL_FONT_SIZE)
+    ax.set_title(title)
 
     ax.set_xticklabels(np.arange(0, 0.07, 0.01))
     ax.set_yticklabels(np.round(np.arange(0, 1, 0.1), 2))
-    ax.set_xticklabels(ax.xaxis.get_ticklabels(), fontsize=LABEL_FONT_SIZE)
-    ax.set_yticklabels(ax.yaxis.get_ticklabels(), fontsize=LABEL_FONT_SIZE)
+    ax.set_xticklabels(ax.xaxis.get_ticklabels())
+    ax.set_yticklabels(ax.yaxis.get_ticklabels())
 
-    ax.legend(legend, title='selD_copy_num', title_fontsize=LABEL_FONT_SIZE, fontsize=LABEL_FONT_SIZE)
+    ax.legend(legend, title='$selD$ copy number')
 
-    if path is not None: fig.savefig(path, **savefig_options)
-
+    if path is not None: fig.savefig(path, **SAVEFIG_OPTIONS)
 
 
 def plot_precision_recall_curves(
@@ -196,7 +178,7 @@ def plot_precision_recall_curves(
 
     ax.set_title(title)
 
-    if path is not None: fig.savefig(path, **savefig_options)
+    if path is not None: fig.savefig(path, **SAVEFIG_OPTIONS)
 
 
 def plot_receiver_operator_curves(
@@ -229,7 +211,7 @@ def plot_receiver_operator_curves(
 
     ax.set_title(title)
 
-    if path is not None: fig.savefig(path, **savefig_options)
+    if path is not None: fig.savefig(path, **SAVEFIG_OPTIONS)
 
 
 # def plot_model_weights(
@@ -265,4 +247,4 @@ def plot_receiver_operator_curves(
 
 #     ax.legend([])
 
-#     if path is not None: fig.savefig(path, **savefig_options)
+#     if path is not None: fig.savefig(path, **SAVEFIG_OPTIONS

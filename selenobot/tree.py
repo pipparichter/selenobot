@@ -1,316 +1,159 @@
-'''Utilities for visualizing phylogenetic trees with selenoprotein data.'''
-
-import ete3
-import PyQt5
-from ete3 import NodeStyle
-import io
-import pandas as pd
-import numpy as np
+from Bio import Phylo
+# import dendropy I actually don't think I need dendropy. 
+from utils import *
+import re
+import networkx as nx
 import matplotlib.pyplot as plt
-import matplotlib
-import os
+import matplotlib as mpl
+from typing import Dict, NoReturn
+from Bio.Phylo.BaseTree import Tree, Clade
+# import pydot
 
-# from PySide6.QtWidgets import QGraphicsItem
+BACTERIA_TREE_PATH = load_config_paths()['bacteria_tree_path']
+ARCHAEA_TREE_PATH = load_config_paths()['archaea_tree_path']
 
+# Some specs to make sure everything is in line with Nature Micro requirements.
+TITLE_FONT_SIZE = 10
+LABEL_FONT_SIZE = 10
+FIGSIZE = (4, 3)
+FONT = 'Arial'
+PALETTE = 'Set1'
 
-from typing import NoReturn, Tuple, List, Dict
+# Set all matplotlib global parameters.
+plt.rc('font', **{'family':'sans-serif', 'sans-serif':[FONT], 'size':LABEL_FONT_SIZE})
+plt.rc('xtick', **{'labelsize':LABEL_FONT_SIZE})
+plt.rc('ytick', **{'labelsize':LABEL_FONT_SIZE})
+plt.rc('axes',  **{'titlesize':TITLE_FONT_SIZE, 'labelsize':LABEL_FONT_SIZE})
+# plt.rc('text',  **{'usetex':True}) # Enable use of LaTeX
 
-# Tree plotting works with the GTDB data, which should contain the following information:
-# - Parsed taxonomy information (domain, class, phylum, etc.)
-# - total_hits, i.e. detected selenoproteins. 
-# - selenoprotein_ratio, the ratio of total_hits to the number of genes. 
-# - selD_copy_num, number of selD copies detected using Kofamscan
-# - total_genes, total number of genes in the genome (I think detected using Prodigam)
-# - hits_with_annotation, total number of genes detected as selenoproteins, successfully annotated (I think using Kofamscan?)
-# - total_genes_with_annotation, total number of genes which are successfully annotated. 
-# - genome_id, the unique genome identifier. 
-
-LEVELS = ['domain', 'phylum', 'class', 'order', 'genus', 'species']
-
-
-# TODO: Something that displayes species name when hovering!
-class InteractiveNode(QGraphicsItem):
-    pass
-
-
-def load_tree(tree_path:str, collapse=True) -> ete3.Tree:
-    '''Loads an ete3 tree in Newick format from the specified path.'''
-
-    # Read in the tree data from the file. Should be in paranthetical format. 
-    with open(tree_path, 'r') as f:
-        tree_data = f.read()
-
-    # By default, the species naming function just grabs the first three letters of the
-    # node name (which is like d__ or s__). 
-    def sp_naming_function(name):
-        if 's__' in name:
-            return name.split('s__')[-1]
-        else:
-            return ''
-
-    t = ete3.PhyloTree(tree_data, format=1, quoted_node_names=True, sp_naming_function=sp_naming_function) 
-    if collapse:
-        t = t.collapse_lineage_specific_expansions(return_copy=True)
-    return t
+LEVEL_ABBREVIATIONS = {'phylum':'p', 'domain':'d', 'genus':'g', 'species':'s', 'order':'o', 'c':'class', 'family':'f'}
 
 
-def rgb_to_hex(r, g, b):
-    '''Convert a red, blue, and green value (the output of map.to_rgba) to a hex string.'''
-    # First need to put each value into hexadecimal. 
-    return '#' + '%02x%02x%02x' % (r, g, b)
-
-
-
-def parse_taxonomy(taxonomy:str) -> Dict[str, str]:
-    '''Extract information from a taxonomy string.'''
-
-    m = {'o':'order', 'd':'domain', 'p':'phylum', 'c':'class', 'f':'family', 'g':'genus', 's':'species'}
-
-    parsed_taxonomy = {}
-    # Split taxonomy string along the semicolon...
-    for x in taxonomy.strip().split(';'):
-        l, t = x.split('__')
-        l = l.strip() # Make sure there's no remaining whitespace. 
-        t = t.strip()
-        parsed_taxonomy[m[l]] = t
+def tree_label_terminals_with_taxonomy(tree, level='c'):
+    '''Label terminals such that all terminals that belong to the same genus, order, family, etc. have the same name,
+    corresponding to the taxonomical categorie to which they all belong.'''
     
-    return parsed_taxonomy # Return None if flag is not found in the taxonomy string. 
+    # pattern = f'\d+\.\d:[\w__; ]*{level}__\w+; [\w__; ]*[\w__]+' # Pattern to match. 
+    pattern = f'.*{level}__.+' # Pattern to match. 
 
+    for node in tree.find_elements(name=pattern, terminal=False):
+        t = re.search(f'{level}__\w+', node.name).group(0)
+        # .group(0) # Extract the texonomical category from the matching string.
+        for leaf in node.get_terminals():
+            leaf.name = t[3:] # Set the leaf name to the taxonomy. 
+    return tree
+
+def tree_collapse_nodes(tree):
+    '''Iterate over tree nodes, ensuring that each terminal node has a unique name. This should be called after
+    tree_label_terminals_with_taxonomy, so that it effectively collapses everything in the same taxonomical group.'''
+
+    for node in tree.find_clades():
+        if node.count_terminals() > 1: # Check if the node is followed by more than one leaf. 
+            leafs = node.get_terminals()
+            if len(set([l.name for l in leafs])) == 1: # All the leafs in this clade have the same name.
+                for leaf in leafs[1:]: # Remove all nodes but the first.    
+                    # print(leaf.name)                            
+                    tree.prune(leaf)
+    for node in tree.get_terminals():
+        if 's__' in node.name:
+            tree.prune(node)
+
+    return tree
+
+
+def tree_remove_non_terminal_labels(tree:Tree) -> Tree:
+    '''Remove the labels from any non-terminal tree node, so plotting is nicer. This should only be called
+    after tree_collapse_nodes.'''
+
+    for node in tree.find_clades(terminal=False):
+        node.name = None
+    return tree
+
+
+def tree_draw(tree:Tree, 
+    path:str=None,
+    relative_selenoprotein_content:Dict[Tree, float]={}) -> NoReturn:
+
+    def get_x_positions(tree):
+        '''Create a mapping of each clade to its horizontal position.'''
+        # Assume unit branch lengths for simplicity. 
+        return tree.depths()
+
+    def get_y_positions(tree):
+        '''Create a mapping of each node to its vertical position.'''
+        max_height = tree.count_terminals()
+        # Why are the terminals reversed here?
+        ys = {leaf: max_height - i for i, leaf in enumerate(reversed(tree.get_terminals()))}
+
+        # Internal nodes are place at midpoint of children.
+        def get_y(node):
+            '''Recursively calculate the y position for each internal node. Positions of the leaf nodes have already been calculated.'''
+            for child in node: # Didn't know you could iterate over clades like this!
+                if child not in ys: # When it hits the root node, this will evaluate to False. 
+                    get_y(child)
+            first_child, last_child = node.clades[0], node.clades[-1]
+            ys[node] = (ys[first_child] + ys[last_child]) / 2.0
+
+        get_y(tree.root)
+        return ys
+
+    xs, ys = get_x_positions(tree), get_y_positions(tree)
+    fig, ax = plt.subplots(1)
+
+    lw, c = '0.1', 'black' # Just stick to this for now. 
+
+    # NOTE: Calling iter on a node iterates through the direct descendents.
+    def draw_node(node):
+        '''Recursively draw a tree from the root node.'''
+        if not node.is_terminal(): # Don't try to call the function again if terminal.
+            # Get the position of the first verical line, halway between parent and closest child node. 
+            y_min, y_max = min([ys[n] for n in node.clades]), max([ys[n] for n in node.clades])
+            x = (min([xs[n] for n in node.clades]) + xs[node]) / 2.0
+            ax.vlines(x, y_min, y_max, 'gray')
+            # Draw a horizontal line between the parent and first vertical line. 
+            ax.hlines(ys[node], xs[node], x, 'gray')
+            # Draw a horizontal line between the first vertical line and each child node.
+            for child in node.clades:
+                ax.hlines(ys[child], x, xs[child], 'gray')
+                draw_node(child) # Recursive call. 
     
-# def get_average_selenoprotein_ratio(level:str, name:str, gtdb_data:pd.DataFrame=None) -> float:
-#     '''Calculate the average selenoprotein_ratio across all members of a taxonomic level specified
-#     by the given name.'''
-#     # Search the DataFrame for wherever the taxonomical level is equal to the given name. 
-#     data = gtdb_data[gtdb_data[level] == name]
-#     return selenoprotein_ratios = data['selenoprotein_ratio'].mean()
+    draw_node(tree.root)
+
+    data, colors = [], []
+    for leaf in tree.get_terminals():
+        x, y = xs[leaf], ys[leaf]
+        data.append([x, y])
+        colors.append(relative_selenoprotein_content.get(leaf, 'lightblue'))
+        ax.text(x, y, leaf.name, fontsize=10)
+
+    ax.scatter(*np.array(data).T, s=30, c=colors)
+
+    ax.axis('off')
+
+    if path:
+        fig.savefig(path, dpi=500, format='png')
 
 
-def label_nodes_with_taxonomy(tree:ete3.Tree, gtdb_data=None) -> NoReturn:
-    '''
-    Traverses the tree, and labels all nodes with relevant taxonomical information. 
-    '''
-    # Should only need to annotate the leaf nodes to filter by taxonomy. Although
-    # how do we find the root node?
+if __name__ == '__main__':
 
-    for leaf in tree.get_leaves(): 
-        # family = genome_id_to_family_map[node.name]
-        entry = gtdb_data[gtdb_data['species'] == leaf.species]
-
-        if len(entry) == 0:
-            print(f'tree.label_nodes_`with_taxonomy: No entries matching {leaf.species} found in gtdb_data.')
-            continue
-        if len(entry) > 1:
-            print(f'tree.label_nodes_with_taxonomy: More than one entry matching {leaf.species} found in gtdb_data.')
-            continue
-        
-        leaf.add_features(**{level:entry[level].item() for level in LEVELS})
+    level = 'phylum'
 
 
-def get_is_leaf_fn(level:str):
-    '''Generates a leaf function for the specified level.'''
+    tree = Phylo.read(ARCHAEA_TREE_PATH, 'newick')
 
-    def is_leaf_fn(node):
-        '''Function for collapsing the tree according to taxonomy.'''
-        # If a node is monophyletic for the taxonomy, then it is a leaf.
-        leaves = node.get_leaves()
-        # Get the taxonomy of the organism at the specified level.
-        x = getattr(leaves[0], level)
-        
-        if np.all([x == getattr(leaf, level) for leaf in leaves]):
-            node.name = x
-            return True
-        else:
-            return False
-    
-    return is_leaf_fn # Return the function defined using the input level.
+    tree = tree_label_terminals_with_taxonomy(tree, level=LEVEL_ABBREVIATIONS[level])
+    tree = tree_collapse_nodes(tree)
+    # tree = tree_remove_non_terminal_labels(tree)
 
+    print(tree.count_terminals(), f'leaf nodes present in the final {level} tree.')
 
-def find_root_node(tree:ete3.Tree, level:str, name:str) -> ete3.Tree:
-    '''Traverses the phylogenetic tree, finding the node for which all
-    children belong to the phylogenetic category specified in the input.'''
-    for node in tree.traverse:
-        leaves = node.get_leaves()
-        taxonomies = np.array([getattr(leaf, level) for leaf in leaves])
-        if np.all(taxonomies == name):
-            return node 
-    
-    # Raise an exception if no node was found.     
-    raise Exception(f'tree.find_root_node: No root node {name} was found at taxonomical level {level}.')
-
-
-# def merge_nodes_by_family(tree:ete3.Tree, families=List[str], genome_id_to_family_map:Dict[str,str]=None) -> ete3.Tree :
-def merge_nodes_by_taxonomy(tree:ete3.Tree, gtdb_data=None, level:str=None) -> ete3.Tree :
-    '''Takes a tree as input, and merges all the nodes so that there is only one node for
-    a particular family.'''
-
-    # Annotate all nodes with stored taxonomical data. 
-    label_nodes_with_taxonomy(tree, gtdb_data=gtdb_data)
-    return ete3.Tree(tree.write(is_leaf_fn=get_is_leaf_fn(level)), format=1, quoted_node_names=True)
-
-
-# TODO: Want to be able to specify the root node of a plot, as well as the level. 
-# Might be worth moving all the tree plotting code over to another Python file. 
-
-# Having an issue where not every organism in the tree is present in the GTDB data. 
-
-def plot(
-        tree:ete3.Tree,
-        gtdb_data:pd.DataFrame, 
-        level:str='class',
-        sel_ratio_threshold:float=None,
-        path:str=None, 
-        show_sel_ratio:bool=True,
-        font_size:int=15, 
-        margin:int=10,
-        root:str=None, 
-        root_level:str='domain') -> NoReturn:
-    '''Phylogenetic tree from the GTDB database with selenoprotein content coded as a color. 
-    Selenoprotein content is given as total selenoproteins divided by total genes.'''
-
-    assert path is not None, 'tree.plot: A path must be specified.'
-
-    os.environ['QT_QPA_PLATFORM'] = 'wayland'
-
-    # The level of the root node must be lower than that of the leaves. 
-    if root is not None:
-        assert root_level is not None, 'tree.plot: A root level must be specified along with a node to use as the root.'
-        assert levels.index(root_level) < levels.index(level), f'tree.plot: Root level {root_level} must be higher than leaf level {level}.'
-        # Make sure the root name is in the correct level. 
-        assert root in np.unique(gtdb_data[[level]].values), f'tree.plot: Root name is not in the specified taxonomic level {root_level}.'
-
-
-    print(f'tree.plot_gtdb_tree: {len(np.unique(gtdb_data[level].values))} unique instances of level "{level}" present in gtdb_data.')
-
-    tree = merge_nodes_by_taxonomy(tree, gtdb_data=gtdb_data, level=level)
-
-    selenoprotein_ratios = gtdb_data.groupby(level)['selenoprotein_ratio'].mean()
-
-    # Create a normalized colormap for coloring the nodes. 
-    cmap = matplotlib.colormaps['Blues']
-    norm = matplotlib.colors.Normalize(vmin=min(selenoprotein_ratios), vmax=max(selenoprotein_ratios))
-    m = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
-
-    # Color the merged tree according to sec_content.
-    for node in tree.traverse():
-        
-        # Make sure the node bubbles aren't visible -- maybe a cleaner way to do this. 
-        node_style = ete3.NodeStyle()
-        node_style['size'] = 0
-        node_style['hz_line_width'] = 2
-        node_style['hz_line_width'] = 2
-        node.set_style(node_style)
-
-        if node.is_leaf():
-
-            sel_ratio = selenoprotein_ratios[selenoprotein_ratios.index == node.name].item()
-
-            # If a sec_content threshold is specified, remove all leaves which do not meet the threshold.
-            if sel_ratio_threshold is not None:
-                if selenoprotein_ratio < sel_ratio:
-                    node.delete()
-                    continue
-
-            label = node.name + f' ({sel_ratio})' if show_sel_ratio else node.name
-
-            r, g, b, _ = m.to_rgba(sel_ratio, bytes=True) # Set bytes=True to get values between 0 and 255. 
-            if (r > 200 )or (g > 200) or (b > 200): # I think a reasonable test for if the background is dark?
-                font_color = '#000000'
-            else:
-                font_color = '#FFFFFF'
-            
-            face = ete3.TextFace(text=label, ftype='arial', fgcolor=font_color, fsize=font_size)
-            face.background.color = rgb_to_hex(r, g, b)
-            face.border.type = 0 # Make the border solid. 
-            face.border.width = 1
-            face.penwidth = 2
-            face.margin_left = margin
-            face.margin_right = margin
-            face.margin_top = margin
-            face.margin_bottom = margin
-
-            # ete3.add_face_to_node(face, node, aligned=True, column=0) # Not sure what the column parameter does. 
-            node.add_face(face, column=0) # , position='aligned')
-
-    tree_style = ete3.TreeStyle()
-
-    tree_style.mode = 'c'
-    tree_style.arc_start = -180 # 0 degrees = 3 o'clock
-    tree_style.arc_span = 180
-    tree_style.show_leaf_name = False
-    tree_style.show_scale = False
-
-    print(f'tree.plot_gtdb_tree: {len(tree.get_leaves())} leaves in final tree.')
-
-    tree.render(path, tree_style=tree_style)
+    tree_draw(tree, path='tree.png')
 
 
 
-# def get_taxonomy_to_sec_content_map(gtdb_data, genome_id_to_taxonomy_map:Dict[str, str]=None):
-#     '''Use GTDB taxomonomy to combine different families and plot average selenoprotein content
-#     across labeled members.
-
-#     '''
-#     assert genome_id_to_taxonomy_map is not None, 'tree.get_class_to_sec_content: A dictionary mapping genome ID to class name must be specified.'
-    
-#     # Get a list of all possible taxonomical categories at the specified level. 
-#     keys = np.unique([t for t in  genome_id_to_taxonomy_map.values()])
-#     taxonomy_to_sec_content_map = {t:[] for t in keys}
-
-#     for row in gtdb_data.itertuples():
-#         # Get the relevant taxonomy. 
-#         try: # Try to extract the specified taxonomic label. 
-#             taxonomy = genome_id_to_taxonomy_map.get(row.Index, None)     
-#             sec_content = row.total_hits / row.total_genes
-#             taxonomy_to_sec_content_map[taxonomy].append(sec_content)
-#         except KeyError: # If the taxonomy is not found, move on to the next iteration. 
-#             continue
-
-#     # Take the average of each sec content list. 
-#     # Possibly will need to make sure that we are not trying to take the mean of an empty list.
-#     return {t:0 if np.isnan(np.mean(s)) else np.mean(s) for t, s in taxonomy_to_sec_content_map.items()}
 
 
-# def get_genome_id_to_taxonomy_map(taxonomy_data:pd.DataFrame, level:str='class') -> Dict[str, str]:
-#     '''Processes a taxonomy file, converting it into a dictionary mapping genome ID
-#     to the name of the family to which the genome belongs.
 
-#     args:
-#         - taxonomy_data: Contains two columns, genome_id and taxonomy. The taxonomy column contains
-#             strings with each taxonomical level separated by semicolons. 
-#         - level: The taxonomic level for which to accumulate data. 
-#     '''
-#     # Collect information into a dictionary mapping 
-#     genome_id_to_taxonomy_map = {}
-#     for row in taxonomy_data.itertuples():
-#         try:
-#             genome_id_to_taxonomy_map[row.genome_id] = parse_taxonomy(row.taxonomy)[level]
-#         except KeyError:
-#             print(f'tree.get_genome_id_to_taxonomy_map: Genome {genome_id} does not have specified taxonomy data.')
-#             continue
 
-#     return genome_id_to_taxonomy_map
-
-# def label_nodes_with_taxonomy(tree:ete3.Tree, genome_id_to_taxonomy_map:Dict[str, str]=None) -> NoReturn:
-#     '''Label all nodes in a tree with their family. Labels according to the specified taxonomic level.
-    
-#     args:
-#         - tree: A Tree object with unlabeled nodes. 
-#         - genome_id_to_taxonomy_map: A map co
-#     '''
-    
-#     assert genome_id_to_taxonomy_map is not None, 'tree.get_class_to_sec_content: A dictionary mapping genome ID to class name must be specified.'
-
-#     for leaf in tree.get_leaves():
-#         # family = genome_id_to_family_map[node.name]
-#         taxonomy = genome_id_to_taxonomy_map[leaf.name]
-#         leaf.add_features(taxonomy=taxonomy)
-
-# def get_support(name):
-#     '''Extract support value from a node name. I feel like this should be done automatically?'''
-#     if ':' in name:
-#         support, name = name.split(':')
-#         return float(support), name
-#     else:
-#         return None, name
 
 
