@@ -1,0 +1,3 @@
+# selenobot/weights
+
+This directory stores the weights of trained classifiers. When the `train.py` script is run, the produced model weights are saved in this directory, and can be...

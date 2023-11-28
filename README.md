@@ -18,8 +18,10 @@ Use `pip` to install the `selenobot` package into the `selenobot` conda environm
 % Apparently the -e option just pts the package in "editable mode", which means that any changes made are reflected in the environment. I am not sure if this is actually 
 % necessary when a user is installing it. 
 ```
+cd selenobot # Important so that the directory structure is properly set up. 
 pip install selenobot
 ```
+Modify the configuration file to set the necessary file paths. 
 
 ## Accessing data
 
