@@ -11,7 +11,7 @@ from data_utils import fasta_seqs, fasta_ids, pd_from_clstr, csv_ids, fasta_size
 
 FILENAMES = ['train.csv', 'val.csv', 'test.csv']
 
-# TODO: Some selenoproteins will be missing because of hte CD-HIT minimum sequence length. 
+# TODO: Some selenoproteins will be missing because of the CD-HIT minimum sequence length. 
 
 # test_[method under test]_[expected behavior]?_when_[preconditions]
 

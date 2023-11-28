@@ -134,7 +134,7 @@ def run_cd_hit(fasta_file_path:str, c:float=0.8, l:int=1, n:int=2) -> pd.DataFra
     '''Run CD-HIT on the FASTA file stored in the input path, generating the homology-based sequence similarity clusters.
     
     args:
-        - fasta_file_path
+        - fasta_file_path: Path to the FASTA file on which to run the CD-HIT program. 
         - c: The similarity cutoff for sorting sequences into clusters (see CD-HIT documentation for more information). 
         - l: Minimum sequence length allowed by the clustering algorithm. Note that some truncated sequences
             are filtered out by this parameter (see CD-HIT documentation for more information). 

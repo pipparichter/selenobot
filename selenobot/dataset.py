@@ -56,7 +56,8 @@ class Dataset(torch.utils.data.Dataset):
             - embedder: One of length, aac, or plm. Specifies the embedding method used.
         '''
         f = 'dataset.Dataset.__init__'
-        assert 'seq' in data.columns, f'{f}: Input DataFrame missing required field seq.'
+        if embedder is not None:
+            assert 'seq' in data.columns, f'{f}: Input DataFrame missing required field seq.'
         assert 'label' in data.columns, f'{f}: Input DataFrame missing required field label.'
         assert 'id' in data.columns, f'{f}: Input DataFrame missing required field id.'
 
@@ -103,7 +104,7 @@ class BalancedBatchSampler(torch.utils.data.BatchSampler):
     def __init__(self, 
         data_source:Dataset, 
         batch_size:int=None, 
-        selenoprotein_fraction:float=0.25,
+        selenoprotein_fraction:float=0.5,
         verbose:bool=True): # , shuffle=True):
         '''Initialize a custom BatchSampler object.'''
         f = 'dataset.BalancedBatchSampler.__init__'
