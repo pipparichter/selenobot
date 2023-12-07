@@ -1,7 +1,7 @@
 # Selenobot
 
 ## Requirements
-What are the packages and software the user is already assumed to have installed? So far, I think it is just Python and Miniconda (or Anaconda).
+What are the packages and software the user is already assumed to have installed? So far, I think it is just Python and Miniconda (or Anaconda). Also CD-HIT. 
 
 ## Installation
 
@@ -25,4 +25,8 @@ Modify the configuration file to set the necessary file paths.
 
 ## Accessing data
 
-Curated training, validation, and testing data are stored in a publically-available Google Cloud bucket. The data can be accessed using the `download_training_data` function, defined in teh `selenobot.io` module. 
+Pretrained model weights are available for download. 
+
+https://storage.googleapis.com/selenobot-data/weights/aac.pth
+https://storage.googleapis.com/selenobot-data/weights/length.pth 
+https://storage.googleapis.com/selenobot-data/weights/plm.pth 

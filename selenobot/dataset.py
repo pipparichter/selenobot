@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import torch
 import torch.utils.data
-import embedders
+from selenobot.embedders import LengthEmbedder, AacEmbedder
 from typing import List
 import subprocess
 import time
@@ -62,9 +62,9 @@ class Dataset(torch.utils.data.Dataset):
         assert 'id' in data.columns, f'{f}: Input DataFrame missing required field id.'
 
         if embedder == 'aac':
-            self.embeddings = embedders.AacEmbedder()(list(data['seq'].values))
+            self.embeddings = AacEmbedder()(list(data['seq'].values))
         elif embedder == 'length':
-            self.embeddings = embedders.LengthEmbedder()(list(data['seq'].values))
+            self.embeddings = LengthEmbedder()(list(data['seq'].values))
         elif embedder == 'plm': # For PLM embeddings, assume embeddings are in the file. 
             self.embeddings = torch.from_numpy(data.drop(columns=['label', 'cluster', 'seq', 'id']).values).to(torch.float32)
         else:

@@ -6,27 +6,19 @@ import re
 import random
 import subprocess
 import os
-from typing import NoReturn, Dict, List
+from typing import NoReturn
+from configparser import ConfigParser
 import sys
 import torch
 import time
-from selenobot.utils import *
-
-# Load information from the configuration file. 
-UNIPROT_DATA_DIR = load_config_paths()['uniprot_data_dir']
-DETECT_DATA_DIR = load_config_paths()['detect_data_dir']
+from selenobot.utils import csv_ids
 
 def setup_train_test_val(
-    all_data_path:str=None,
-    all_embeddings_path:str=None,
-    train_path:str=None,
-    test_path:str=None,
-    val_path:str=None,
+    config:ConfigParser,
     train_size:int=None,
     test_size:int=None,
     val_size:int=None,
-    use_existing_clstr_file:bool=True,
-    clstr_file_path:str=os.path.join(UNIPROT_DATA_DIR, 'all_data.clstr')) -> NoReturn:
+    use_existing_clstr_file:bool=True) -> ConfigParser:
     '''Splits the data stored in the input path into a train set, test set, and validation set. These sets are disjoint.
     
     args:
@@ -35,43 +27,44 @@ def setup_train_test_val(
         - train_path, test_path, val_path: Paths to the training, test, and validation datasets. 
         - train_size, test_size, val_size: Sizes of the training, test, and validation datasets. 
     '''
-    f = 'setup.setup_train_test_val'
-    assert (train_size > test_size) and (test_size >= val_size), f'{f}: Expected size order is train_size > test_size >= val_size.'
+    assert (train_size > test_size) and (test_size >= val_size), 'setup.data.detect: Expected size order is train_size > test_size >= val_size.'
 
     # Read in the data, and convert sizes to integers. The index column is gene IDs.
+    all_data_path = config['paths']['all_data_path']
     all_data = pd_from_fasta(all_data_path, set_index=False)
 
-    # This takes too much memory. Will need to do this in chunks. 
-    # all_data = all_data.merge(pd.read_csv(all_embeddings_path), on='id')
-    # print(f'{f}: Successfully added embeddings to the dataset.') 
-    
-    # Run CD-HIT on the data stored at the given path, or load an existing clstr_file. .
-    clstr_data = pd_from_clstr(clstr_file_path) if use_existing_clstr_file else run_cd_hit(all_data_path, l=MIN_SEQ_LENGTH - 1, n=5) 
+    # Run CD-HIT on the data stored at the given path, or load an existing clstr_file.
+    clstr_file_path = os.path.join(config['paths']['uniprot_data_dir'], 'all_data.clstr')
+    clstr_data = pd_from_clstr(clstr_file_path) if use_existing_clstr_file else run_cd_hit(all_data_path, l=int(config['setup']['min_seq_length']) - 1, n=5) 
     clstr_data_size = len(clstr_data)
 
-    # TODO: Switch over to indices rather than columns, which is faster. 
     # Add the cluster information to the data. 
     all_data = all_data.merge(cluster_data, on='id')
-    print(f'{f}: Successfully added homology cluster information to the dataset.') 
-
     all_data, train_data = sample_homology(all_data, size=len(all_data) - train_size)
     val_data, test_data = sample_homology(all_data, size=val_size)
     
-    assert len(train_data) + len(val_data) + len(test_data) == len(clstr_data), f'{f}: Expected {clstr_data_size} sequences present after partitioning, but got {len(train_data) + len(val_data) + len(test_data)}.'
+    assert len(train_data) + len(val_data) + len(test_data) == len(clstr_data), f'setup.data.detect: Expected {clstr_data_size} sequences present after partitioning, but got {len(train_data) + len(val_data) + len(test_data)}.'
+
+    train_path = os.path.join(config['paths']['detect_data_dir'], 'train.csv')
+    test_path = os.path.join(config['paths']['detect_data_dir'], 'test.csv')
+    val_path = os.path.join(config['paths']['detect_data_dir'], 'val.csv')
 
     for data, path in zip([train_data, test_data, val_data], [train_path, test_path, val_path]):
         # Add labels to the DataFrame based on whether or not the gene_id contains a bracket.
         data['label'] = [1 if '[' in gene_id else 0 for gene_id in data.index]
         data.to_csv(path, index=False)
-        print(f'{f}: Data successfully written to {path}.')
-        add_embeddings_to_file(path, all_embeddings_path)
+        print(f'setup.data.detect: Data successfully written to {path}.')
+        add_embeddings_to_file(path, config['paths']['embeddings_path'])
+        # Add the information to the config file. 
+        config['paths'][os.path.basename(path).replace('.csv', '') + '_path'] = path
+
+    return config
 
 
-def add_embeddings_to_file(path:str, embeddings_path:str, chunk_size:int=1000):
-    '''Adding embedding information to a CSV file.'''
-    f = 'setup.add_embeddings_to_file'
+def add_embeddings_to_file(filename, config, chunk_size:int=1000):
+    '''Add embedding information to a CSV file stored in the detect data directory.'''
 
-    embeddings_ids = csv_ids(embeddings_path)
+    embeddings_ids = csv_ids(config['paths']['embeddings_path'])
     reader = pd.read_csv(path, index_col=['id'], chunksize=chunk_size)
     tmp_file_path = os.path.join(os.path.dirname(path), 'tmp.csv')
 
@@ -102,8 +95,7 @@ def sample_homology(data:pd.DataFrame, size:int=None):
         - cluster_data: A pandas DataFrame mapping the gene ID to cluster number. 
         - size: The size of the first group, which must also be the smaller group. 
     '''
-    f = 'setup.sample_homology'
-    assert (len(data) - size) >= size, f'{f}: The size argument must specify the smaller partition. Provided arguments are len(clusters)={len(data)} and size={size}.'
+    assert (len(data) - size) >= size, f'setup.data.detect: The size argument must specify the smaller partition. Provided arguments are len(clusters)={len(data)} and size={size}.'
 
     groups = {'sample':[], 'remainder':[]} # First group is smaller.
     curr_size = 0 # Keep track of how big the sample is, without concatenating DataFrames just yet. 
@@ -123,10 +115,10 @@ def sample_homology(data:pd.DataFrame, size:int=None):
             add_to = 'sample'
 
     sample, remainder = pd.concat(groups['sample']), pd.concat(groups['remainder'])
-    assert len(sample) + len(remainder) == len(data), f"{f}: The combined sizes of the partitions do not add up to the size of the original data."
-    assert len(sample) < len(remainder), f'{f}: The sample DataFrame should be smaller than the remainder DataFrame.'
+    assert len(sample) + len(remainder) == len(data), f"setup.data.detect:: The combined sizes of the partitions do not add up to the size of the original data."
+    assert len(sample) < len(remainder), f'setup.data.detect: The sample DataFrame should be smaller than the remainder DataFrame.'
 
-    print(f'{f}: Collected homology-controlled sample of size {len(sample)} ({np.round(len(sample)/len(data), 2) * 100} percent of the input dataset).')
+    print(f'setup.data.detect: Collected homology-controlled sample of size {len(sample)} ({np.round(len(sample)/len(data), 2) * 100} percent of the input dataset).')
     return sample, remainder
 
 
@@ -150,23 +142,17 @@ def run_cd_hit(fasta_file_path:str, c:float=0.8, l:int=1, n:int=2) -> pd.DataFra
     return pd_from_clstr(os.path.join(directory, filename + '.clstr'))
 
 
-def setup_detect():
-    '''Creates a dataset for the detection classification task, which involves determining
-    whether a protein, truncated or not, is a selenoprotein. The data consists of truncated and
-    non-truncated selenoproteins, as well as a number of normal full-length proteins equal to all 
-    selenoproteins.'''
+def setup_detect(config:ConfigParser, split=(0.8, 0.6)) -> ConfigParser:
+    '''Creates training, test, and validation datasets for the selenoprotein detection task.'''
     
-    all_data_size = fasta_size(os.path.join(UNIPROT_DATA_DIR, 'all_data.fasta'))
+    all_data_size = fasta_size(config['paths']['all_data_path'])
 
-    train_size = int(0.8 * all_data_size)
+    train_size = int(split[0] * all_data_size)
     test_size = int(0.6 * (all_data_size - train_size)) # Making sure test_size is larger than val_size.
     val_size = all_data_size - train_size - test_size
     sizes = {'train_size':train_size, 'test_size':test_size, 'val_size':val_size}
 
     # train_data, test_data, and val_data should have sequence information. 
-    setup_train_test_val(
-        all_data_path=os.path.join(UNIPROT_DATA_DIR, 'all_data.fasta'),
-        all_embeddings_path=os.path.join(UNIPROT_DATA_DIR, 'all_embeddings.csv'),
-        test_path=os.path.join(DETECT_DATA_DIR, 'test.csv'),
-        train_path=os.path.join(DETECT_DATA_DIR, 'train.csv'),
-        val_path=os.path.join(DETECT_DATA_DIR, 'val.csv'), **sizes)
+    config = setup_train_test_val(config, **sizes)
+
+    return config

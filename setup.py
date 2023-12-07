@@ -1,6 +1,7 @@
-from setuptools import setup, find_packages
+import setuptools
+from selenobot.setup import setup
 
-setup(
+setuptools.setup(
     name='selenobot',
     # version='0.1',    
     description='Tool which uses protein language models to detect erroneous truncation of selenoproteins',
@@ -8,9 +9,6 @@ setup(
     author='Philippa Richter',
     author_email='prichter@caltech.edu',
     packages=['selenobot'],
-    install_requires=find_packages(exclude=['selenobot']))
-
-
-
+    install_requires=setuptools.find_packages(exclude=['selenobot', 'selenobot.setup', 'selenobot.setup.data', 'selenobot.plot']))
 
 

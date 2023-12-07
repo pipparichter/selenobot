@@ -1,6 +1,6 @@
 '''A binary classification head and associated utilities, designed for handling embedding objects.'''
-from dataset import Dataset
-from reporter import TestReporter, TrainReporter
+from selenobot.dataset import Dataset
+from selenobot.reporter import TestReporter, TrainReporter
 
 from tqdm import tqdm
 from typing import Optional, NoReturn, Tuple, List

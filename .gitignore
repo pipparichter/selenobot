@@ -9,9 +9,11 @@
 **/*.tsv
 **/*.pth
 **/.faa
+**/.pyc
 **/data/gtdb/**
 **/data/gtdb/
 .vscode/
 **/.ipynb_checkpoints/
 **/__pycache__
 **/selenobot.egg-info
+selenobot-local.cfg
