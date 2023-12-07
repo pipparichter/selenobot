@@ -9,6 +9,6 @@ setuptools.setup(
     author='Philippa Richter',
     author_email='prichter@caltech.edu',
     packages=['selenobot'],
-    install_requires=setuptools.find_packages(exclude=['selenobot', 'selenobot.setup', 'selenobot.setup.data', 'selenobot.plot']))
+    install_requires=setuptools.find_packages(exclude=['selenobot', 'setup', 'setup.data', 'selenobot.plot']))
 
 

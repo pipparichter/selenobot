@@ -14,7 +14,6 @@ from selenobot.setup.data.uniprot import setup_uniprot
 PROJECT_DIR = os.getcwd()
 CONFIG_FILE_PATH = os.path.join(PROJECT_DIR, 'selenobot.cfg')
 
-
 # UNIPROT VERSION 2023 3
 # GTDB VERSION r207
 
@@ -44,26 +43,6 @@ def download_file(filename:str, directory:str, config:ConfigParser) -> ConfigPar
     return config
 
 
-def download(config:ConfigParser) -> ConfigParser:
-    '''Download all necessary files, and add relevant paths to the configuration file. 
-    This must be run after setup_data_directory, as it relies on the information in the config file, 
-    as well as the presence of an existing directory structure.'''
-
-    uniprot_data_dir = config['paths']['uniprot_data_dir']
-    gtdb_data_dir = config['paths']['gtdb_data_dir']
-
-    # Download all necessary files to the uniprot subdirectory. 
-    config = download_file('embeddings.csv', uniprot_data_dir, config)
-    config = download_file('sec.fasta', uniprot_data_dir, config)
-    config = download_file('sprot.fasta', uniprot_data_dir, config)
-    # Download all necessary files to the gtdb subdirectory. 
-    config = download_file('archaea_tree.txt', gtdb_data_dir, config)
-    config = download_file('bacteria_tree.txt', gtdb_data_dir, config)
-    config = download_file('archaea_metadata.tsv', gtdb_data_dir, config)
-    config = download_file('bacteria_metadata.tsv', gtdb_data_dir, config)
-
-    return config 
-
 def setup_data_directory(data_dir:str, config:ConfigParser=None) -> ConfigParser:
     '''Set up the data directory structure, starting from the specified root directory.'''
 
@@ -91,7 +70,18 @@ def setup(data_dir, cdhit='/home/prichter/cd-hit-v4.8.1-2019-0228/cd-hit'):
     config['cdhit'] = {'cdhit_min_seq_length':'6', 'cdhit_sequence_similarity':'0.8', 'cdhit_word_length':'5', 'cdhit':cdhit}
 
     config = setup_data_directory(data_dir, config=config)
-    config = download(config)
+    uniprot_data_dir = config['paths']['uniprot_data_dir']
+    gtdb_data_dir = config['paths']['gtdb_data_dir']
+
+    # Download all necessary files to the uniprot subdirectory. 
+    config = download_file('embeddings.csv', uniprot_data_dir, config)
+    config = download_file('sec.fasta', uniprot_data_dir, config)
+    config = download_file('sprot.fasta', uniprot_data_dir, config)
+    # Download all necessary files to the gtdb subdirectory. 
+    config = download_file('archaea_tree.txt', gtdb_data_dir, config)
+    config = download_file('bacteria_tree.txt', gtdb_data_dir, config)
+    config = download_file('archaea_metadata.tsv', gtdb_data_dir, config)
+    config = download_file('bacteria_metadata.tsv', gtdb_data_dir, config)
 
     config = setup_uniprot(config)
     config = setup_detect(config)
