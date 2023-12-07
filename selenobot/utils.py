@@ -22,15 +22,15 @@ def load_config() -> Dict[str, Dict[str, str]]:
     return config._sections # This gets everything as a dictionary. 
 
 
-def load_config_setup():
-    '''Loads everything under the setup flag, making sure to cast the relevant CD-HIT parameters
-    to floats or integers, depending. Assumes all parameters are present.'''
-    setup = load_config()['setup']
-    # Cast the non-string parametes to int and float.
-    setup['cdhit_min_seq_length'] = int(setup['cdhit_min_seq_length'])
-    setup['cdhit_word_length'] = int(setup['cdhit_word_length'])
-    setup['cdhit_sequence_similarity'] = float(setup['cdhit_sequence_similarity'])
-    return setup
+# def load_config_setup():
+#     '''Loads everything under the setup flag, making sure to cast the relevant CD-HIT parameters
+#     to floats or integers, depending. Assumes all parameters are present.'''
+#     setup = load_config()['setup']
+#     # Cast the non-string parametes to int and float.
+#     setup['cdhit_min_seq_length'] = int(setup['cdhit_min_seq_length'])
+#     setup['cdhit_word_length'] = int(setup['cdhit_word_length'])
+#     setup['cdhit_sequence_similarity'] = float(setup['cdhit_sequence_similarity'])
+#     return setup
 
 
 def load_config_paths() -> Dict[str, str]:

@@ -6,6 +6,7 @@ import typing
 from time import perf_counter
 import requests
 import numpy as np
+import argparse
 
 from selenobot.setup.data.detect import setup_detect
 from selenobot.setup.data.uniprot import setup_uniprot
@@ -92,6 +93,11 @@ def setup(data_dir, cdhit='/home/prichter/cd-hit-v4.8.1-2019-0228/cd-hit'):
 
 
 if __name__ == '__main__':
-    setup('/home/prichter/test/')
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('data_dir', type=str, help='Specifies the path of the data directory.')
+    parser.add_argument('--cdhit', type=str, help='Path to the cdhit command.', default='~')
+    args = parser.parse_args()
+    
+    setup(args.data_dir, cdhit=args.cdhit)
 
