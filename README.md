@@ -11,7 +11,7 @@ This repository contains code which handles the selenoprotein "detection" task. 
 
 ## Requirements
 
-Prior to installing `selenobot`, you must have a version of Python, as well as Miniconda or Anaconda to manage the Python environment. For performing homology clustering on the sequence data, you must also have the CD-HIT tool installed. This software can be downloaded at [this link](https://sites.google.com/view/cd-hit). 
+Prior to installing `selenobot`, you must have a version of Python, as well as Miniconda or Anaconda to manage the Python environment. For performing homology clustering on the sequence data, you must also have the CD-HIT (V 4.8.1) tool installed. This software can be downloaded at [this link](https://sites.google.com/view/cd-hit). 
 
 ## Installation
 
@@ -32,7 +32,7 @@ cd selenobot # Important so that the directory structure is properly set up.
 pip install . 
 ```
 
-Once the package has been installed, you must set up the datasets for classifier training, testing, and validation. The scripts for doing this are contained in the `setup` subdirectory. To initiate setup, simply run the following lines in the terminal. These lines download the training data from a [Google Cloud bucket]('https://storage.googleapis.com/selenobot-data/'), and organize the data directory structure. It also sets up the `selenobot.cfg` file, which contains the paths to locally-stored data files, as well as settings for the CD-HIT clustering program. 
+Once the package has been installed, you must set up the datasets for classifier training, testing, and validation. The scripts for doing this are contained in the `setup` subdirectory. To initiate setup, simply run the following lines in the terminal. These lines download the training data from a [Google Cloud bucket](https://storage.googleapis.com/selenobot-data/), and organize the data directory structure. It also sets up the `selenobot.cfg` file, which contains the paths to locally-stored data files, as well as settings for the CD-HIT clustering program. 
 
 ```
 cd setup

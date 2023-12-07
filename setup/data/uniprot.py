@@ -49,7 +49,7 @@ def setup_sprot(config:ConfigParser) -> ConfigParser:
         pd_to_fasta(sprot_data, path=config['paths']['sprot_path'])
 
 
-def setup_uniprot(config:ConfigParser) -> ConfigParser:
+def setup(config:ConfigParser) -> ConfigParser:
     '''Set up all data in the uniprot subdirectory, and modify the configuration file to contain the new file paths.'''
     
     # Setup the file of truncated selenoproteins. 

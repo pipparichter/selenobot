@@ -142,7 +142,7 @@ def run_cd_hit(fasta_file_path:str, c:float=0.8, l:int=1, n:int=2) -> pd.DataFra
     return pd_from_clstr(os.path.join(directory, filename + '.clstr'))
 
 
-def setup_detect(config:ConfigParser, split=(0.8, 0.6)) -> ConfigParser:
+def setup(config:ConfigParser, split=(0.8, 0.6)) -> ConfigParser:
     '''Creates training, test, and validation datasets for the selenoprotein detection task.'''
     
     all_data_size = fasta_size(config['paths']['all_data_path'])

@@ -13,7 +13,7 @@ class Reporter():
         self.loss_metrics = {}
         self.acc_metrics = {}
 
-    def add(self, value:float=None, metric:str=None, group:dict=None):
+    def add(self, value:float=None, metric:str=None, group:Dict[str, float]=None):
         '''Add a value under the specified metric in the internal list given by 
         the 'group' keyword argument.
         
