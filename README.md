@@ -32,6 +32,9 @@ cd selenobot # Important so that the directory structure is properly set up.
 pip install . 
 ```
 
+## Downloading data
+**This step is only necessary if you want to re-train the `Classifiers` on the training data. For loading pre-trained model weights, see the Usage section.**
+
 Once the package has been installed, you must set up the datasets for classifier training, testing, and validation. The scripts for doing this are contained in the `setup` subdirectory. To initiate setup, simply run the following lines in the terminal. These lines download the training data from a [Google Cloud bucket](https://storage.googleapis.com/selenobot-data/), and organize the data directory structure. It also sets up the `selenobot.cfg` file, which contains the paths to locally-stored data files, as well as settings for the CD-HIT clustering program. 
 
 ```
@@ -39,9 +42,10 @@ cd setup
 python main.py DATA_DIR --cdhit CDHIT
 ```
 
-`DATA_DIR` is an absolute path specifying the location where the data will be stored. 
-`CDHIT` is the absolute path to the CD-HIT command. If unspecified, it is assumed that the program is installed in the user's home directory.
+`DATA_DIR` is an absolute path specifying the location where the data will be stored. `CDHIT` is the absolute path to the CD-HIT command. If unspecified, it is assumed that the program is installed in the user's home directory.
 
 ## Usage
+
+
 
 

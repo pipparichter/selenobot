@@ -2,6 +2,7 @@
 import numpy as np
 import pandas as pd
 from typing import List, NoReturn, Tuple, Dict
+import pickle
 
 
 class Reporter():
@@ -25,6 +26,12 @@ class Reporter():
         if metric not in group:
             group[metric] = []
         group[metric].append(value)
+
+    def save(self, path):
+        '''Pickles the object and saves at the specified path.'''
+        with open(reporter_path, 'wb') as f:
+            pickle.dump(train_reporter, f)
+
 
 
 class TrainReporter(Reporter):

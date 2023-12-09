@@ -193,6 +193,10 @@ class Classifier(torch.nn.Module):
         
         return reporter
 
+    def save(self, path:str):
+        '''Save the model weights to the specified path.'''
+        torch.save(self.state_dict(), path)
+
 
 class SimpleClassifier(Classifier):
     '''Class defining a simplified version of the binary classification head.'''

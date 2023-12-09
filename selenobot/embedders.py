@@ -25,17 +25,13 @@ class Embedder():
         pass
 
 
-# TODO: Probably want to work Josh's code in here. 
-class PlmEmbedder(Embedder):
-    pass
-
-
 class LengthEmbedder():
 
     def __init__(self):
         '''Initializes a LengthEmbedder object.'''
         # There is no tokenizer in this case, so leave it as the default None. 
         super(LengthEmbedder, self).__init__()
+        self.type = 'len'
 
     def __call__(self, data):
         '''Takes a list of amino acid sequences, and produces a PyTorch tensor containing the lengths
@@ -50,6 +46,7 @@ class AacEmbedder(Embedder):
     def __init__(self):
         '''Initializes an AacEmbedder object.'''
         super(AacEmbedder, self).__init__()
+        self.type = 'aac'
 
     def __call__(self, data:List[str]) -> torch.Tensor:
         '''Takes a list of amino acid sequences, and produces a PyTorch tensor containing the lengths
@@ -78,6 +75,9 @@ class AacEmbedder(Embedder):
 
         # encoded_seqs is now a 2D list. Convert to a tensor so it works as a model input. 
         return torch.Tensor(embs).to(torch.float32)
+
+    def __str__(self):
+        return 'aac'
 
 
 

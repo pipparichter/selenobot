@@ -76,7 +76,7 @@ def fasta_ids(path):
 def csv_ids(path):
     '''Extract all gene IDs stored in a CSV file.'''
     df = pd.read_csv(path, usecols=['id']) # Only read in the ID values. 
-    return np.ravel(df.values)
+    return np.ravel(df['id'].values)
 
 
 def csv_labels(path):
@@ -145,7 +145,8 @@ def pd_to_fasta(df, path=None, textwidth=80):
     assert df.index.name == 'id', 'setup.pd_to_fasta: Gene ID must be set as the DataFrame index before writing.'
 
     fasta = ''
-    for row in tqdm(df.itertuples(), desc='utils.df_to_fasta', total=len(df)):
+    # for row in tqdm(df.itertuples(), desc='utils.df_to_fasta', total=len(df)):
+    for row in df.itertuples():
         fasta += '>|' + str(row.Index) + '|\n'
 
         # Split the sequence up into shorter, sixty-character strings.

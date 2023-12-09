@@ -11,7 +11,7 @@ from configparser import ConfigParser
 import sys
 import torch
 import time
-from selenobot.utils import csv_ids
+from selenobot.utils import csv_ids, fasta_size, pd_from_fasta, pd_from_clstr, csv_size
 
 def setup_train_test_val(
     config:ConfigParser,
@@ -35,15 +35,16 @@ def setup_train_test_val(
 
     # Run CD-HIT on the data stored at the given path, or load an existing clstr_file.
     clstr_file_path = os.path.join(config['paths']['uniprot_data_dir'], 'all_data.clstr')
-    clstr_data = pd_from_clstr(clstr_file_path) if use_existing_clstr_file else run_cd_hit(all_data_path, l=int(config['setup']['min_seq_length']) - 1, n=5) 
+    # clstr_data = pd_from_clstr(clstr_file_path) if use_existing_clstr_file else run_cdhit(all_data_path, l=int(config['setup']['min_seq_length']) - 1, n=5) 
+    clstr_data = run_cdhit(all_data_path, cdhit=config['cdhit']['cdhit'], l=int(config['cdhit']['cdhit_min_seq_length']) - 1, n=5) 
     clstr_data_size = len(clstr_data)
 
     # Add the cluster information to the data. 
-    all_data = all_data.merge(cluster_data, on='id')
+    all_data = all_data.merge(clstr_data, on='id')
     all_data, train_data = sample_homology(all_data, size=len(all_data) - train_size)
     val_data, test_data = sample_homology(all_data, size=val_size)
     
-    assert len(train_data) + len(val_data) + len(test_data) == len(clstr_data), f'setup.data.detect: Expected {clstr_data_size} sequences present after partitioning, but got {len(train_data) + len(val_data) + len(test_data)}.'
+    assert len(train_data) + len(val_data) + len(test_data) == len(clstr_data), f'setup.data.detect.setup_train_test_val: Expected {clstr_data_size} sequences present after partitioning, but got {len(train_data) + len(val_data) + len(test_data)}.'
 
     train_path = os.path.join(config['paths']['detect_data_dir'], 'train.csv')
     test_path = os.path.join(config['paths']['detect_data_dir'], 'test.csv')
@@ -51,34 +52,38 @@ def setup_train_test_val(
 
     for data, path in zip([train_data, test_data, val_data], [train_path, test_path, val_path]):
         # Add labels to the DataFrame based on whether or not the gene_id contains a bracket.
-        data['label'] = [1 if '[' in gene_id else 0 for gene_id in data.index]
+
+        data['label'] = [1 if '[' in gene_id else 0 for gene_id in data.id]
         data.to_csv(path, index=False)
-        print(f'setup.data.detect: Data successfully written to {path}.')
-        add_embeddings_to_file(path, config['paths']['embeddings_path'])
+        print(f'setup.data.detect.setup_train_test_val: Data successfully written to {path}.')
+        add_embeddings_to_file(path, config)
         # Add the information to the config file. 
         config['paths'][os.path.basename(path).replace('.csv', '') + '_path'] = path
 
     return config
 
 
-def add_embeddings_to_file(filename, config, chunk_size:int=1000):
+def add_embeddings_to_file(path:str, config:ConfigParser, chunk_size:int=1000) -> NoReturn:
     '''Add embedding information to a CSV file stored in the detect data directory.'''
-
+    # Read the IDs in the embedding file to avoid loading the entire thing into memory. 
     embeddings_ids = csv_ids(config['paths']['embeddings_path'])
+
     reader = pd.read_csv(path, index_col=['id'], chunksize=chunk_size)
+
+    # Use a temporary file to write the embeddings to avoid altering the file at 'path' (either train.csv, test.csv, or val.csv)
     tmp_file_path = os.path.join(os.path.dirname(path), 'tmp.csv')
 
     is_first_chunk = True
     n_chunks = csv_size(path) // chunk_size + 1
-    for chunk in tqdm(reader, desc=f'{f}: adding embeddings to {path}.', total=n_chunks):
+    for chunk in tqdm(reader, desc='setup.data.detect.add_embeddings_to_file', total=n_chunks):
         # Get the indices of the embedding rows corresponding to the data chunk.
         idxs = np.where(np.isin(embeddings_ids, chunk.index, assume_unique=True))[0] + 1 # Make sure to shift the index up by one to include the header. 
         idxs = [0] + list(idxs) # Add the header index for merging. 
 
-        chunk = chunk.merge(pd.read_csv(embeddings_path, skiprows=lambda i : i not in idxs), on='id', how='inner')
+        chunk = chunk.merge(pd.read_csv(config['paths']['embeddings_path'], skiprows=lambda i : i not in idxs), on='id', how='inner')
 
         # Subtract 1 from len(idxs) to account for the header row.
-        assert len(chunk) == (len(idxs) - 1), f'{f}: Data was lost while merging embedding data.'
+        assert len(chunk) == (len(idxs) - 1), f'setup.data.detect.add_embeddings_to_file: Data was lost while merging embedding data.'
         
         chunk.to_csv(tmp_file_path, header=is_first_chunk, mode='w' if is_first_chunk else 'a') # Only write the header for the first file. 
         is_first_chunk = False
@@ -95,7 +100,7 @@ def sample_homology(data:pd.DataFrame, size:int=None):
         - cluster_data: A pandas DataFrame mapping the gene ID to cluster number. 
         - size: The size of the first group, which must also be the smaller group. 
     '''
-    assert (len(data) - size) >= size, f'setup.data.detect: The size argument must specify the smaller partition. Provided arguments are len(clusters)={len(data)} and size={size}.'
+    assert (len(data) - size) >= size, f'setup.data.detect.sample_homology: The size argument must specify the smaller partition. Provided arguments are len(clusters)={len(data)} and size={size}.'
 
     groups = {'sample':[], 'remainder':[]} # First group is smaller.
     curr_size = 0 # Keep track of how big the sample is, without concatenating DataFrames just yet. 
@@ -103,7 +108,7 @@ def sample_homology(data:pd.DataFrame, size:int=None):
     ordered_clusters = data.groupby('cluster').size().sort_values(ascending=False).index # Sort the clusters in descending order of size. 
 
     add_to = 'sample'
-    for cluster in tqdm(ordered_clusters, desc=f):
+    for cluster in tqdm(ordered_clusters, desc='setup.data.detect.sample_homology'):
         # If we check for the larger size, it's basically the same as adding to each group in an alternating way, so we need to check for smaller size first.
         cluster = data[data.cluster == cluster]
         if add_to == 'sample' and curr_size < size:
@@ -115,14 +120,14 @@ def sample_homology(data:pd.DataFrame, size:int=None):
             add_to = 'sample'
 
     sample, remainder = pd.concat(groups['sample']), pd.concat(groups['remainder'])
-    assert len(sample) + len(remainder) == len(data), f"setup.data.detect:: The combined sizes of the partitions do not add up to the size of the original data."
-    assert len(sample) < len(remainder), f'setup.data.detect: The sample DataFrame should be smaller than the remainder DataFrame.'
+    assert len(sample) + len(remainder) == len(data), f'setup.data.detect.sample_homology: The combined sizes of the partitions do not add up to the size of the original data.'
+    assert len(sample) < len(remainder), f'setup.data.detect.sample_homology: The sample DataFrame should be smaller than the remainder DataFrame.'
 
-    print(f'setup.data.detect: Collected homology-controlled sample of size {len(sample)} ({np.round(len(sample)/len(data), 2) * 100} percent of the input dataset).')
+    print(f'setup.data.detect.sample_homology: Collected homology-controlled sample of size {len(sample)} ({np.round(len(sample)/len(data), 2) * 100} percent of the input dataset).')
     return sample, remainder
 
 
-def run_cd_hit(fasta_file_path:str, c:float=0.8, l:int=1, n:int=2) -> pd.DataFrame:
+def run_cdhit(fasta_file_path:str, cdhit:str=None, c:float=0.8, l:int=1, n:int=2) -> pd.DataFrame:
     '''Run CD-HIT on the FASTA file stored in the input path, generating the homology-based sequence similarity clusters.
     
     args:
@@ -135,7 +140,7 @@ def run_cd_hit(fasta_file_path:str, c:float=0.8, l:int=1, n:int=2) -> pd.DataFra
     # assert (min([len(seq) for seq in fasta_seqs(path)])) > l, 'Minimum sequence length {l + 2} is longer than the shortest sequence.'
     directory, filename = os.path.split(fasta_file_path)
     filename = filename.split('.')[0] # Remove the extension from the filename. 
-    subprocess.run(f"{CD_HIT} -i {fasta_file_path} -o {os.path.join(directory, filename)} -c {c} -l {l} -n {n}", shell=True, check=True) # Run CD-HIT.
+    subprocess.run(f"{cdhit} -i {fasta_file_path} -o {os.path.join(directory, filename)} -c {c} -l {l} -n {n}", shell=True, check=True) # Run CD-HIT.
     subprocess.run(f'rm {os.path.join(directory, filename)}', shell=True, check=True) # Remove the output file with the cluster reps. 
 
     # Load the clstr data into a DataFrame and return. 

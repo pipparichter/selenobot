@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import torch
 import torch.utils.data
-from selenobot.embedders import LengthEmbedder, AacEmbedder
+from selenobot.embedders import Embedder
 from typing import List
 import subprocess
 import time
@@ -12,12 +12,10 @@ import time
 # device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 def get_dataloader(
-        path:str, 
-        batch_size:int=16,
-        embedder:str=None,
+        dataser:Datasetr, 
+        batch_size:int=1024,
         balance_batches:bool=True,
-        selenoprotein_fraction:float=0.5,
-        verbose:bool=True) -> torch.utils.data.DataLoader:
+        selenoprotein_fraction:float=0.5) -> torch.utils.data.DataLoader:
     '''Create a DataLoader from a CSV of embedding data.
     
     args:
@@ -27,12 +25,8 @@ def get_dataloader(
         - balance_batches: Whether or not to use the BalancedBatchSampler.
         - selenoprotein_fraction: A number between 0 and 1. Specifies the proportion of selenoproteins in each batch. 
         - verbose: Whether or not to print out assorted runtime things. 
-
     '''
-    f = 'dataset.get_dataloader'
-    # Collect all the information into a single pandas DataFrame. Avoid loading all embeddings if not needed.
-    data = pd.read_csv(path, usecols=None if embedder == 'plm' else ['seq', 'label', 'id'])
-    dataset = Dataset(data, embedder=embedder)
+
 
     if balance_batches:
         # Providing batch_sampler will override batch_size, shuffle, sampler, and drop_last altogether.
@@ -41,34 +35,25 @@ def get_dataloader(
     else:
         return torch.utils.data.DataLoader(dataset, shuffle=True, batch_size=batch_size)
 
-# def get_low_memory_dataloader
-
 
 class Dataset(torch.utils.data.Dataset):
     '''A map-style dataset which provides easy access to sequence, label, and embedding data via the 
     overloaded __getitem__ method.'''
     
-    def __init__(self, data:pd.DataFrame, embedder:str=None):
-        '''Initializes a Dataset from a pandas DataFrame containing embeddings and labels.
-        
-        args:
-            - data: A pandas DataFrame loaded from the data/detect subdirectory. 
-            - embedder: One of length, aac, or plm. Specifies the embedding method used.
-        '''
-        f = 'dataset.Dataset.__init__'
-        if embedder is not None:
-            assert 'seq' in data.columns, f'{f}: Input DataFrame missing required field seq.'
-        assert 'label' in data.columns, f'{f}: Input DataFrame missing required field label.'
-        assert 'id' in data.columns, f'{f}: Input DataFrame missing required field id.'
+    def __init__(self, data:pd.DataFrame, embedder:Embedder=None):
+        '''Initializes a Dataset from a pandas DataFrame containing embeddings and labels.'''
 
-        if embedder == 'aac':
-            self.embeddings = AacEmbedder()(list(data['seq'].values))
-        elif embedder == 'length':
-            self.embeddings = LengthEmbedder()(list(data['seq'].values))
-        elif embedder == 'plm': # For PLM embeddings, assume embeddings are in the file. 
+        if embedder is not None:
+            assert 'seq' in data.columns, f'dataset.Dataset.__init__: Input DataFrame missing required field seq.'
+        assert 'label' in data.columns, f'dataset.Dataset.__init__: Input DataFrame missing required field label.'
+        assert 'id' in data.columns, f'dataset.Dataset.__init__: Input DataFrame missing required field id.'
+
+        if embedder is not None:
+            self.embeddings = embedder(list(data['seq'].values))
+            self.type = embedder.type # Type of data contained by the Dataset.
+        else: # This means that the embeddings are already in the DataFrame (or at least, they should be)
+            self.type = 'plm'
             self.embeddings = torch.from_numpy(data.drop(columns=['label', 'cluster', 'seq', 'id']).values).to(torch.float32)
-        else:
-            raise ValueError(f'{f}: Embedder option must be one of aac, plm, or length.')
 
         # Make sure the type of the tensor is the same as model weights.
         self.labels = torch.from_numpy(data['label'].values).type(torch.float32)
