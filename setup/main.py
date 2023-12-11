@@ -14,9 +14,7 @@ import sys
 sys.path.append('./data/')
 import detect, uniprot
 
-# This assumes that this script is being run from the project root directory, so this should be an absolute path to selenobot.
-PROJECT_DIR = os.getcwd()
-CONFIG_FILE_PATH = os.path.join(PROJECT_DIR, 'selenobot.cfg')
+
 
 # UNIPROT VERSION 2023 3
 # GTDB VERSION r207
@@ -139,7 +137,10 @@ def setup(data_dir, cdhit=None):
     config = detect.setup(config)
 
     # Write the configuration file. 
-    with open(CONFIG_FILE_PATH, 'w') as f:
+    # This assumes that this script is being run from the setup directory.
+    # cfg_path = os.path.join(os.dirname(os.getcwd()), 'selenobot.cfg')
+    cfg_path = os.path.join(os.path.expanduser('~'), 'selenobot.cfg')
+    with open(cfg_path, 'w') as f:
         config.write(f)
 
 

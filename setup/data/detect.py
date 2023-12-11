@@ -17,15 +17,14 @@ def setup_train_test_val(
     config:ConfigParser,
     train_size:int=None,
     test_size:int=None,
-    val_size:int=None,
-    use_existing_clstr_file:bool=True) -> ConfigParser:
+    val_size:int=None) -> ConfigParser:
     '''Splits the data stored in the input path into a train set, test set, and validation set. These sets are disjoint.
     
-    args:
-        - all_data_path: A path to a FASTA file containing all the UniProt data used for training, testing, etc. the model.
-        - all_embeddings_path: A path to a CSV file containing the embeddings of each gene in all_data_path, as well as gene IDs.
-        - train_path, test_path, val_path: Paths to the training, test, and validation datasets. 
-        - train_size, test_size, val_size: Sizes of the training, test, and validation datasets. 
+    :param config: The configuaraion file object. 
+    :param train_size: The number of elements in the training set. 
+    :param test_size: The number of elements in the testing set. 
+    :param val_size: The number of elements in the validation set. 
+    :returns: The configuration file object with paths to the trianing, testing, and validation data added. 
     '''
     assert (train_size > test_size) and (test_size >= val_size), 'setup.data.detect: Expected size order is train_size > test_size >= val_size.'
 
