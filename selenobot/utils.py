@@ -142,19 +142,18 @@ def pd_from_fasta(path, set_index=False):
 def pd_to_fasta(df, path=None, textwidth=80):
     '''Convert a pandas DataFrame containing FASTA data to a FASTA file format.'''
 
-    assert df.index.name == 'id', 'setup.pd_to_fasta: Gene ID must be set as the DataFrame index before writing.'
+    assert df.index.name == 'id', 'utils.pd_to_fasta: Gene ID must be set as the DataFrame index before writing.'
 
     fasta = ''
     # for row in tqdm(df.itertuples(), desc='utils.df_to_fasta', total=len(df)):
     for row in df.itertuples():
         fasta += '>|' + str(row.Index) + '|\n'
 
-        # Split the sequence up into shorter, sixty-character strings.
+        # Split the sequence up into shorter, 60-character strings.
         n = len(row.seq)
         seq = [row.seq[i:min(n, i + textwidth)] for i in range(0, n, textwidth)]
-
-        seq = '\n'.join(seq) + '\n'
-        fasta += seq
+        assert ''.join(seq) == n, 'utils.pd_to_fasta: Part of the sequence was lost when splitting into lines.'
+        fasta += '\n'.join(seq) + '\n'
     
     # Write the FASTA string to the path-specified file. 
     write(fasta, path=path)
