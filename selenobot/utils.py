@@ -64,12 +64,12 @@ def get_id(head):
     return head[:end_idx]
 
 
-def fasta_ids(path):
+def fasta_ids(path, get_id_func=get_id):
     '''Extract all gene IDs stored in a FASTA file.'''
     # Read in the FASTA file as a string. 
     fasta = read(path)
     # Extract all the IDs from the headers, and return the result. 
-    ids = [get_id(head) for head in re.findall(r'^>.*', fasta, re.MULTILINE)]
+    ids = [get_id_func(head) for head in re.findall(r'^>.*', fasta, re.MULTILINE)]
     return np.array(ids)
 
 
@@ -126,10 +126,10 @@ def fasta_concatenate(paths, out_path=None):
     pd_to_fasta(df, path=out_path)
 
 
-def pd_from_fasta(path, set_index=False):
+def pd_from_fasta(path, set_index=False, get_id_func=get_id):
     '''Load a FASTA file in as a pandas DataFrame.'''
 
-    ids = fasta_ids(path)
+    ids = fasta_ids(path, get_id_func=get_id_func)
     seqs = fasta_seqs(path)
 
     df = pd.DataFrame({'seq':seqs, 'id':ids})
@@ -142,7 +142,7 @@ def pd_from_fasta(path, set_index=False):
 def pd_to_fasta(df, path=None, textwidth=80):
     '''Convert a pandas DataFrame containing FASTA data to a FASTA file format.'''
 
-    assert df.index.name == 'id', 'utils.pd_to_fasta: Gene ID must be set as the DataFrame index before writing.'
+    # assert df.index.name == 'id', 'utils.pd_to_fasta: Gene ID must be set as the DataFrame index before writing.'
 
     fasta = ''
     # for row in tqdm(df.itertuples(), desc='utils.df_to_fasta', total=len(df)):
@@ -152,7 +152,7 @@ def pd_to_fasta(df, path=None, textwidth=80):
         # Split the sequence up into shorter, 60-character strings.
         n = len(row.seq)
         seq = [row.seq[i:min(n, i + textwidth)] for i in range(0, n, textwidth)]
-        assert ''.join(seq) == n, 'utils.pd_to_fasta: Part of the sequence was lost when splitting into lines.'
+        assert len(''.join(seq)) == n, 'utils.pd_to_fasta: Part of the sequence was lost when splitting into lines.'
         fasta += '\n'.join(seq) + '\n'
     
     # Write the FASTA string to the path-specified file. 

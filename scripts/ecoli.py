@@ -6,10 +6,16 @@ import numpy as np
 from pyopenms.plotting import plot_spectrum # Takes an MSSpectrum as input. 
 import matplotlib.pyplot as plt
 from Bio.Seq import Seq # Has a builtin method for coming up with the complement. 
+from selenobot.utils import pd_from_fasta, pd_to_fasta, fasta_seqs
 # from Bio.Alphabet import generic_dna
+import copy
+from typing import NoReturn, List
+import re
+import subprocess
 
 # NOTE: The genome file is one-indexed, so the start position must be shifted backwards by one. 
 # NOTE: For reverse genes, it seems as though I need to grab the *reverse* complement of the input nucleotide sequence. 
+
 
 # Directory where the mzML files are stored. 
 MZML_PATH = '/home/prichter/Documents/data/selenobot/ecoli/ms/mzml/'
@@ -22,7 +28,8 @@ FORWARD_START_CODONS = ['ATG', 'GTG', 'TTG']
 REVERSE_START_CODONS = ['CAT', 'CAC', 'CAA']
 
 # Known selenoproteins in E. coli, which we do not want to extend. All are formate dehydrogenase-related. 
-KNOWN_SELENOPROTEINS = ['eco:b1474', 'eco:b3894', 'eco:b4079']
+# KNOWN_SELENOPROTEINS = ['eco:b1474', 'eco:b3894', 'eco:b4079']
+KNOWN_SELENOPROTEINS = ['fdoG', 'fdnG', 'fdhF'] # Use the RefSeq IDs. 
 
 
 def has_valid_start_codon(seq, reverse=False):
@@ -41,17 +48,25 @@ def has_valid_stop_codon(seq, reverse=False):
         return seq[-3:] in FORWARD_STOP_CODONS
 
 
-# def check_valid_start_stop_codons(data):
-#     '''Scan all nucleotide sequences in the input DataFrame and confirm each has a valid stop and
-#     start codon. Because of in-frame stop codons following extension, BioPython cannot be used for this.
-#     '''
-#     def check(seq, gene_id, reverse=False):
-#         valid_start = has_valid_start_codon(seq, reverse=reverse)
-#         valid_stop = has_valid_stop_codon(seq, reverse=reverse)
-#         assert valid_start, f'ecoli.check_start_stop_codons: {gene_id} has an invalid start codon.'
-#         assert valid_stop, f'ecoli.check_start_stop_codons: {gene_id} has an invalid stop codon.'
+def check_valid_sequence(seq):
+    '''Check to confirm if a sequence translated from nucleotides in the genome is present in
+    the set of genes in the FASTA file with E. coli genes.'''
+    print(seq)
+    valid_seqs = fasta_seqs(os.path.join(ECOLI_PATH, 'sequences.fasta'))
+    assert seq in valid_seqs, 'ecoli.check_valid_sequence: The input sequence is not present in the E. coli proteome.'
 
-#     data.apply(lambda row : check(row['nt_seq'], row['gene_id'], reverse=row['complement']), axis=1)
+
+def check_valid_start_stop_codons(data):
+    '''Scan all nucleotide sequences in the input DataFrame and confirm each has a valid stop and
+    start codon. Because of in-frame stop codons following extension, BioPython cannot be used for this.
+    '''
+    def check(seq, gene_id, reverse=False):
+        valid_start = has_valid_start_codon(seq, reverse=reverse)
+        valid_stop = has_valid_stop_codon(seq, reverse=reverse)
+        assert valid_start, f'ecoli.check_start_stop_codons: {gene_id} has an invalid start codon.'
+        assert valid_stop, f'ecoli.check_start_stop_codons: {gene_id} has an invalid stop codon.'
+
+    data.apply(lambda row : check(row['nt_seq'], row['gene_id'], reverse=row['complement']), axis=1)
 
 
 def filter_valid_start_stop_codons(data, filter_start=True, filter_stop=True):
@@ -97,44 +112,51 @@ def extend_reverse(start, stop, genome):
     return start, stop # Just return the original start and stop if nothing is found. 
 
 
+def translate(nt_seq, reverse=False):
+    '''Translate a nucleotide sequence, returning the corresponding sequence of amino acids.'''
+    # It's possible that I will need to manually remove the stop codon if I set to_stop=True
+    nt_seq = Seq(nt_seq)
+    assert len(nt_seq) % 3 == 0, 'ecoli.get_amino_acid_sequences: Length of nucleotide sequence is not divisible by 3.'
+    if reverse:
+        nt_seq = nt_seq.reverse_complement()
+    # The cds=True ensures that the sequence is in multiples of 3, and starts with a start codon. 
+    aa_seq = nt_seq.translate(to_stop=False) # Can't set cds=True because it throws an error with in-frame stop codons.  
+    aa_seq = str(aa_seq).replace('*', 'U', 1) # Replace the first in-frame stop with a selenocysteine. 
+    return aa_seq[:-1] # Also remove the asterisk termination character, becayse pyopenms doesn't like it. 
+
+
 # NOTE: Will need to have a special case for complementary genes. 
-def get_extended_nucleotide_sequences(data, genome:str):
+def get_extended_sequences(data:pd.DataFrame, genome:str):
     '''Take a DataFrame containing, at minimum, gene names and start/stop coordinates. Then, find the gene in the input
-    genome and extend it to the next stop codon. Add the extended nucleotide sequence to the DataFrame.'''
+    genome and extend it to the next stop codon. Add the extended sequence to the DataFrame.'''
     seqs, exts, starts, stops = [], [], [], []
     for row in data.itertuples():
+
         # Handle forward and reverse genes differently. Reverse genes indicated by the complement flag. 
         start, stop = extend_forward(row.start, row.stop, genome) if not row.complement else extend_reverse(row.start, row.stop, genome)
+        seq = translate(genome[start:stop], reverse=row.complement)
 
-        seqs.append(genome[start:stop]) # Add the extended sequence to the list. 
+        seqs.append(seq) # Add the extended sequence to the list. 
         exts.append((stop - start) - (row.stop - row.stop)) # Store the amount the sequence was extended by. 
         starts.append(start)
         stops.append(stop)
+
     # Add new info to the DataFrame. 
-    data['nt_seq'], data['nt_ext'], data['start'], data['stop'] = seqs, exts, starts, stops
+    data['seq'], data['ext'], data['start'], data['stop'] = seqs, exts, starts, stops
     return data
 
 
+def get_decoy_sequences(data:pd.DataFrame) -> pd.DataFrame: 
+    '''Generates decoy protein sequences by reversing every original sequence. Returns a DataFrame with both 
+    the original sequences and the original sequences.'''
 
-def get_amino_acid_sequences(data):
+    decoy_data = copy.deepcopy(data)
+    # Reverse each sequence in the database. 
+    decoy_data['seq'] = data.seq.apply(lambda s : s[::-1])
+    # Label all decoys with an asterisk. 
+    decoy_data['gene_id'] = data.gene_id.apply(lambda i : i + '*')
 
-    # Ambiguous codons like TAN or NNN could be an amino acid or a stop codon. These are 
-    # translated as 'X'. 
-
-    def translate(nt_seq, gene_id, reverse=False):
-        # It's possible that I will need to manually remove the stop codon if I set to_stop=True
-        nt_seq = Seq(nt_seq)
-        assert len(nt_seq) % 3 == 0, 'ecoli.get_amino_acid_sequences: Length of nucleotide sequence is not divisible by 3.'
-        if reverse:
-            nt_seq = nt_seq.reverse_complement()
-        # The cds=True ensures that the sequence is in multiples of 3, and starts with a start codon. 
-        aa_seq = nt_seq.translate(to_stop=False) # Can't set cds=True because it throws an error with in-frame stop codons.  
-        aa_seq = str(aa_seq).replace('*', 'U', 1) # Replace the first in-frame stop with a selenocysteine. 
-        return aa_seq[:-1] # Also remove the asterisk termination character, becayse pyopenms doesn't like it. 
-    
-    data['aa_seq'] = data.apply(lambda row : translate(row['nt_seq'], row['gene_id'], reverse=row['complement']), axis=1) 
-
-    return data
+    return pd.concat([data, decoy_data])
 
 
 def load_mzml(filename):
@@ -143,96 +165,94 @@ def load_mzml(filename):
     return mzml
 
 
-def load_genome(path):
+def load_sequences():
+    '''Load the FASTA file containing the E. coli gene sequences. .'''
+    df = pd_from_fasta(os.path.join(ECOLI_PATH, 'sequences.fasta'), get_id_func=lambda h : re.search('gene=([a-zA-Z]+)', h).group(1))
+    df['gene_id'] = df.id
+    return df.drop(columns=['id'])
+
+
+def load_genome():
     '''Load in the complete nucleotide sequence of the genome.'''
-    with open(path, 'r') as f:
+    with open(os.path.join(ECOLI_PATH, 'genome.fasta'), 'r') as f:
         # lines = f.readlines()[1:] # Skip the header line. 
         lines = f.read().splitlines()[1:] # Skip the header line. 
         seq = ''.join(lines)
     return seq
 
 
-def load_predictions(path):
-    ''''''
+def load_predictions(path:str=os.path.join(ECOLI_PATH, 'predictions.csv')) -> List[str]:
+    '''Load in the gene IDs of the proteins predicted to be selenoproteins, excluding the known
+    selenoproteins.'''
     predictions = pd.read_csv(path, usecols=['info'])
-    return [i.split()[0] for i in predictions['info']]
+    # Exclude the known selenoproteins from the list. 
+    return [re.search('\(RefSeq\) ([A-Za-z]+);', i).group(1) for i in predictions['info'] if i not in KNOWN_SELENOPROTEINS]
 
 
-def load_coordinate_data(path):
+def load_coordinate_data(path:str=os.path.join(ECOLI_PATH, 'coordinates.tsv')) -> pd.DataFrame:
     '''Load in the gene coordinates and other metadata as a pandas DataFrame, processing the start and
     stop locations as integers in two separate columns.
     
-    :param path: The path to the gene_coordinates.tsv file, downloaded from the KEGG API. 
-    :return: A DataFrame containing the start and stop coordinates, gene ID, whether or not the gene is a complement, and other metadata. 
+    :param path: The path to the coordinate data. 
+    :return: A DataFrame with columns for start and stop locations and the RefSeq gene ID. 
     '''
 
     data = pd.read_csv(path, sep='\t', names=['gene_id', 'type', 'coords', 'description'])
-    # Filter out everything that is not a coding sequence. Get errors about the stop/start codons otherwise. 
-    data = data[data['type'].str.match('CDS')]
+    data['gene_id'] = data.description.apply(lambda d : d.split(';')[0]) # Replace the current gene IDs with the RefSeq IDs. 
+    data = data[data['type'].str.match('CDS')] # Filter out everything that is not a coding sequence.
+
     # Flag the genes on reverse strands. 
     data['complement'] = ['complement' in c for c in data['coords']]
     # Remove coordinates with "joins" (none of the predicted selenoproteins have this)
     data = data[~data['coords'].str.contains('join')] 
     # Remove complementary(...) from the coords which have it. 
-    data['coords'] = [c.replace('complement(', '').replace(')', '') for c in data['coords']] # Can do this with regex in a much neater way.
+    data['coords'] = [c.replace('complement(', '').replace(')', '') for c in data['coords']] 
     data[['start', 'stop']] = data['coords'].str.split('\.\.', expand=True) # Make sure to escape the dot character so it doesn't think it's a pattern. 
     data[['start', 'stop']] = data[['start', 'stop']].apply(pd.to_numeric) # Convert start and stop to integers. 
     # Shift all starts to be zero-indexed for my sanity...
     data['start'] = data['start'] - 1
 
-    return data.drop(columns=['coords'])
+    return data.drop(columns=['description', 'type', 'coords']) # Drop unnecessary columns. 
 
 
-def build_fasta_database(path=os.path.join(ECOLI_PATH, 'search.fasta')):
+def run_tandem(path:str=os.path.join(ECOLI_PATH, 'ms/mgf/')) -> NoReturn:
+    '''Run X! Tandem on a directory of mgf files.'''
+    for sample in os.listdir(path):
+        sample = sample.replace('.mgf', '') # Remove the file extension. 
+        # Read in the input.xml template file, and fill in the sample name. 
+        with open('input.xml', 'r') as f:
+            input_xml = f.read().format(sample=sample)
+        with open('tmp.xml', 'w') as f:
+            f.write(input_xml)
+        
+        cmd = '/home/prichter/tandem-linux-17-02-01-4/bin/tandem.exe'
+        subprocess.run([cmd, 'tmp.xml'])
+        # Remove the temporary input.xml file. 
+        subprocess.run(['rm', 'tmp.xml'])
+
+
+
+def build_fasta_database(path=os.path.join(ECOLI_PATH, 'search.fasta')) -> NoReturn:
     
-    genome = load_genome(os.path.join(ECOLI_PATH, 'genome.fasta'))
-    predictions = load_predictions(os.path.join(ECOLI_PATH, 'predictions.csv'))
-    
-    data = load_coordinate_data(os.path.join(ECOLI_PATH, 'coordinates.tsv'))
-    # Grab the information about the predicted selenoproteins only. 
-    data = data[data['gene_id'].isin(predictions)]
-    data = data[~data['gene_id'].isin(KNOWN_SELENOPROTEINS)] # Remove known selenos. 
+    genome = load_genome()
 
-    data = get_extended_nucleotide_sequences(data, genome)
-    data = filter_valid_start_stop_codons(data)
-    # check_valid_start_stop_codons(data)
-    data = get_amino_acid_sequences(data)
+    # Grab the coordingate information about the predicted selenoproteins only. 
+    data = load_coordinate_data()
+    data = data[data['gene_id'].isin(load_predictions())]
+    data = get_extended_sequences(data, genome)
 
-    fasta = ''
-    for row in data.itertuples():
-        metadata = [row.gene_id]
-        metadata.append('forward' if not row.complement else 'reverse')
-        metadata.append(f'({row.start}..{row.stop})')
-        # metadata.append(row.description)
+    # Combine the extended sequences with the original data. 
+    data = pd.concat([load_sequences(), data[['seq', 'gene_id']]])
+    # Add the decoy sequences. 
+    data = get_decoy_sequences(data)
 
-        fasta += '>|'  +'|'.join(metadata) + '|\n'
-
-        # Split the sequence up into shorter, 80-character strings.
-        n = len(row.aa_seq)
-        aa_seq = [row.aa_seq[i:min(n, i + 80)] for i in range(0, n, 80)]
-        assert len(''.join(aa_seq)) == n, f"ecoli.build_fasta_database: {len(''.join(aa_seq)) - n} amino acids in a sequence were lost when splitting into lines."
-        fasta += '\n'.join(aa_seq) + '\n'
-
-    with open(path, 'w') as f:
-        f.write(fasta)
+    pd_to_fasta(data.set_index('gene_id'), path)
 
 
 if __name__ == '__main__':
     
-    build_fasta_database()
-    protein_ids, peptide_ids = [], []
-
-
-    search_path, mzml_path = os.path.join(ECOLI_PATH, 'search.fasta'), os.path.join(MZML_PATH, 'A14-07017.mzML')
-
-    # exp = oms.MSExperiment()
-    # oms.MzMLFile().load(mzml_path, exp)
-
-
-    # spectrum_data = exp.getSpectrum(0).get_peaks()
-
-    output = oms.SimpleSearchEngineAlgorithm().search(mzml_path, search_path, protein_ids, peptide_ids)
-    print(output)
+    # build_fasta_database()
+    run_tandem()
 
 
 

@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<bioml label="x! taxon-to-file matching list">
+	<taxon label="ecoli">
+		<file format="peptide" URL="/home/prichter/Documents/selenobot-detect/scripts/ecoli.fasta" />
+	</taxon>
+</bioml>
