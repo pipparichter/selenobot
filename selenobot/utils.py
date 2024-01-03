@@ -152,7 +152,7 @@ def pd_to_fasta(df, path=None, textwidth=80):
         # Split the sequence up into shorter, 60-character strings.
         n = len(row.seq)
         seq = [row.seq[i:min(n, i + textwidth)] for i in range(0, n, textwidth)]
-        assert len(''.join(seq)) == n, 'utils.pd_to_fasta: Part of the sequence was lost when splitting into lines.'
+        assert len(''.join(seq)) == n, 'utils.pd_to_fasta: Part of the sequence was lmicrobiologyost when splitting into lines.'
         fasta += '\n'.join(seq) + '\n'
     
     # Write the FASTA string to the path-specified file. 

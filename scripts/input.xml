@@ -11,10 +11,10 @@
 	</note>
 
 	<note type="input" label="list path, default parameters">/home/prichter/tandem-linux-17-02-01-4/bin/default_input.xml</note>
-	<note type="input" label="list path, taxonomy information">/home/prichter/Documents/selenobot-detect/scripts/taxonomy.xml</note>
+	<note type="input" label="list path, taxonomy information">/home/prichter/Documents/data/selenobot/ecoli/{strain}/taxonomy.xml</note>
 	<note type="input" label="protein, taxon">ecoli</note>
 	
-	<note type="input" label="spectrum, path">/home/prichter/Documents/data/selenobot/ecoli/ms/mgf/{sample}.mgf</note>
+	<note type="input" label="spectrum, path">/home/prichter/Documents/data/selenobot/ecoli/{strain}/ms/mgf/{sample}.mgf</note>
 
-	<note type="input" label="output, path">/home/prichter/Documents/data/selenobot/tandem/{sample}.xml</note>
+	<note type="input" label="output, path">/home/prichter/Documents/data/selenobot/ecoli/{strain}/xtandem/{sample}.xml</note>
 </bioml>
