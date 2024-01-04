@@ -67,7 +67,7 @@ def translate(nt_seq, reverse=False):
         nt_seq = nt_seq.reverse_complement()
 
     # assert len(nt_seq) % 3 == 0, 'ecoli.translate: Length of nucleotide sequence is not divisible by 3.'
-    if len(nt_seq) % 3 != 0: # Return None if the nucleotide sequence is not divisible by 3. 
+    if len(nt_seq) % 3 != 0: # Returndomain_stop None if the nucleotide sequence is not divisible by 3. 
         return True, 'length not divisible by three.'
     if not has_valid_start_codon(nt_seq):
         return True, 'invalid START codon.'
@@ -170,7 +170,7 @@ def load_database(strain:str, remove_decoys:bool=True) -> pd.DataFrame:
 def load_xtandem(strain:str) -> pd.DataFrame:
     '''Read the result of writing the X! Tandem output to a CSV file.'''
     path = os.path.join(get_ecoli_dir_path(strain), 'xtandem.csv')
-    return pd.read_csv(path)
+    return pd.read_csv(path, index_col=0)
 
 
 def load_proteins(strain:str) -> pd.DataFrame:
@@ -241,56 +241,93 @@ def xtandem_run(strain:str) -> NoReturn:
         subprocess.run(['rm', 'tmp.xml'])
 
 
+# def xtandem_check(strain:str) -> NoReturn:
+
+#     xtandem = load_xtandem(strain)
+#     database = load_database(strain)
+#     n, m = len(xtandem), len(database) # Original length of the data. 
+
+#     database = database.drop_duplicates('accession')
+#     if len(database) != m: print(f'ecoli.check_xtandem: Dropped {m - len(database)} duplicate accessions.')
+
+#     xtandem = xtandem.merge(database[['nt_start', 'nt_stop', 'accession']], on=['accession'], how='left')
+#     assert len(xtandem) == n, f'ecoli.check_xtandem: Merge was unsuccessful. Length before merge {n}, length after merge {len(database)}.'
+
+#     for row in xtandem.itertuples():
+#         assert row.nt_domain_start >= row.nt_start and row.nt_domain_start < row.nt_stop
+#         assert row.nt_domain_stop > row.nt_start and row.nt_domain_stop <= row.nt_stop
+#         overlap_start, overlap_stop = get_overlap(row.nt_start, row.nt_stop, row.nt_domain_start, row.nt_domain_stop)
+#         assert (overlap_stop - overlap_start) == (row.nt_domain_stop - row.nt_domain_start)
+
+
 def xtandem_parse_xml_output(strain:str) -> NoReturn:
     '''Read everything in the X! Tandem output directory into a pandas DataFrame. Writes the
     rerulting output to a CSV file in the strain directory. '''
 
+    def get_coordinates(data:pd.DataFrame) -> pd.DataFrame:
+        '''Get the absolute nucleotide coordinates of domain starts and stops. Domain stops and starts are
+        originally given in terms of # amino acids from the start of the protein,'''
+        database = load_database(strain)
+        n, m = len(data), len(database) # Original length of the data. 
+
+        database = database.drop_duplicates('accession')
+        if len(database) != m: print(f'ecoli.xtandem_parse_xml_output: Dropped {m - len(database)} duplicate accessions.')
+
+        data = data.merge(database[['nt_start', 'nt_stop', 'accession']], on=['accession'], how='left')
+        assert len(data) == n, f'ecoli.xtandem_parse_xml_output: Merge was unsuccessful. Length before merge {n}, length after merge {len(database)}.'
+
+        data['nt_domain_start'] = data.nt_start + (3 * data.aa_domain_start)
+        data['nt_domain_stop'] = data.nt_start + (3 * data.aa_domain_stop)
+        return data.drop(columns=['nt_start', 'nt_stop'])
+
     def parse(path:str) -> pd.DataFrame:
         '''Parses the output of an X! Tandem run on a single sample.'''
 
-        sample = os.path.basename(path).replace('.xml', '') # Get the sample name. 
-        df = {'strain':[], 'sample':[], 'gene_id':[], 'domain_start':[], 'domain_stop':[], 'domain_log10_e':[], 'domain_seq':[], 'aa_ext':[], 'aa_length':[]} 
+        # Columns in the DataFrame output. 
+        cols = ['gene_id', 'aa_domain_start', 'aa_domain_stop', 'domain_log10_e', 'protein_log10_e', 'domain_seq', 'aa_ext', 'aa_length', 'accession', 'reverse']
+        sample_data = {col:[] for col in cols} 
 
         # parser = etree.XMLParser(recover=True) # Ignore some (inconsequential?) parsing errors. 
         tree = xml.etree.ElementTree.parse(path)
         root = tree.getroot()
 
-        # print(len(root.findall('.//group[@type="model"]')))
-        # I think there is one model per spectrum, but I am not sure. 
-
         for protein in root.iter('protein'):
             info = {k:v for k, v in [i.split('=') for i in protein.attrib.get('label').split('|')]}
+            protein_log10_e = protein.attrib.get('expect')
 
             # E value describes the number of hits one can “expect” to see by chance when searching a database. 
             for domain in protein.iter('domain'):
-                df['domain_log10_e'].append(float(domain.attrib.get('expect')))
-                df['domain_seq'].append(domain.attrib.get('seq'))
-                df['domain_start'].append(int(domain.attrib.get('start')))
-                df['domain_stop'].append(int(domain.attrib.get('end')))
-                df['gene_id'].append(info['gene_id'])
-                df['sample'].append(sample)
-                df['strain'] = strain
-                df['aa_ext'].append(int(info['nt_ext']) // 3)
-                df['aa_length'].append(int(info['aa_length']))
+                sample_data['protein_log10_e'].append(protein_log10_e)
+                sample_data['domain_log10_e'].append(float(domain.attrib.get('expect')))
+                sample_data['domain_seq'].append(domain.attrib.get('seq'))
+                sample_data['aa_domain_start'].append(int(domain.attrib.get('start')))
+                sample_data['aa_domain_stop'].append(int(domain.attrib.get('end')))
+                sample_data['gene_id'].append(info['gene_id'])
+                sample_data['accession'].append(info['accession'])
+                sample_data['reverse'].append(bool(info['reverse']))
+                sample_data['aa_ext'].append(int(info['nt_ext']) // 3)
+                sample_data['aa_length'].append(int(info['aa_length']))
 
-        return pd.DataFrame(df)
+        sample_data = pd.DataFrame(sample_data)
+        sample_data['sample'] = os.path.basename(path).replace('.xml', '') # Add the sample name to the DataFrame.
+        return sample_data
 
     dir_path = os.path.join(get_ecoli_dir_path(strain), 'xtandem')
-    dfs = []
-    pbar = tqdm(os.listdir(dir_path), desc='ecoli.xtandem_parse_xml_output')
+    data = []
+    pbar = tqdm([f for f in os.listdir(dir_path) if '.xml' in f], desc='ecoli.xtandem_parse_xml_output')
     for filename in pbar:
-        if '.xml' in filename:
             pbar.set_description(f'ecoli.xtandem_parse_xml_output: Reading output from {filename}.')
-            dfs.append(parse(os.path.join(dir_path, filename) ))
-    df = pd.concat(dfs)
-    df.to_csv(os.path.join(get_ecoli_dir_path(strain), 'xtandem.csv'))
+            data.append(parse(os.path.join(dir_path, filename) ))
+
+    data = get_coordinates(pd.concat(data)) # Add the absolute nucleotide positions of the domain hits. 
+    data.to_csv(os.path.join(get_ecoli_dir_path(strain), 'xtandem.csv'))
 
         
 def xtandem_get_fpr(strain:str, threshold:float=1) -> float:
     '''Calculate the false positive rate of an X! Tandem run using the decoy sequences.'''
     xtandem = load_xtandem(strain)
     # NOTE: I think this might need to be the expectation value for the whole protein, but not totally sure?
-    xtandem = xtandem[xtandem['domain_log10_e'] <= threshold] # Filter according to E value threshold.
+    xtandem = xtandem[xtandem['protein_log10_e'] <= threshold] # Filter according to E value threshold.
     # Decoy sequences are flagged with an asterisk. 
     return sum(xtandem.gene_id.str.contains('*', regex=False)) / len(xtandem)
 
@@ -303,7 +340,7 @@ def xtandem_get_hits_past_original_stop(strain:str) -> pd.DataFrame:
     output = load_xtandem(strain)
     # Extract all hits for the predicted selenoproteins. 
     output = output[output.gene_id.isin(predictions)]
-    return output[output.apply(lambda row : (row.aa_length - row.aa_ext) < row.domain_stop, axis=1)]
+    return output[output.apply(lambda row : (row.aa_length - row.aa_ext) < row.aa_domain_stop, axis=1)]
 
 
 def database_size(strain:str, decoy:bool=False) -> int:
@@ -317,6 +354,25 @@ def database_size(strain:str, decoy:bool=False) -> int:
         return len(ids)
 
 
+def get_overlap(start_a:int, stop_a:int, start_b:int, stop_b:int) -> Tuple[int, int]:
+    '''Calculate any overlap between two sequences in units of nucleotides. Assumes the sequences flanked by the 
+    start and stop locations are located on the same strand.'''
+    if (start_a <= start_b) and (stop_a > start_b) and (stop_a <= stop_b):
+        # (start_a) ... (start_b) ... (stop_a) ... (stop_b)
+        return start_b, stop_a
+    if (start_b <= start_a) and (stop_b > start_a) and (stop_b <= stop_a):
+        # (start_b) ... (start_a) ... (stop_b) ... (stop_a)
+        return start_a, stop_b
+    elif (start_a <= start_b) and (stop_a >= stop_b): # If the entire sequence is overlapping. 
+        # (start_a) ... (start_b) ... (stop_b) ... (stop_a)
+        return start_b, stop_b
+    elif (start_b <= start_a) and (stop_b >= stop_a): # If the entire sequence is overlapping. 
+        # (start_b) ... (start_a) ... (stop_a) ... (stop_b)
+        return start_a, stop_a
+    else:
+        return None, None
+
+
 def database_check(strain:str):
     '''Run a series of checks on the database.'''
 
@@ -327,30 +383,21 @@ def database_check(strain:str):
 
     n = len(database) # Original size of database. 
 
+    repeated_accessions = list(database.accession.value_counts()[database.accession.value_counts() > 1].index)
+    assert len(repeated_accessions) == 0, f'database.database_check: Values in the accession column are not unique. {len(repeated_accessions)} instances of repeats.'
+
     def get_residue_difference(seq:str, ncbi_seq:str) -> int:
         '''Calculate the difference between the translated and NCBI reference sequence, assuming equal length.'''
         return sum([r1 != r2 for r1, r2 in zip(seq, ncbi_seq)])
 
-    def get_overlaps(nt_start:int=None, nt_stop:int=None, reverse:bool=None, accession:str=None, database:pd.DataFrame=None) -> List[int]:
+    def get_overlaps(nt_start:int, nt_stop, database:pd.DataFrame) -> str:
         '''Determines whether or not there is overlap between the sequence in the given range and other
         proteins in the databasebase.'''
         overlaps = []
         for row in database.itertuples():
-            if row.accession == accession: # Don't check the sequence against itself. 
-                continue
-            if row.reverse != reverse: # Genes must be on the same strand to count as overlap. 
-                continue
-
-            if (nt_start < row.nt_start) and (nt_stop > row.nt_start):
-                overlap = nt_stop - row.nt_start
-            elif (nt_start < row.nt_stop) and (nt_stop > row.nt_stop):
-                overlap = row.nt_stop - nt_start
-            elif (nt_start > row.nt_start) and (nt_stop < row.nt_stop): # If the entire sequence is overlapping. 
-                overlap = nt_stop - nt_start
-            else:
-                continue   
-            overlaps.append(f'{row.gene_id} ({overlap})') # Record the amount of overlap. 
-
+            overlap_start, overlap_stop = get_overlap(nt_start, nt_stop, row.nt_start, row.nt_stop)
+            if overlap_start is not None:
+                overlaps.append(f'{row.gene_id} ({overlap_stop - overlap_start})') # Record the amount of overlap. 
         return ', '.join(overlaps)
 
     database = database.merge(proteins, on=['accession'])
@@ -364,8 +411,8 @@ def database_check(strain:str):
     for row in database.itertuples():
         # Special case for manually-extended sequences. 
         if (row.gene_id in predictions) and (row.gene_id not in known_selenoproteins):
-            # For the extended sequences, be sure to check for overlap. 
-            overlaps = get_overlaps(nt_start=row.nt_start, nt_stop=row.nt_stop, accession=row.accession, reverse=row.reverse, database=database)
+            # For the extended sequences, be sure to check for overlap. Exclude the gene itself, and those on the opposite strand. 
+            overlaps = get_overlaps(row.nt_start, row.nt_stop, database[(database.accession != row.accession) & (database.reverse == row.reverse)])
             if len(overlaps) > 0:
                 extended_sequence_overlaps[row.gene_id] = overlaps
             continue # Skip the remaining checks, which do not work if the genes have been extended past the forst stop codon. 
@@ -380,6 +427,7 @@ def database_check(strain:str):
     if len(translation_errors) > 0: print('Translation errors > 1 AA:', '\n'.join([f'\t{k} {v}' for k, v in translation_errors_greater_than_one.items()]))
     if len(length_mismatches) > 0: print('Length mismatches:\n', '\n'.join([f'\t{k} {v}' for k, v in length_mismatches.items()]))
     if len(extended_sequence_overlaps) > 0: print('Overlaps in extended sequences:\n', '\n'.join([f'\t{k}: {v}' for k, v in extended_sequence_overlaps.items()]))
+
 
 
 def database_write(data:pd.DataFrame, strain:str) -> NoReturn:
@@ -416,13 +464,38 @@ class Protein():
         '''Inititalize a Protein object.'''
         
         database = load_database(strain)
+        assert gene_id in list(database.gene_id.values), f'ecoli.Protein: {gene_id} is not present in the database.' 
+        row = database[database.gene_id == gene_id] # The row for the specific protein. 
         xtandem = load_xtandem(strain)
 
+        self.nt_start = row.nt_start.item() 
+        self.nt_stop = row.nt_stop.item()
         self.gene_id = gene_id
-        self.seq = database[database.gene_id == gene_id].seq.item()
+        self.accession = row.accession.item()
+        self.reverse = row.reverse.item()
+        self.seq = row.seq.item()
         self.length = len(self.seq)
         self.hits = xtandem[xtandem.gene_id == gene_id] # Filter the X! Tandem hits for the particular protein. 
-        # print(f'ecoli.Protein: {len(self.hits)} hits detected for protein {gene_id}.')
+        self.overlaps = self.get_overlaps(xtandem)
+
+    def get_overlaps(self, xtandem:pd.DataFrame) -> pd.DataFrame:
+        '''Find the locations where the sequence overlaps with other sequence in the database.
+        Returns a subset of the X! Tandem results DataFrame with hits which overlap the Protein.'''
+        xtandem = xtandem[xtandem.accession != self.accession] # Exclude hits belonging to the Protein.
+        xtandem = xtandem[xtandem.reverse == self.reverse] # Exclude hits belonging to genes on the opposite strand.
+
+        f = lambda r : get_overlap(self.nt_start, self.nt_stop, r.nt_domain_start, r.nt_domain_stop)
+        xtandem[['nt_overlap_start', 'nt_overlap_stop']] = xtandem[['nt_domain_start', 'nt_domain_stop']].apply(f, axis=1, result_type='expand')
+
+        xtandem = xtandem.dropna(axis=0) # Drop rows where no overlap was detected. 
+        # Convert overlap to units of amino acids relative to start of the protein. 
+        xtandem['overlap_start'] = (xtandem.nt_overlap_start - self.nt_start) // 3
+        xtandem['overlap_stop'] = (xtandem.nt_overlap_stop - self.nt_start) // 3
+        # Restrict overlaps to the range of the protein. 
+        xtandem['overlap_start'] = xtandem.overlap_start.apply(lambda n : max(0, n))
+        xtandem['overlap_stop'] = xtandem.overlap_stop.apply(lambda n : min(n, self.length))
+        return xtandem.drop(columns=['nt_overlap_start', 'nt_overlap_stop'])
+
 
     def __len__(self) -> int:
         '''Return the length of the protein sequence.'''
@@ -432,37 +505,56 @@ class Protein():
         '''Set the string representation of the Protein object to be the amino acid sequence.'''
         return self.seq
 
-    def plot(self):
+    def plot(self, plot_overlaps:bool=True):
         '''Visualize the X! Tandem hits on the protein sequence.'''
 
         fig, ax = plt.subplots(1)
+        legend = [self.gene_id]
 
-        lines = {}
+        points = {}
         for hit in self.hits.itertuples():
-            for x in range(hit.domain_start, hit.domain_stop + 1):
-                if x in lines:
-                    lines[x] += 1
+            for x in range(hit.aa_domain_start, hit.aa_domain_stop + 1):
+                if x in points:
+                    points[x] += 1
                 else:
-                    lines[x] = 1
-                    
-        x_vals = list(lines.keys())
-        y_maxes = [lines[x] for x in x_vals]
-        y_mins = [0] * len(x_vals)
-        ax.vlines(x_vals, y_mins, y_maxes)
+                    points[x] = 1
+        x_vals = list(range(self.length))
+        y_vals = [points.get(x, 0) for x in x_vals]
+        ax.plot(x_vals, y_vals, lw=3)
+
+        if plot_overlaps and (len(self.overlaps) > 0):
+            transform = ax.get_xaxis_transform() # Get the coordinate system of the x-axis. 
+
+            for gene_id in self.overlaps.gene_id.drop_duplicates(): # Overlaps in units amino acid. 
+                legend.append(gene_id)
+                overlap_hits = self.overlaps[self.overlaps.gene_id == gene_id]
+                points = {}
+                for hit in overlap_hits.itertuples():
+                    for x in range(hit.aa_domain_start, hit.aa_domain_stop + 1):
+                        if x in points:
+                            points[x] += 1
+                        else:
+                            points[x] = 1
+                x_vals = list(range(self.length))
+                y_vals = [points.get(x, 0) for x in x_vals]
+                ax.plot(x_vals, y_vals)
 
         ax.set_xticks(np.arange(self.length + 1))
         ax.set_xticklabels(['' if aa != 'U' else aa for aa in self.seq] + ['STOP'])
-        ax.set_yticks(np.arange(0, max(y_maxes)))
+        ax.set_yticks(np.arange(0, max(y_vals)))
         ax.set_ylabel('number of hits')
         ax.set_title(self.gene_id)
 
+        ax.legend(legend)
+
         # fig.subplots_adjust(bottom=0.5)
         fig.tight_layout()
-        
         plt.show()
 
 
 # TODO: Add color-coding by E-value, perhaps?
+# TODO: Add potential overlap with other sequences. 
+# TODO: Possibly change how the hits are plotted, maybe to look more like a spectrum. 
 
 # The goal is to find hits which are in the region after the stop codon of the predicted proteins, but don't overlap with the next protein. 
 if __name__ == '__main__':
@@ -470,19 +562,12 @@ if __name__ == '__main__':
     # database_build('mg1655')
     # database_build('bw25113')
 
-    # database_check('mg1655')\
-    # database_check('bw25113')
-
     # xtandem_run('mg1655')
     # xtandem_run('bw25113')
-
     # xtandem_parse_xml_output('mg1655')
     # xtandem_parse_xml_output('bw25113')
-    # print('MG1655 false positive rate:', xtandem_get_fpr('mg1655'))
-    # print('BW25113 false positive rate:', xtandem_get_fpr('bw25113'))
-    
 
-    protein = Protein('fdnG', strain='mg1655')
+    protein = Protein('ilvB', strain='mg1655')
     protein.plot()
 
 # eco:b3894 seems to have an extra in-frame stop codon which I don't quite understand. It also has a U present, which means
