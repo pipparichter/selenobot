@@ -458,6 +458,7 @@ def database_build(strain:str) -> NoReturn:
     database_write(database, strain)
 
 
+
 class Protein():
     
     def __init__(self, gene_id:str, strain:str='mg1655'):
@@ -466,6 +467,10 @@ class Protein():
         database = load_database(strain)
         assert gene_id in list(database.gene_id.values), f'ecoli.Protein: {gene_id} is not present in the database.' 
         row = database[database.gene_id == gene_id] # The row for the specific protein. 
+    
+        if len(row) > 1: #TODO: Fix this!
+            row = row.head(1)
+
         xtandem = load_xtandem(strain)
 
         self.nt_start = row.nt_start.item() 
@@ -477,6 +482,7 @@ class Protein():
         self.length = len(self.seq)
         self.hits = xtandem[xtandem.gene_id == gene_id] # Filter the X! Tandem hits for the particular protein. 
         self.overlaps = self.get_overlaps(xtandem)
+        self.strain = strain
 
     def get_overlaps(self, xtandem:pd.DataFrame) -> pd.DataFrame:
         '''Find the locations where the sequence overlaps with other sequence in the database.
@@ -505,8 +511,12 @@ class Protein():
         '''Set the string representation of the Protein object to be the amino acid sequence.'''
         return self.seq
 
-    def plot(self, plot_overlaps:bool=True):
+    def plot(self, plot_overlaps:bool=True, show:bool=False, save:bool=True) -> NoReturn:
         '''Visualize the X! Tandem hits on the protein sequence.'''
+
+        if len(self.hits) < 1:
+            print(f'ecoli.Protein.plot: No hits found for protein {self.gene_id}.')
+            return
 
         fig, ax = plt.subplots(1)
         legend = [self.gene_id]
@@ -520,7 +530,7 @@ class Protein():
                     points[x] = 1
         x_vals = list(range(self.length))
         y_vals = [points.get(x, 0) for x in x_vals]
-        ax.plot(x_vals, y_vals, lw=3)
+        ax.plot(x_vals, y_vals)
 
         if plot_overlaps and (len(self.overlaps) > 0):
             transform = ax.get_xaxis_transform() # Get the coordinate system of the x-axis. 
@@ -549,7 +559,12 @@ class Protein():
 
         # fig.subplots_adjust(bottom=0.5)
         fig.tight_layout()
-        plt.show()
+
+        if show:
+            plt.show()
+        if save:
+            path = os.path.join(get_ecoli_dir_path(self.strain), 'plots', f'{self.gene_id}.png')
+            fig.savefig(path, format='png')
 
 
 # TODO: Add color-coding by E-value, perhaps?
@@ -567,8 +582,13 @@ if __name__ == '__main__':
     # xtandem_parse_xml_output('mg1655')
     # xtandem_parse_xml_output('bw25113')
 
-    protein = Protein('ilvB', strain='mg1655')
-    protein.plot()
+
+    for gene_id in load_predictions('bw25113'):
+        try:
+            protein = Protein(gene_id, strain='bw25113')
+            protein.plot(save=True)
+        except:
+            continue
 
 # eco:b3894 seems to have an extra in-frame stop codon which I don't quite understand. It also has a U present, which means
 # that this is not the issue.
