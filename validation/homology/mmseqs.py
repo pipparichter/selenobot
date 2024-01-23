@@ -1,23 +1,17 @@
-'''Code for searching for homologs to extended predicted selenoproteins against the GTDB.'''
-import pyopenms as oms
+'''Code for setting up databases for a search against GTDB using MMSeqs2.'''
 import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from Bio.Seq import Seq # Has a builtin method for coming up with the complement. 
 import copy
 from typing import NoReturn, List, Tuple, Dict
 import re
 import subprocess
 from tqdm import tqdm
+import seaborn as sns
 
 # Eventually will need to expand this list to accommodate all known selenos
 known_selenoproteins = ['fdoG', 'fdnG', 'fdhF']
-# From https://link.springer.com/article/10.3103/S0891416812030056#preview 
-marker_genes = ['rpoB', 'gyrB', 'dnaK', 'dsrB', 'mipA', 'frc', 'oxc']
-
-
-# In prokaryotes, E. coli is found to use AUG 83%, GUG 14%, and UUG 3% as START codons.
 
 DATA_DIR = '/home/prichter/Documents/data/selenobot/homology/'
 
@@ -166,39 +160,6 @@ def load_predictions() -> List[str]:
     return list(predictions)
 
 
-def load_results(dir_path=os.path.join(DATA_DIR, 'results_s_default')) -> pd.DataFrame:
-    '''Load the BLAST hit results from the search of GTDB into a pandas DataFrame. BLAST result files (file extension m8)
-    are tab-separated, with no column headers.'''
-    # Columns in the output file, as specified in the MMSeqs2 User Guide. 
-    cols = ['header', 'target_gene_id', 'seq_identity', 'alignment_length', 'num_mismatches', 'num_gap_openings', 'query_domain_start', 'query_domain_stop', 'target_domain_start', 'target_domain_stop', 'e_value', 'bit_score']
-
-    def parse_headers(headers:pd.Series) -> pd.DataFrame:
-        rows = []
-        for header in headers:
-            header = dict([item.split('=') for item in header.split('|')])
-            # Don't need all of the information contained in the header... 
-            header = {key:val for key, val in header.items() if key in ['gene_id', 'aa_length', 'nt_ext']}
-            header['aa_ext'] = int(header['nt_ext']) // 3 # Get the number of added amino acids. 
-            header = {'query_' + key:val for key, val in header.items()} # Clarify that all header information is associated with the query sequence.
-            rows.append(header)
-        return pd.DataFrame(rows, index=np.arange(len(headers)))
-
-    data = []
-    for filename in os.listdir(dir_path):
-        # Grab the number of the split from the filename. 
-        split = int(re.match('([0-9]+)', filename).group(1))
-        split_data = pd.read_csv(os.path.join(dir_path, filename), delimiter='\t', names=cols)
-        split_data = pd.concat([split_data.drop(columns=['header']), parse_headers(split_data.header)], axis=1)
-        split_data['split'] = split # Add the target database split where the BLAST hit was found.
-        data.append(split_data)
-
-    data = pd.concat(data, axis=0)
-    # Convert the columns which are numbers to numerical columns. Only the query and target gene_ids are not numerical
-    num_cols = [col for col in data.columns if 'gene_id' not in col]
-    data[num_cols] = data[num_cols].apply(pd.to_numeric)
-
-    return data
-
 
 def load_coordinates(gene_ids:List[str]=None) -> pd.DataFrame:
     '''Load in the gene coordinates and other metadata as a pandas DataFrame, processing the start and
@@ -261,46 +222,4 @@ def database_build_control() -> NoReturn:
     database['extend'] = False # Don't extend anything here. 
     database = get_sequences(database, load_genome('', path=os.path.join(DATA_DIR, 'genome.fasta')))
     database_write(database, filename='control.fasta')
-
-
-def get_hits_past_stop_codon(data:pd.DataFrame, require_span:bool=True) -> pd.DataFrame: #, remove_query_gene_ids:List[str]=[]) -> pd.DataFrame:
-    '''Find instances where a domain match is found past the first stop codon. The aa_length column gives the length of the
-    extended amino acid sequence (if an extension was applied), so the stop codon location can be computed by subtracting the aa_ext
-    from the length.
-    
-    :param data: The DataFrame containing the BLAST hits for the query sequences against GTDB.
-    :param require_span: Whether or not to only include hits which span the U codon (not just in the region to the right of it).
-    :param remove_query_gene_ids: If specified, the query hits to remove from the DataFrame (e.g. false positives like ilvB).
-    :return: A DataFrame which contains the hits which meet the parameter specifications. 
-    '''
-    # Compute the location of the posited U residue. 
-    data['query_u_position'] = data.query_aa_length - data.query_aa_ext
-    # Filter by locations where the end of the matching domain in the query sequence is found past the extension.
-    data = data[data.query_domain_stop >= data.query_u_position]
-    if require_span: # Make sure the beginning of the matching domain is to the left of the putative U position. 
-        data = data[data.query_domain_start <= data.query_u_position] 
-    
-    # Remove the desired query sequences/ 
-    # data = data[~data.query_gene_id.isin(remove_query_gene_ids)]
-    return data
-
-
-
-# The goal is to find hits which are in the region after the stop codon of the predicted proteins, but don't overlap with the next protein. 
-if __name__ == '__main__':
-
-    results = load_results(dir_path=os.path.join(DATA_DIR, 'results_s_default'))
-    controls = load_results(dir_path=os.path.join(DATA_DIR, 'controls_s_default'))
-    # Remove the things we know to be false positives. 
-    results = results[~results.query_gene_id.isin(['ilvB', 'ivbL'])]
-    controls = controls[~controls.query_gene_id.isin(['ilvB', 'ivbL'])]
-
-    print('Total hits:', len(results))
-    print('Total hits (controls):', len(controls))
-
-    # The results are the same whether or not we require spanning. 
-    results = get_hits_past_stop_codon(results, require_span=False)
-    print('Total hits spanning putative selenocysteine:', len(results))
-    print('Query sequences with hits spanning putative selenocysteine:', set(results.query_gene_id))
-    
 
