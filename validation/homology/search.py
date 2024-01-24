@@ -12,8 +12,7 @@ import seaborn as sns
 
 # Eventually will need to expand this list to accommodate all known selenos
 known_selenoproteins = ['fdoG', 'fdnG', 'fdhF']
-
-DATA_DIR = '/home/prichter/Documents/data/selenobot/homology/'
+DATA_DIR = '/home/prichter/Documents/data/selenobot/validation/homology/'
 
 
 def has_valid_start_codon(seq):
@@ -116,40 +115,6 @@ def load_genome(genome_id:str, path=None):
         lines = f.read().splitlines()[1:] # Skip the header line. 
         seq = ''.join(lines)
     return seq
-
-
-
-def load_database(remove_decoys:bool=True) -> pd.DataFrame:
-    '''Load the database.fasta file in as a pandas DataFrame.'''
-
-    path = os.path.join(DATA_DIR, 'database.fasta')
-    data = {'seq':[], 'gene_id':[], 'nt_ext':[], 'nt_stop':[], 'nt_start':[], 'aa_length':[], 'accession':[], 'reverse':[]}
-
-    with open(path, 'r') as f:
-        text = f.read()
-        seqs = re.split(r'^>.*', text, flags=re.MULTILINE)[1:]
-        # Strip all of the newline characters from the amino acid sequences. 
-        seqs = [s.replace('\n', '') for s in seqs]
-        headers = re.findall(r'^>.*', text, re.MULTILINE)
-
-        for seq, header in zip(seqs, headers):
-            # Headers are of the form |gene_id|col=value|...|col=value
-            header = header.replace('>', '') # Remove the header marker. 
-            header = header.split('|')
-            for entry in header:
-                col, value = entry.split('=')
-                data[col].append(value)
-            data['seq'].append(seq) # Add the sequence as well. 
-
-    data = pd.DataFrame(data)
-    # Convert to numerical datatypes. 
-    data[['aa_length', 'nt_start', 'nt_stop', 'nt_ext']] = data[['aa_length', 'nt_start', 'nt_stop', 'nt_ext']].apply(pd.to_numeric)
-    data['reverse'] = data['reverse'].apply(bool)
-
-    if remove_decoys: # Remove decoys if this option is set. 
-        data = data[~data.gene_id.str.contains('*', regex=False)]
-
-    return data
 
 
 def load_predictions() -> List[str]:
