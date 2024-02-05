@@ -4,7 +4,6 @@
 
 # Selenobot
 
-% Possibly add more description of the project here. 
 
 `selenobot` is a computational framework which uses transformer-generated embeddings of protein sequences to detect misannotated selenoproteins in genome databases. This repository contains code for reproducing the training of the classifiers used for selenoprotein prediction.
 

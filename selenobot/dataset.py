@@ -4,75 +4,70 @@ import pandas as pd
 import numpy as np
 import torch
 import torch.utils.data
-from selenobot.embedders import Embedder
-from typing import List
+from typing import List, Dict, NoReturn, Iterator
 import subprocess
 import time
 
 # device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 class Dataset(torch.utils.data.Dataset):
-    '''A map-style dataset which provides easy access to sequence, label, and embedding data via the 
-    overloaded __getitem__ method.'''
+    '''A map-style dataset which  Dataset objects which provide extra functionality for producing sequence embeddings
+    and accessing information about selenoprotein content.'''
     
-    def __init__(self, data:pd.DataFrame, embedder:Embedder=None):
-        '''Initializes a Dataset from a pandas DataFrame containing embeddings and labels.'''
+    def __init__(self, df:pd.DataFrame, embedder=None):
+        '''Initializes a Dataset from a pandas DataFrame containing embeddings and labels.
+        
+        :param df: A pandas DataFrame containing the data to store in the Dataset. 
+        :param embedder: The embedder to apply to the amino acid sequences in the DataFrame. 
+            If None, it is assumed that the embeddings are already present in the file. 
+        '''
 
         # Check to make sure all expected fields are present in the input DataFrame. 
         if embedder is not None:
-            assert 'seq' in data.columns, f'dataset.Dataset.__init__: Input DataFrame missing required field seq.'
-        assert 'label' in data.columns, f'dataset.Dataset.__init__: Input DataFrame missing required field label.'
-        assert 'id' in data.columns, f'dataset.Dataset.__init__: Input DataFrame missing required field id.'
+            assert 'seq' in df.columns, f'dataset.Dataset.__init__: Input DataFrame missing required field seq.'
+        assert 'label' in df.columns, f'dataset.Dataset.__init__: Input DataFrame missing required field label.'
+        assert 'id' in df.columns, f'dataset.Dataset.__init__: Input DataFrame missing required field id.'
 
         if embedder is not None:
-            self.embeddings = embedder(list(data['seq'].values))
+            self.embeddings = embedder(list(df['seq'].values))
             self.type = embedder.type # Type of data contained by the Dataset.
         else: # This means that the embeddings are already in the DataFrame (or at least, they should be)
             self.type = 'plm'
-            self.embeddings = torch.from_numpy(data.drop(columns=['label', 'cluster', 'seq', 'id']).values).to(torch.float32)
+            self.embeddings = torch.from_numpy(df.drop(columns=['label', 'cluster', 'seq', 'id']).values).to(torch.float32)
 
         # Make sure the type of the tensor is the same as model weights.
-        self.labels = torch.from_numpy(data['label'].values).type(torch.float32)
-        self.ids = data['id']
+        self.labels = torch.from_numpy(df['label'].values).type(torch.float32)
+        self.ids = df['id'].values
         self.latent_dim = self.embeddings.shape[-1]
-        self.length = len(data)
 
-    def __len__(self):
+        self.length = len(df)
+
+    def __len__(self) -> int:
         return self.length
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx:int) -> Dict:
         '''Returns an item from the Dataset. Also returns the underlying index for testing purposes.'''
-        return {'label':self.labels[idx], 'emb':self.embeddings[idx], 'id':self.ids[idx], 'idx':idx}
-
-    def get_labels(self):
-        '''Accessor for the labels associated with the Dataset.'''
-        return self.labels
-
-    def get_embeddings(self):
-        '''Accessor function for the embeddings stored in the Dataset.'''
-        return self.embeddings
+        label = self.labels[idx]
+        embedding = self.embeddings[idx]
+        id_ = self.ids[idx]
+        return {'label':label, 'embedding':embedding, 'id':id_, 'idx':idx}
 
     def get_selenoprotein_indices(self) -> List[int]:
         '''Obtains the indices of selenoproteins in the Dataset.'''
-        return list(np.where([']' in id for id in self.ids])[0])
+        return list(np.where([']' in i for i in self.ids])[0])
 
 
 # A BatchSampler should have an __iter__ method which returns the indices of the next batch once called.
 class BalancedBatchSampler(torch.utils.data.BatchSampler):
-    '''A Sampler object which ensures that each batch has a similar proportion of selenoproteins to non-selenoproteins.'''
+    '''A Sampler object which ensures that each batch has a similar proportion of selenoproteins to non-selenoproteins.
+    This class is used in conjunction with PyTorch DataLoaders.'''
 
     # TODO: Probably add some checks here, unexpected bahavior might occur if things are evenly divisible by batch size, for example.
-    def __init__(self, 
-        data_source:Dataset, 
-        batch_size:int=None, 
-      ): 
+    def __init__(self, data_source:Dataset, batch_size:int=None,): 
         '''Initialize a custom BatchSampler object.
         
         :param data_source: A Dataset object containing the data to sample into batches. 
         :param batch_size: The size of the batches. 
-        :returns: A BalancedBatchSampler object. 
-        :raises AssertionError: If the number of selenoproteins in the data_source is greater than the number of full-length, non-selenoproteins. 
-        :raises AssertionError: If the batch dimensions following the data partitioning are incorrect. 
         '''
         r = 0.5 # The fraction of truncated selenoproteins to include in each batch. 
 
@@ -108,11 +103,12 @@ class BalancedBatchSampler(torch.utils.data.BatchSampler):
         data_source.num_removed = num_non_sel - len(non_sel_idxs)
         print(f'dataset.BalancedBatchSampler.__init__: Resampled {data_source.num_resampled} selenoproteins and removed {data_source.num_removed} non-selenoproteins to generate {num_batches} batches of size {batch_size}.')
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator:
         return iter(self.batches)
 
     # Not sure if this should be the number of batches, or the number of elements.
-    def __len__(self):
+    def __len__(self) -> int:
+        '''Returns the number of batches.'''
         return len(self.batches)
 
 
@@ -127,10 +123,9 @@ def get_dataloader(
     :param balance_batches: Whether or not to ensure that each batch has equal proportion of full-length and truncated proteins. 
     :return: A pytorch DataLoader object. 
     '''
-
     if balance_batches:
         # Providing batch_sampler will override batch_size, shuffle, sampler, and drop_last altogether.
-        batch_sampler = BalancedBatchSampler(dataset, batch_size=batch_size, r=r)
+        batch_sampler = BalancedBatchSampler(dataset, batch_size=batch_size)
         return torch.utils.data.DataLoader(dataset, batch_sampler=batch_sampler)
     else:
         return torch.utils.data.DataLoader(dataset, shuffle=True, batch_size=batch_size)

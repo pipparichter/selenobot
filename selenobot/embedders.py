@@ -10,23 +10,7 @@ import pandas as pd
 
 from typing import List
 
-
-def check_input_sequences():
-    # TODO: A function for checking input sequences. 
-    pass
-
-class Embedder():
-    '''Base Embedder class, specifies the necessary functions, which is really
-    just __init__ and __call__'''
-    def __init__(self):
-        pass
-
-    def __call__(self, data:List[str]) -> torch.Tensor:
-        pass
-
-
-class PLMEmbedder():
-    pass
+DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
 class LengthEmbedder():
@@ -45,7 +29,7 @@ class LengthEmbedder():
         return torch.Tensor(lengths).to(torch.float32)
 
 
-class AacEmbedder(Embedder):
+class AacEmbedder():
 
     def __init__(self):
         '''Initializes an AacEmbedder object.'''
@@ -84,89 +68,91 @@ class AacEmbedder(Embedder):
         return 'aac'
 
 
-# def embed_batch(
-#     batch:List[str],
-#     model:torch.nn.Module, 
-#     tokenizer:T5Tokenizer) -> torch.FloatTensor:
-#     '''Embed a single batch, catching any exceptions.
-    
-#     args:
-#         - batch: A list of strings, each string being a tokenized sequence. 
-#         - model: The PLM used to generate the embeddings.
-#         - tokenizer: The tokenizer used to convert the input sequence into a padded FloatTensor. 
-#     '''
-#     # Should contain input_ids and attention_mask. Make sure everything's on the GPU. 
-#     inputs = {k:torch.tensor(v).to(device) for k, v in tokenizer(batch, padding=True).items()}
-#     try:
-#         with torch.no_grad():
-#             outputs = model(**inputs)
-#             return outputs
-#     except RuntimeError:
-#         print('setup.get_batch_embedding: RuntimeError during embedding for. Try lowering batch size.')
-#         return None
+class PlmEmbedder():
+    '''Adapted from Josh's code, which he adapted from https://github.com/agemagician/ProtTrans/blob/master/Embedding/prott5_embedder.py'''
+
+    def __init__(model_name:str):
+        '''Initializes a PLM embedder object.
+        
+        :param model_name: The name of the pre-trained PLM to load from HuggingFace.
+        '''
+        
+        self.model = T5EncoderModel.from_pretrained(model_name)
+        self.model = model.to(DEVICE) # Move model to GPU
+        self.model = model.eval() # Set model to evaluation model
+        # Should be a T5Tokenizer object. 
+        self.tokenizer = T5Tokenizer.from_pretrained(model_name, do_lower_case=False)
 
 
-# def setup_plm_embeddings(
-#     fasta_file_path=None, 
-#     embeddings_path:str=None,
-#     max_aa_per_batch:int=10000,
-#     max_seq_per_batch:int=100,
-#     max_seq_length:int=1000) -> NoReturn:
-#     '''Generate sequence embeddings of sequences contained in the FASTA file using the PLM specified at the top of the file.
-#     Adapted from Josh's code, which he adapted from https://github.com/agemagician/ProtTrans/blob/master/Embedding/prott5_embedder.py. 
-#     The parameters of this function are designed to prevent GPU memory errors. 
-    
-#     args:
-#         - fasta_file_path: Path to the FASTA file with the input sequences.
-#         - out_path: Path to which to write the embeddings.
-#         - max_aa_per_batch: The maximum number of amino acid residues in a batch 
-#         - max_seq_per_batch: The maximum number of sequences per batch. 
-#         - max_seq_length: The maximum length of a single sequence, past which we switch to single-sequence processing
-#     '''
-#     # Dictionary to store the embedding data. 
-#     embeddings = []
+    def __call__(self, data:List[SyntaxError], path:str,
+        max_aa_per_batch:int=10000,
+        max_seq_per_batch:int=100,
+        max_seq_length:int=1000) -> torch.FloatTensor:
+        '''
+        Embeds the input data using the PLM stored in the model attribute.
+        
+        :param data: 
+        :param path: Path to which to write the embeddings.
+        :param max_aa_per_batch: The maximum number of amino acid residues in a batch 
+        :param max_seq_per_batch: The maximum number of sequences per batch. 
+        :param max_seq_length: The maximum length of a single sequence, past which we switch to single-sequence processing
+        :return: A Tensor object containing all of the embedding data. 
+        '''
 
-#     model = T5EncoderModel.from_pretrained(MODEL_NAME)
-#     model = model.to(device) # Move model to GPU
-#     model = model.eval() # Set model to evaluation model
+        embeddings = [] # List to store the embedding data. 
+        data = [seq.replace('U', 'X').replace('Z', 'X').replace('O', 'X') for seq in data] # Replace non-standard amino acids with X token.
+        # Order the sequences in ascending order according to sequence length to avoid unnecessary padding. 
+        data = sorted(data, key=len)
 
-#     tokenizer = T5Tokenizer.from_pretrained(MODEL_NAME, do_lower_case=False)
+        curr_aa_count = 0
+        curr_batch = []
+        for seq in data:
+            # Switch to single-sequence processing if length limit is exceeded.
+            if len(seq) > max_seq_length:
+                outputs = self.embed_batch([seq])
 
-#     df = pd_from_fasta(fasta_file_path, set_index=False) # Read the sequences into a DataFrame. Don't set the index. 
-#     # Need to make sure not to replace all U's with X's in the original DataFrame. 
-#     df['seq_standard_aa_only'] = df['seq'].str.replace('U', 'X').replace('Z', 'X').replace('O', 'X') # Replace non-standard amino acids with X token. 
+                if outputs is not None:
+                    # Add information to the list. 
+                    emb = outputs.last_hidden_state[0, :row['length']].mean(dim=0)
+                    embeddings.append(emb)
+                continue
 
-#     # Order the rows according to sequence length to avoid unnecessary padding. 
-#     df['length'] = df['seq'].str.len()
-#     df = df.sort_values(by='length', ascending=True, ignore_index=True)
+            # Add the sequence to the batch, and keep track of total amino acids in the batch. 
+            curr_batch.append(seq)
+            curr_aa_count += len(seq)
 
-#     curr_aa_count = 0
-#     curr_batch = []
-#     for row in df.itertuples():
+            if len(curr_batch) > max_seq_per_batch or curr_aa_count > max_aa_per_batch:
+                # If any of the presepecified limits are exceeded, go ahead and embed the batch. 
+                outputs = self.embed_batch(curr_batch)
 
-#         # Switch to single-sequence processing. 
-#         if len(row['seq']) > max_seq_length:
-#             outputs = embed_batch([row['seq_standard_aa_only']], model, tokenizer)
+                if outputs is not None:
+                    for seq, emb in zip(curr_batch, outputs): # Should iterate over each batch output, or the first dimension. 
+                        emb = emb[:len(seq)].mean(dim=0) # Remove the padding and average over sequence length. 
+                        embeddings.append(emb)
 
-#             if outputs is not None:
-#                 # Add information to the DataFrame. 
-#                 emb = outputs.last_hidden_state[0, :row['length']].mean(dim=0)
-#                 embeddings.append(emb)
-#             continue
+                        # Reset the current batch and amino acid count. 
+                        curr_batch = []
+                        curr_aa_count = 0
 
-#         curr_batch.append(row['seq_standard_aa_only'])
-#         curr_aa_count += row['length']
+        # Concatenate the list of tensors and return. 
+        return torch.cat(embeddings).astype(float)
 
-#         if len(curr_batch) > max_seq_per_batch or curr_aa_count > max_aa_per_batch:
-#             outputs = embed_batch(curr_batch, model, tokenizer)
 
-#             if outputs is not None:
-#                 for seq, emb in zip(curr_batch, embeddings): # Should iterate over each batch output, or the first dimension. 
-#                     emb = emb[:len(seq)].mean(dim=0) # Remove the padding and average over sequence length. 
-#                     embeddings.append(emb)
+    def embed_batch(self, batch:List[str]) -> torch.FloatTensor:
+        '''Embed a single batch, catching any exceptions.
+        
+        :param batch: A list of strings, each string being a tokenized sequence. 
+        :return: A PyTorch tensor containing PLM embeddings for the batch. 
+        '''
+        # Should contain input_ids and attention_mask. Make sure everything's on the GPU. 
+        inputs = {k:torch.tensor(v).to(device) for k, v in tokenizer(batch, padding=True).items()}
+        try:
+            with torch.no_grad():
+                outputs = self.model(**inputs)
+                return outputs
+        except RuntimeError:
+            print('embedders.PlmEmbedder.embed_batch: RuntimeError during embedding. Try lowering batch size.')
+            return None
 
-#                     curr_batch = []
-#                     curr_aa_count = 0
-#     # Remove all unnecessary columns before returning.
-#     df = pd.DataFrame(torch.cat(embeddings)).astype(float).drop(columns=['seq_standard_aa_only', 'length'])
-#     df.to_csv(embeddings_path)
+
+

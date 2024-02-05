@@ -20,35 +20,6 @@ blastp = '/home/prichter/ncbi-blast-2.15.0+/bin/blastp' # Location of blast bina
 makeblastdb = '/home/prichter/ncbi-blast-2.15.0+/bin/makeblastdb' 
 
 
-def mmseqs_load_database(path) -> pd.DataFrame:
-    '''Load the database FASTA file in as a pandas DataFrame.'''
-
-    data = {'seq':[], 'gene_id':[], 'nt_ext':[], 'nt_stop':[], 'nt_start':[], 'aa_length':[], 'accession':[], 'reverse':[]}
-
-    with open(path, 'r') as f:
-        text = f.read()
-        seqs = re.split(r'^>.*', text, flags=re.MULTILINE)[1:]
-        # Strip all of the newline characters from the amino acid sequences. 
-        seqs = [s.replace('\n', '') for s in seqs]
-        headers = re.findall(r'^>.*', text, re.MULTILINE)
-
-        for seq, header in zip(seqs, headers):
-            # Headers are of the form |gene_id|col=value|...|col=value
-            header = header.replace('>', '') # Remove the header marker. 
-            header = header.split('|')
-            for entry in header:
-                col, value = entry.split('=')
-                data[col].append(value)
-            data['seq'].append(seq) # Add the sequence as well. 
-
-    data = pd.DataFrame(data)
-    # Convert to numerical datatypes. 
-    data[['aa_length', 'nt_start', 'nt_stop', 'nt_ext']] = data[['aa_length', 'nt_start', 'nt_stop', 'nt_ext']].apply(pd.to_numeric)
-    data['reverse'] = data['reverse'].apply(bool)
-
-    return data
-
-
 def mmseqs_load_sequence_from_database(gene_id:str) -> str:
     '''Grab a specific sequence from the query database stored in the query.fasta file.'''
     database = mmseqs_load_database(path=os.path.join(DATA_DIR, 'query.fasta')) # Not really working with control sequences right now.
@@ -70,42 +41,6 @@ def blast_run(query_filename:str, target_filename:str, output_filename:str) -> N
     # Use a custom format, which is equivalent to fmt 6, but with the addition of the aligned parts of the query and subject sequence. 
     fmt = '"6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qseq sseq"'
     subprocess.run(f'{blastp} -query {query_path} -subject {target_path} -out {output_path} -outfmt {fmt}', shell=True, check=True)
-
-
-
-def blast_load_results(filename:str) -> pd.DataFrame:
-    '''Load the results of running BLAST pairwise alignment on a set of homology matches.'''
-    # Column names for output format 6. From https://www.metagenomics.wiki/tools/blast/blastn-output-format-6. 
-    columns =['query_header', 'target_header', 'percentage_identical', 'align_length', 'num_mismatches', 'num_gap_openings', 
-        'query_align_start', 'query_align_stop', 'target_align_start', 'target_align_stop', 'e_value', 'bit_score', 'query_align_seq', 'target_align_seq']
-    path = os.path.join(DATA_DIR, 'alignments', filename)
-    data = pd.read_csv(path, index_col=None, delimiter='\t', names=columns)
-
-    def parse_headers(headers:pd.Series) -> pd.DataFrame:
-        '''Convert a series of headers into a standalone pandas DataFrame.'''
-        rows = []
-        for header in headers:
-            header = dict([item.split('=') for item in header.split('|')])
-            # Don't need all of the information contained in the header... 
-            # NOTE: The {seq}_domain_stop and {seq}_domain_start are remnants from the MMSeqs2 homology search. They mark the boundaries
-            # of the homologous regions detected by MMSeqs relative to the queries and targets. 
-            header = {key:val for key, val in header.items() if key in ['target_gene_id', 'query_gene_id']}
-            rows.append(header)
-        return pd.DataFrame(rows, index=np.arange(len(headers)))
-
-    headers = pd.concat([parse_headers(data.target_header), parse_headers(data.query_header)], axis=1)
-    data = data.drop(columns=['target_header', 'query_header'])
-    data = pd.concat([data, headers], axis=1)
-
-    all_target_gene_ids = set(data.target_gene_id)
-    data = data[data.query_align_seq.str.contains('U')]
-    remaining_target_gene_ids = set(data.target_gene_id)
-    print(f'align.blast_load_results: Alignments for', ', '.join(all_target_gene_ids - remaining_target_gene_ids), 'do not cover selenocysteine, and were removed.')
-
-    data['u_pos'] = data.query_align_seq.str.find('U')
-    data['u_overlap'] = data.apply(lambda row: row.target_align_seq[row.u_pos], axis=1)
-
-    return data
 
 
 def blast_build_query(query_gene_id:str, query_seq:str, filename:str) -> NoReturn:
@@ -247,34 +182,4 @@ def plot_hits(data:pd.DataFrame, query_gene_id:str, past_stop_codon:bool=False) 
     plt.savefig(f'{query_gene_id}.png' if not past_stop_codon else f'{query_gene_id}_past_stop_codon.png', format='PNG')
 
 
-
-# NOTE: Calvin said pairwise alignment is sufficient -- no need for MSA. 
-def get_pairwise_alignments(query_seq:str, data:pd.DataFrame, filename:str=None, max_num_alignments:int=1000) -> NoReturn:
-    '''Generate multisequence alignments for the query sequence against each target sequence in the input DataFrame.
-    Write the resulting alignments to a file.'''
-    # NOTE: Note that pairwise aligners can return an astronomical number of alignments if they align poorly to each other. 
-    align_data = []
-    skipped = [] # Store the sequences for which an alignment could not be computed. 
-
-    for row in data.itertuples():
-        # There are multiple possible alignments, so calling align returns a list. 
-        aligner = Align.PairwiseAligner()
-        try:
-            alignments = aligner.align(query_seq, row.target_seq)
-            if max_num_alignments:
-                print(f'homology.get_pairwise_alignments: Reduced number of alignments from {len(alignments)} to {max_num_alignments}.')
-                alignments = [alignments[i] for i in range(min(max_num_alignments, len(alignments)))]
-        except OverflowError:
-            skipped.append(row.target_gene_id)
-            continue
-
-        for a in alignments:
-            query_align, target_align = a.format('phylip').strip().split('\n')[1:]
-            query_align, target_align = query_align.strip(), target_align.strip() # Remove the extra whitespace.
-            # assert len(query_align) == len(query_seq.replace('*', '')), 'main.get_pairwise_alignments: Query sequence and query alignment lengths do not match'
-            align_data.append({'score':a.score, 'query_align':query_align, 'target_align':target_align, 'target_gene_id':row.target_gene_id, 'query_id':row.query_gene_id, 'target_seq_length':len(row.target_seq)})
-
-    print(f'homology.get_pairwise_alignments: Unable to generate alignments for {len(skipped)} target genes.')
-    align_data = pd.DataFrame(align_data)
-    align_data.to_csv(os.path.join(DATA_DIR, 'alignments', filename))
 

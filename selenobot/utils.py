@@ -32,24 +32,19 @@ def read(path:str) -> str:
     return text
 
 
-def get_id(head:str) -> str:
-    '''Extract the unique identifier from a FASTA metadata string (the information on the line preceding 
-    the actual sequence). This ID should be flanked by '|' characters.
-    '''
-    start_idx = head.find('|') + 1
-    # Cut off any extra stuff preceding the ID, and locate the remaining |.
-    head = head[start_idx:]
-    end_idx = head.find('|')
-    return head[:end_idx]
-
-
-def fasta_ids(path, get_id_func=get_id):
+def fasta_ids(path:str, id_label:str='id') -> np.array:
     '''Extract all gene IDs stored in a FASTA file.'''
     # Read in the FASTA file as a string. 
     fasta = read(path)
     # Extract all the IDs from the headers, and return the result. 
-    ids = [get_id_func(head) for head in re.findall(r'^>.*', fasta, re.MULTILINE)]
+    pattern = f'{id_label}=([^;]+)'
+    ids = [re.search(pattern, head).group(1) for head in re.findall(r'^>.*', fasta, re.MULTILINE)]
     return np.array(ids)
+
+
+def fasta_size(path:str) -> int:
+    '''Gets the number of entries in a FASTA file.'''
+    return len(fasta_ids(path))
 
 
 def csv_size(path):
@@ -70,38 +65,35 @@ def fasta_seqs(path):
     return seqs
     
 
-def fasta_size(path):
-    '''Get the number of entries in a FASTA file.'''
-    return len(fasta_ids(path))
+def dataframe_from_fasta(path:str) -> pd.DataFrame:
+    '''Load the database FASTA file in as a pandas DataFrame.'''
+    df = {'seq':[]}
+    text = read(path)
 
+    seqs = re.split(r'^>.*', text, flags=re.MULTILINE)[1:]
+    # Strip all of the newline characters from the amino acid sequences. 
+    seqs = [s.replace('\n', '') for s in seqs]
+    headers = re.findall(r'^>.*', text, re.MULTILINE)
 
-def fasta_concatenate(paths, out_path=None):
-    '''Combine the FASTA files specified by the paths. Creates a new file
-    containing the combined data.'''
-    dfs = [pd_from_fasta(p, set_index=False) for p in paths]
-    df = pd.concat(dfs)
-    
-    # Remove any duplicates following concatenation. 
-    n = len(df)
-    df = df.drop_duplicates(subset='id')
-    df = df.set_index('id')
+    for seq, header in zip(seqs, headers):
+        # Headers are of the form |>col=value|...|col=value
+        header = header.replace('>', '') # Remove the header marker. 
+        for col, val in [entry.split('=') for entry in header.split(';')]:
+            if col not in df:
+                df[col] = []
+            df[col].append(val)
+        df['seq'].append(seq) # Add the sequence as well. 
 
-    if len(df) < n:
-        print(f'utils.fasta_concatenate: {n - len(df)} duplicates removed upon concatenation.')
+    df = pd.DataFrame(df) # Convert to a DataFrame
 
-    pd_to_fasta(df, path=out_path)
+    # Convert to numerical datatypes. 
+    num_fields = ['aa_length', 'nt_start', 'nt_stop', 'nt_ext']
+    for field in num_fields:
+        if field in df.columns:
+            df[field] = df[field].apply(pd.to_numeric)
+    if 'reverse' in df.columns:
+        df['reverse'] = df['reverse'].apply(bool)
 
-
-def dataframe_from_fasta(path, set_index=False, get_id_func=get_id):
-    '''Load a FASTA file in as a pandas DataFrame.'''
-
-    ids = fasta_ids(path, get_id_func=get_id_func)
-    seqs = fasta_seqs(path)
-
-    df = pd.DataFrame({'seq':seqs, 'id':ids})
-    # df = df.astype({'id':str, 'seq':str})
-    if set_index: 
-        df = df.set_index('id')
     return df
 
 
@@ -113,17 +105,75 @@ def dataframe_to_fasta(df:pd.DataFrame, path:str, textwidth:int=80) -> NoReturn:
     :param path: The path to write the FASTA file to. 
     :param textwidth: The length of lines in the FASTA file.     
     '''
-    # assert df.index.name == 'id', 'utils.pd_to_fasta: Gene ID must be set as the DataFrame index before writing.'
+    # Sometimes the ID column is the 
+    if df.index.name == 'id':
+        df['id'] = df.index
+
+    # Include all non-sequence fields in the FASTA header. 
+    header_fields = [col for col in df.columns if col != 'seq']
+
     fasta = ''
     for row in df.itertuples():
-        fasta += '>|' + str(row.Index) + '|\n'
+        header = [f'{field}={getattr(row, field)}' for field in header_fields]
+        fasta += '>' + ';'.join(header) + '\n' # Add the header to the FASTA file. 
+
         # Split the sequence up into substrings of length textwidth.
         n = len(row.seq)
         seq = [row.seq[i:min(n, i + textwidth)] for i in range(0, n, textwidth)]
-        assert len(''.join(seq)) == n, 'utils.pd_to_fasta: Part of the sequence was lmicrobiologyost when splitting into lines.'
+        assert len(''.join(seq)) == n, 'utils.pd_to_fasta: Part of the sequence was lost when splitting into lines.'
         fasta += '\n'.join(seq) + '\n'
+
     # Write the FASTA string to the path-specified file. 
     write(fasta, path=path)
+
+
+def dataframe_from_gff(path:str, cds_only:bool=True) -> pd.DataFrame:
+    '''convert a .gff gile into a pandas DataFrame.
+
+    :param path: The path to the .gff file.
+    :param cds_only: Whether or not to only include coding sequences. True by default. 
+    :return: A pandas DataFrame containing information in the GFF file.
+    '''
+    # GFF files are tab-separated. There are no column headers, but the fields are as follows.
+    cols = ['scaffold_id', 'source', 'feature', 'nt_start', 'nt_stop', 'score', 'reverse', 'frame', 'info']
+
+    # id: The name of the chromosome or scaffold (must not contain assembly information)
+    # source: The name of the program that generated this feature
+    # feature: Feature type name, e.g. Gene, Variation, Similarity
+    # nt_start: Start position of the feature, with sequence numbering starting at 1.
+    # nt_stop: End position of the feature, with sequence numbering starting at 1.
+    # score: A floating point value.
+    # strand: + (forward) or - (reverse).
+    # frame: One of '0', '1' or '2'. '0' indicates that the first base of the feature is the first base of a codon, '1' that the second base is the first base of a codon, and so on.
+    # attribute: A semicolon-separated list of tag-value pairs, providing additional information about each feature.
+
+    # Skip the comment lines at the beginning using the comment parameter. 
+    df = pd.read_csv(path, delimiter='\t', names=cols, comment='#') # Load in the TSV with the correct column names. 
+    
+    def parse_info(infos:pd.Series) -> pd.DataFrame():
+        '''Parse the info strings, extracting the relevant information. This function
+        assumes all non-coding sequences have been filtered out of the DataFrame.'''
+        info_df = {'id':[], 'gene_id':[]}
+        for info in infos:
+            # Extract the GenBank gene identifier. 
+            info_df['id'].append(re.search('ID=cds-([^;]+);', info).group(1))
+            info_df['gene_id'].append(re.search('gene=([^;]+);', info).group(1))
+        return pd.DataFrame(info_df)
+
+    # Clean up the data a bit... 
+    df['reverse'] = [x == '-' for x in df.reverse if x != '.'] # Convert to booleans. 
+    df['nt_start'] = df.nt_start - 1 # Shift to zero-indexed.
+    df['nt_stop'] = df.nt_stop - 1 # Shift to zero-indexed.
+
+    # Fill blanks with NaNs. 
+    df = df.replace('.', np.nan)
+
+    # Filter out everything that's not a coding sequence. Make sure to reset the index so pd.concat works correctly.
+    df = df[df['feature'].str.match('CDS')].reset_index(drop=True)
+    df['frame'] = df.frame.astype(int)
+    df = pd.concat([df, parse_info(df['info'])], axis=1)
+
+    return df.drop(columns=['info', 'score']).reset_index(drop=True) # Drop some columns we don't care about. 
 
 
 def dataframe_from_clstr(path:str) -> pd.DataFrame:
@@ -132,13 +182,14 @@ def dataframe_from_clstr(path:str) -> pd.DataFrame:
     :param path: The path to the .clstr file generated by CD-HIT.
     :return: A pandas DataFrame mapping gene ID to cluster ID. 
     '''
-    clstr = read(clstr_file_path) # Read in the cluster file as a string. 
+    clstr = read(path) # Read in the cluster file as a string. 
     df = {'id':[], 'cluster':[]}
     # The start of each new cluster is marked with a line like ">Cluster [num]"
     clusters = re.split(r'^>.*', clstr, flags=re.MULTILINE)
     # Split on the newline. 
     for i, cluster in enumerate(clusters):
-        ids = [get_id(x) for x in cluster.split('\n') if x != '']
+        pattern = '>id=([\w\d_\[\]]+)' # Pattern to extract gene ID from line. 
+        ids = [re.search(pattern, x).group(1) for x in cluster.split('\n') if x != '']
         df['id'] += ids
         df['cluster'] += [i] * len(ids)
 
@@ -146,6 +197,36 @@ def dataframe_from_clstr(path:str) -> pd.DataFrame:
     df.cluster = df.cluster.astype(int) # This will speed up grouping clusters later on. 
     return df
 
+
+def dataframe_from_blast(path:str) -> pd.DataFrame:
+    '''Load a TSV file produced by running BLAST pairwise alignment.'''
+    # Column names for output format 6. From https://www.metagenomics.wiki/tools/blast/blastn-output-format-6. 
+    columns =['query_header', 'target_header', 'percentage_identical', 'align_length', 'num_mismatches', 'num_gap_openings', 
+        'query_align_start', 'query_align_stop', 'target_align_start', 'target_align_stop', 'e_value', 'bit_score', 'query_align_seq', 'target_align_seq']
+    path = os.path.join(DATA_DIR, 'alignments', filename)
+    # Read in the TSV file. 
+    df = pd.read_csv(path, index_col=None, delimiter='\t', names=columns)
+
+    def parse_headers(headers:pd.Series) -> pd.DataFrame:
+        '''Convert a series of headers into a pandas DataFrame.'''
+        rows = []
+        for header in headers:
+            header = dict([item.split('=') for item in header.split('|')])
+            # Don't need all of the information contained in the header... 
+            # NOTE: The {seq}_domain_stop and {seq}_domain_start are remnants from the MMSeqs2 homology search. They mark the boundaries
+            # of the homologous regions detected by MMSeqs relative to the queries and targets. 
+            header = {key:val for key, val in header.items() if key in ['target_gene_id', 'query_gene_id']}
+            rows.append(header)
+        return pd.DataFrame(rows, index=np.arange(len(headers)))
+
+    headers = pd.concat([parse_headers(df.target_header), parse_headers(df.query_header)], axis=1)
+    df = df.drop(columns=['target_header', 'query_header'])
+    df = pd.concat([df, headers], axis=1)
+
+    # data['u_pos'] = data.query_align_seq.str.find('U')
+    # data['u_overlap'] = data.apply(lambda row: row.target_align_seq[row.u_pos], axis=1)
+
+    return df
 
 
 
