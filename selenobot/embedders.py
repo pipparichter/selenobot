@@ -11,7 +11,7 @@ from transformers import T5Tokenizer, T5EncoderModel
 
 from typing import List
 
-DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
 class LengthEmbedder():
