@@ -71,7 +71,7 @@ class AacEmbedder():
 class PlmEmbedder():
     '''Adapted from Josh's code, which he adapted from https://github.com/agemagician/ProtTrans/blob/master/Embedding/prott5_embedder.py'''
 
-    def __init__(model_name:str):
+    def __init__(self, model_name:str):
         '''Initializes a PLM embedder object.
         
         :param model_name: The name of the pre-trained PLM to load from HuggingFace.
