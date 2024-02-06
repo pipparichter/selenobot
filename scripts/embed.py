@@ -3,7 +3,7 @@ import sys
 # Make the modules in the selenobot directory visible from this script. 
 sys.path.append('../selenobot/')
 
-from embedders import PLMEmbedder
+from embedders import PlmEmbedder
 from classifiers import Dataset
 from utils import dataframe_from_fasta
 import subprocess
@@ -45,7 +45,7 @@ def main(in_path:str, out_path:str):
     '''
     
     # Instantiate the PLM embedder with the model name. 
-    embedder = PLMEmbedder('Rostlab/prot_t5_xl_half_uniref50-enc')
+    embedder = PlmEmbedder('Rostlab/prot_t5_xl_half_uniref50-enc')
 
     df = dataframe_from_fasta(in_path) # Load the FASTA file containing the sequences to embed. 
     df.to_csv(out_path) # Write the DataFrame to a CSV file. 
