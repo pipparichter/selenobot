@@ -7,6 +7,7 @@ from embedders import PlmEmbedder
 from utils import dataframe_from_fasta
 import subprocess
 from typing import NoReturn
+import pandas as pd
 
 def add_embeddings(path:str, chunk_size:int=1000) -> NoReturn:
     '''Add embedding information to a dataset, and overwrite the original dataset with the
@@ -57,7 +58,7 @@ def main(in_path:str, out_path:str):
     embeddings, ids = embedder(seqs, ids)
     embeddings_df = pd.DataFrame(embeddings)
     embeddings['id'] = ids
-    pd.to_csv(embeddings.set_index('id'), 'embeddings.csv')
+    embeddings.set_index('id').to_csv('embeddings.csv')
 
     # Add the embeddings contained in embeddings.csv to the CSV at out_path.abs
     add_embeddings(out_path)
