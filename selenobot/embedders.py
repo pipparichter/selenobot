@@ -79,7 +79,7 @@ class PlmEmbedder():
         '''
         
         self.model = T5EncoderModel.from_pretrained(model_name)
-        self.model.to(DEVICE) # Move model to GPU
+        self.model.to(device) # Move model to GPU
         self.model.eval() # Set model to evaluation model
         # Should be a T5Tokenizer object. 
         self.tokenizer = T5Tokenizer.from_pretrained(model_name, do_lower_case=False)
