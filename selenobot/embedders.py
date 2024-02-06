@@ -139,7 +139,7 @@ class PlmEmbedder():
 
         # Separate the IDs and embeddings in the list of tuples. 
         ids = [i for i, _ in embeddings]
-        embeddings = [e for _, e in embeddings]
+        embeddings = [torch.unsqueeze(e, 0) for _, e in embeddings]
 
         # Concatenate the list of tensors and return, along with the list of IDs. 
         return torch.cat(embeddings).float(), ids

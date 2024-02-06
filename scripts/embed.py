@@ -18,7 +18,7 @@ def add_embeddings(path:str, chunk_size:int=1000) -> NoReturn:
     '''
     embedding_ids = pd.read_csv('embeddings.csv', usecols=['id'])['id'].values.ravel() # Read the IDs in the embedding file to avoid loading the entire thing into memory.
     reader = pd.read_csv(path, index_col=['id'], chunksize=chunk_size) # Use read_csv to load the dataset one chunk at a time. 
-    tmp_file_path = f'{DATA_DIR}tmp.csv' # The path to the temporary file to which the modified dataset will be written in chunks.
+    tmp_file_path = 'tmp.csv' # The path to the temporary file to which the modified dataset will be written in chunks.
 
     is_first_chunk = True
     n_chunks = csv_size(path) // chunk_size + 1
