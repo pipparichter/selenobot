@@ -142,7 +142,7 @@ class PlmEmbedder():
         embeddings = [e for _, e in embeddings]
 
         # Concatenate the list of tensors and return, along with the list of IDs. 
-        return torch.cat(embeddings).astype(float), ids
+        return torch.cat(embeddings).float(), ids
 
 
     def embed_batch(self, batch:List[str]) -> torch.FloatTensor:
