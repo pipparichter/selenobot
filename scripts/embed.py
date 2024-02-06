@@ -6,6 +6,7 @@ sys.path.append('../selenobot/')
 from embedders import PlmEmbedder
 from utils import dataframe_from_fasta
 import subprocess
+from typing import NoReturn
 
 def add_embeddings(path:str, chunk_size:int=1000) -> NoReturn:
     '''Add embedding information to a dataset, and overwrite the original dataset with the
