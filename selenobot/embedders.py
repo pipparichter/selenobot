@@ -152,7 +152,7 @@ class PlmEmbedder():
         :return: A PyTorch tensor containing PLM embeddings for the batch. 
         '''
         # Should contain input_ids and attention_mask. Make sure everything's on the GPU. 
-        inputs = {k:torch.tensor(v).to(device) for k, v in tokenizer(batch, padding=True).items()}
+        inputs = {k:torch.tensor(v).to(device) for k, v in self.tokenizer(batch, padding=True).items()}
         try:
             with torch.no_grad():
                 outputs = self.model(**inputs)
