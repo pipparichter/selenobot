@@ -9,6 +9,7 @@ import subprocess
 from typing import NoReturn
 import pandas as pd
 from tqdm import tqdm
+import numpy as np
 
 def add_embeddings(path:str, chunk_size:int=1000) -> NoReturn:
     '''Add embedding information to a dataset, and overwrite the original dataset with the
