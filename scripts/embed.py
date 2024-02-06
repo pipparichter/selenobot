@@ -4,7 +4,7 @@ import sys
 sys.path.append('../selenobot/')
 
 from embedders import PlmEmbedder
-from utils import dataframe_from_fasta
+from utils import dataframe_from_fasta, csv_size
 import subprocess
 from typing import NoReturn
 import pandas as pd
