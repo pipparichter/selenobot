@@ -129,10 +129,7 @@ class PlmEmbedder():
                 outputs = self.embed_batch([s for _, s in curr_batch])
 
                 if outputs is not None:
-                    for (i, s), e in zip(curr_batch, outputs): # Should iterate over each batch output, or the first dimension. 
-                        print(e)
-                        print(outputs)
-                        print(i, s)
+                    for (i, s), e in zip(curr_batch, outputs.last_hidden_state): # Should iterate over each batch output, or the first dimension. 
                         e = e[:len(s)].mean(dim=0) # Remove the padding and average over sequence length. 
                         embeddings.append((i, e)) # Append the ID and embedding to the list. 
 
