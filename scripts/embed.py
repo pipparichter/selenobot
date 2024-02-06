@@ -4,7 +4,6 @@ import sys
 sys.path.append('../selenobot/')
 
 from embedders import PlmEmbedder
-from classifiers import Dataset
 from utils import dataframe_from_fasta
 import subprocess
 
