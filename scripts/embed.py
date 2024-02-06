@@ -57,8 +57,8 @@ def main(in_path:str, out_path:str):
     # Write the embeddings and the corresponding IDs to a CSV output file. This file is temporary. 
     embeddings, ids = embedder(seqs, ids)
     embeddings_df = pd.DataFrame(embeddings)
-    embeddings['id'] = ids
-    embeddings.set_index('id').to_csv('embeddings.csv')
+    embeddings_df['id'] = ids
+    embeddings_df.set_index('id').to_csv('embeddings.csv')
 
     # Add the embeddings contained in embeddings.csv to the CSV at out_path.abs
     add_embeddings(out_path)
