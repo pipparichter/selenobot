@@ -8,7 +8,7 @@ from utils import dataframe_from_fasta, csv_size
 import subprocess
 from typing import NoReturn
 import pandas as pd
-import tqdm
+from tqdm import tqdm
 
 def add_embeddings(path:str, chunk_size:int=1000) -> NoReturn:
     '''Add embedding information to a dataset, and overwrite the original dataset with the
