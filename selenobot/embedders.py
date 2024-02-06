@@ -115,7 +115,7 @@ class PlmEmbedder():
 
                 if outputs is not None:
                     # Add information to the list. 
-                    e = outputs.last_hidden_state[0, :row['length']].mean(dim=0)
+                    e = outputs.last_hidden_state[0, :len(s)].mean(dim=0)
                     embeddings.append((i, e))
                 continue
 
@@ -130,6 +130,9 @@ class PlmEmbedder():
 
                 if outputs is not None:
                     for (i, s), e in zip(curr_batch, outputs): # Should iterate over each batch output, or the first dimension. 
+                        print(e)
+                        print(outputs)
+                        print(i, s)
                         e = e[:len(s)].mean(dim=0) # Remove the padding and average over sequence length. 
                         embeddings.append((i, e)) # Append the ID and embedding to the list. 
 
