@@ -65,7 +65,12 @@ class TestReporter():
         '''
         # Make sure outputs and targets are stored as one-dimensional numpy arrays. 
         self.outputs = outputs.detach().numpy().ravel()
-        self.targets = targets.detach().numpy().ravel()
+
+        if targets is not None:
+            self.targets = targets.detach().numpy().ravel()
+        else:
+            self.targets = None
+
         self.loss = None
 
 
@@ -167,17 +172,18 @@ class Classifier(torch.nn.Module):
     def predict(self, dataset) -> TestReporter:
         '''Evaluate the Classifier on the data in the input Dataset. 
 
-        :param dataset: The Dataset object containing the testing data. 
+        :param dataset: The Dataset object containing the testing data. This Dataset can be either labeled or unlabeled.  
         :param threshold: The threshold above which (inclusive) a classification is considered a '1.' 
         '''    
         self.eval() # Put the model in evaluation mode. 
         
         inputs, targets = dataset.embeddings, dataset.labels
         outputs = self(inputs, batch_size=32) # Run a forward pass of the model. Batch to limit memory usage. 
-        loss = self.loss_func(outputs, targets)
-        
+            
         reporter = TestReporter(outputs, targets) # Instantiate a Reporter for storing collected data. 
-        reporter.loss = self.loss_func(outputs, targets).item() # Add the test loss to the reporter as a float.
+
+        if targets is not None: # Just in case the dataset is unlabeled. 
+            reporter.loss = self.loss_func(outputs, targets).item() # Add the loss to the reporter as a float.
 
         self.train() # Put the model back in train mode.
 
@@ -192,6 +198,9 @@ class Classifier(torch.nn.Module):
         :param lr: The learning rate. 
         :param bce_loss_weight: The weight to be passed into the WeightedBCELoss constructor.
         '''
+        assert dataloader.dataset.labeled, 'classifiers.Classifier.fit: The input DataLoader must be labeled.'
+        assert val_dataset.labeled, 'classifiers.Classifier.fit: The input validation Dataset must be labeled.'
+
         self.train() # Put the model in train mode.
 
         reporter = TrainReporter(epochs=epochs, lr=lr, batches_per_epoch=len(dataloader))

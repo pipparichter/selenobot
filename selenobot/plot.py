@@ -9,7 +9,7 @@ import scipy.stats
 from classifiers import TestReporter, TrainReporter
 from sklearn.linear_model import LogisticRegression
 from sklearn.calibration import calibration_curve
-from sklearn.metrics import roc_curve, precision_recall_curve
+from sklearn.metrics import roc_curve, precision_recall_curve, confusion_matrix
 
 # Some specs to make sure everything is in line with Nature Micro requirements.
 TITLE_FONT_SIZE, LABEL_FONT_SIZE = 10, 10
@@ -66,7 +66,7 @@ def plot_calibration_curve(reporter:TestReporter, ax:plt.Axes=None, n_bins:int=1
     ax.set_ylabel('fraction of positives')
 
 
-def plot_confusion_matrix(reporter:TestReporter, threshold:float=0.5) -> NoReturn:
+def plot_confusion_matrix(reporter:TestReporter, threshold:float=0.5) -> plt.Axes:
     '''Plots a confusion matrix using a TestReporter.
 
     :param reporter: The TestReporter object containing the results of model testing. 
@@ -79,7 +79,7 @@ def plot_confusion_matrix(reporter:TestReporter, threshold:float=0.5) -> NoRetur
 
     # Calculate the confusion matrix using the stored output and target values.
     # Make sure to pass targets, outputs to the confusion matrix function in the correct order.
-    (tn, fp, fn, tp) = sklearn.metrics.confusion_matrix(reporter.targets, outputs)
+    (tn, fp, fn, tp) = confusion_matrix(reporter.targets, outputs).ravel()
  
     # Confusion matrix function takes y_predicted and y_true as inputs, which is exactly the output of the predict method.
     fig, ax = plt.subplots(1)
@@ -95,6 +95,8 @@ def plot_confusion_matrix(reporter:TestReporter, threshold:float=0.5) -> NoRetur
     # Make the lines around the confusion matrix visible. 
     for _, spine in ax.spines.items():
         spine.set_visible(True)
+    
+    return ax
 
 
 def plot_precision_recall_curve(reporter:TestReporter, ax:plt.Axes=None) -> NoReturn:

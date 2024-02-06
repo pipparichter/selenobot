@@ -25,7 +25,6 @@ class Dataset(torch.utils.data.Dataset):
         # Check to make sure all expected fields are present in the input DataFrame. 
         if embedder is not None:
             assert 'seq' in df.columns, f'dataset.Dataset.__init__: Input DataFrame missing required field seq.'
-        assert 'label' in df.columns, f'dataset.Dataset.__init__: Input DataFrame missing required field label.'
         assert 'id' in df.columns, f'dataset.Dataset.__init__: Input DataFrame missing required field id.'
 
         if embedder is not None:
@@ -33,10 +32,15 @@ class Dataset(torch.utils.data.Dataset):
             self.type = embedder.type # Type of data contained by the Dataset.
         else: # This means that the embeddings are already in the DataFrame (or at least, they should be)
             self.type = 'plm'
-            self.embeddings = torch.from_numpy(df.drop(columns=['label', 'cluster', 'seq', 'id']).values).to(torch.float32)
+            # Drop all non-numeric columns from the DataFrame to isolate the embeddings. 
+            drop_cols = [col for col in df.columns if type(col) == str]
+            self.embeddings = torch.from_numpy(df.drop(columns=drop_cols).values).to(torch.float32)
 
         # Make sure the type of the tensor is the same as model weights.
-        self.labels = torch.from_numpy(df['label'].values).type(torch.float32)
+        # Set the labels to None if no labels are given. 
+        self.labels = None if 'label' not in df.columns else torch.from_numpy(df['label'].values).type(torch.float32)
+        self.labeled = 'label' in df.columns # Boolean value indicating whether or not the data is labeled. 
+
         self.ids = df['id'].values
         self.latent_dim = self.embeddings.shape[-1]
 
@@ -48,9 +52,10 @@ class Dataset(torch.utils.data.Dataset):
     def __getitem__(self, idx:int) -> Dict:
         '''Returns an item from the Dataset. Also returns the underlying index for testing purposes.'''
         label = self.labels[idx]
-        embedding = self.embeddings[idx]
-        id_ = self.ids[idx]
-        return {'label':label, 'embedding':embedding, 'id':id_, 'idx':idx}
+        item = {'embedding':self.embeddings[idx], 'id':self.ids[idx], 'idx':idx}
+        if self.labeled: # Include the label if the Dataset is labeled.
+            item['label'] = self.labels[idx]
+        return item
 
     def get_selenoprotein_indices(self) -> List[int]:
         '''Obtains the indices of selenoproteins in the Dataset.'''
@@ -123,6 +128,8 @@ def get_dataloader(
     :param balance_batches: Whether or not to ensure that each batch has equal proportion of full-length and truncated proteins. 
     :return: A pytorch DataLoader object. 
     '''
+    assert dataloader.dataset.labeled, 'dataset.get_dataloader: The input Dataset must be labeled.'
+
     if balance_batches:
         # Providing batch_sampler will override batch_size, shuffle, sampler, and drop_last altogether.
         batch_sampler = BalancedBatchSampler(dataset, batch_size=batch_size)

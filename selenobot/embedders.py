@@ -84,58 +84,64 @@ class PlmEmbedder():
         self.tokenizer = T5Tokenizer.from_pretrained(model_name, do_lower_case=False)
 
 
-    def __call__(self, data:List[SyntaxError], path:str,
+    def __call__(self, seqs:List[str], ids:List[str],
         max_aa_per_batch:int=10000,
         max_seq_per_batch:int=100,
         max_seq_length:int=1000) -> torch.FloatTensor:
         '''
-        Embeds the input data using the PLM stored in the model attribute.
+        Embeds the input data using the PLM stored in the model attribute. Note that this embedding
+        algorithm does not preserve the order of the input sequences, so IDs must be included for each sequence.
         
-        :param data: 
-        :param path: Path to which to write the embeddings.
+        :param seqs: A list of amino acid sequences to embed.
+        :param ids: A list of identifiers for the amino acid sequences. 
         :param max_aa_per_batch: The maximum number of amino acid residues in a batch 
         :param max_seq_per_batch: The maximum number of sequences per batch. 
         :param max_seq_length: The maximum length of a single sequence, past which we switch to single-sequence processing
         :return: A Tensor object containing all of the embedding data. 
         '''
-
-        embeddings = [] # List to store the embedding data. 
-        data = [seq.replace('U', 'X').replace('Z', 'X').replace('O', 'X') for seq in data] # Replace non-standard amino acids with X token.
+        seqs = [seq.replace('U', 'X').replace('Z', 'X').replace('O', 'X') for seq in seqs] # Replace non-standard amino acids with X token.
+        seqs = list(zip(ids, seqs)) # Store the IDs with the sequences as tuples in a list. 
         # Order the sequences in ascending order according to sequence length to avoid unnecessary padding. 
-        data = sorted(data, key=len)
+        seqs = sorted(seqs, key=lambda t : len(t[1]))
 
+        embeddings = []
         curr_aa_count = 0
         curr_batch = []
-        for seq in data:
+        for i, s in tqdm(seqs, desc='embedders.PlmEmbedder.__call__'):
             # Switch to single-sequence processing if length limit is exceeded.
-            if len(seq) > max_seq_length:
-                outputs = self.embed_batch([seq])
+            if len(s) > max_seq_length:
+                outputs = self.embed_batch([s])
 
                 if outputs is not None:
                     # Add information to the list. 
-                    emb = outputs.last_hidden_state[0, :row['length']].mean(dim=0)
-                    embeddings.append(emb)
+                    e = outputs.last_hidden_state[0, :row['length']].mean(dim=0)
+                    embeddings.append((i, e))
                 continue
 
             # Add the sequence to the batch, and keep track of total amino acids in the batch. 
-            curr_batch.append(seq)
-            curr_aa_count += len(seq)
+            curr_batch.append((i, s))
+            curr_aa_count += len(s)
 
             if len(curr_batch) > max_seq_per_batch or curr_aa_count > max_aa_per_batch:
                 # If any of the presepecified limits are exceeded, go ahead and embed the batch. 
-                outputs = self.embed_batch(curr_batch)
+                # Make sure to only pass in the sequence. 
+                outputs = self.embed_batch([s for _, s in curr_batch])
 
                 if outputs is not None:
-                    for seq, emb in zip(curr_batch, outputs): # Should iterate over each batch output, or the first dimension. 
-                        emb = emb[:len(seq)].mean(dim=0) # Remove the padding and average over sequence length. 
-                        embeddings.append(emb)
+                    for (i, s), e in zip(curr_batch, outputs): # Should iterate over each batch output, or the first dimension. 
+                        e = e[:len(s)].mean(dim=0) # Remove the padding and average over sequence length. 
+                        embeddings.append((i, e)) # Append the ID and embedding to the list. 
 
                         # Reset the current batch and amino acid count. 
                         curr_batch = []
                         curr_aa_count = 0
 
-        # Concatenate the list of tensors and return. 
-        return torch.cat(embeddings).astype(float)
+        # Separate the IDs and embeddings in the list of tuples. 
+        ids = [i for i, _ in embeddings]
+        embeddings = [e for _, e in embeddings]
+
+        # Concatenate the list of tensors and return, along with the list of IDs. 
+        return torch.cat(embeddings).astype(float), ids
 
 
     def embed_batch(self, batch:List[str]) -> torch.FloatTensor:

@@ -211,7 +211,8 @@ def dataframe_from_blast(path:str) -> pd.DataFrame:
         '''Convert a series of headers into a pandas DataFrame.'''
         rows = []
         for header in headers:
-            header = dict([item.split('=') for item in header.split('|')])
+            # Assume the header is separated by semicolons, as for other FASTA files in this project. 
+            header = dict([item.split('=') for item in header.split(';')])
             # Don't need all of the information contained in the header... 
             # NOTE: The {seq}_domain_stop and {seq}_domain_start are remnants from the MMSeqs2 homology search. They mark the boundaries
             # of the homologous regions detected by MMSeqs relative to the queries and targets. 
