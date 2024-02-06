@@ -66,4 +66,9 @@ def main(in_path:str, out_path:str):
     subprocess.run('rm embeddings.csv', shell=True, check=True)
 
 
+if __name__ == '__main__':
+
+    genome_id = 'GCF_000005845.2'
+    main('~/data/protein.faa', f'~/data/{genome_id}.csv')
+
 
