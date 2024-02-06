@@ -7,6 +7,7 @@ import os
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
+from transformers import T5Tokenizer, T5EncoderModel
 
 from typing import List
 
