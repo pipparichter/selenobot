@@ -17,3 +17,5 @@
 **/__pycache__
 **/selenobot.egg-info
 selenobot-local.cfg
+ncbi-blast-2.15.0+
+ncbi-blast-2.15.0+-x64-linux.tar.gz

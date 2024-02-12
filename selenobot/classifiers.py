@@ -72,12 +72,16 @@ class TestReporter():
 
         self.loss = None
 
-
-    def get_balanced_accuracy(self, threshold:float=0.5) -> float:
-        '''Applies a threshold to the model outputs, and uses it to compute a balanced accuracy score.'''
+    def apply_threshold(self, threshold:float=0.5) -> np.array:
+        '''Apply the threshold to model outputs.'''
         # Apply the threshold to the output values. 
         outputs = np.ones(self.outputs.shape) # Initialize an array of ones. 
         outputs[np.where(self.outputs < threshold)] = 0
+        return outputs
+
+    def get_balanced_accuracy(self, threshold:float=0.5) -> float:
+        '''Applies a threshold to the model outputs, and uses it to compute a balanced accuracy score.'''
+        outputs = self.apply_threshold(threshold=threshold)
         # Compute balanced accuracy using a builtin sklearn function. 
         return sklearn.metrics.balanced_accuracy_score(self.targets, outputs)
 
@@ -132,7 +136,8 @@ class Classifier(torch.nn.Module):
     def __init__(self, 
         hidden_dim:int=512,
         latent_dim:int=1024,
-        bce_loss_weight:float=1):
+        bce_loss_weight:float=1,
+        random_seed:int=42):
         '''
         Initializes a two-layer linear classification head. 
 
@@ -142,6 +147,7 @@ class Classifier(torch.nn.Module):
         '''
         # Initialize the torch Module
         super().__init__()
+        torch.manual_seed(random_seed)
 
         self.classifier = torch.nn.Sequential(
             torch.nn.Linear(latent_dim, hidden_dim),
@@ -248,12 +254,14 @@ class SimpleClassifier(Classifier):
 
     def __init__(self, 
         bce_loss_weight:float=1.0,
-        latent_dim:int=1):
+        latent_dim:int=1,
+        random_seed:int=42):
         '''Initializes a single-layer linear classification head.'''
 
         # Initialize the torch Module. The classifier attribute will be overridden by the rest of this init function. 
         super().__init__()
-
+        torch.manual_seed(random_seed)
+        
         self.classifier = torch.nn.Sequential(
             torch.nn.Linear(latent_dim, 1),
             torch.nn.Sigmoid())

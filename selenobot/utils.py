@@ -10,6 +10,19 @@ import pickle
 import subprocess
 
 
+def to_numeric(n:str):
+    '''Try to convert a string to a numerical data type. Used when 
+    reading in header strings from files.'''
+    try: 
+        n = int(n)
+    except:
+        try: 
+            n = float(n)
+        except:
+            pass
+    return n
+
+
 def write(text:str, path:str) -> NoReturn:
     '''Writes a string of text to a file.   
     
@@ -156,14 +169,24 @@ def dataframe_from_gff(path:str, cds_only:bool=True) -> pd.DataFrame:
         info_df = {'id':[], 'gene_id':[]}
         for info in infos:
             # Extract the GenBank gene identifier. 
-            info_df['id'].append(re.search('ID=cds-([^;]+);', info).group(1))
-            info_df['gene_id'].append(re.search('gene=([^;]+);', info).group(1))
-        return pd.DataFrame(info_df)
+            id_match = re.search('ID=cds-([^;]+);', info)
+            info_df['id'].append(id_match.group(1))
+            # Extract the gene name. 
+            gene_id_match = re.search(f'gene=([^;]+);', info)
+            if gene_id_match is None:
+                info_df['gene_id'].append(None)
+            else:
+                info_df['gene_id'].append(gene_id_match.group(1))
+        # Drop the source column, as it can contains whitespaces that trip up MMSeqs2 (causes it to cut off some of the header when 
+        # writing the results file).
+        return pd.DataFrame(info_df).drop(columns=['source'])
 
     # Clean up the data a bit... 
     df['reverse'] = [x == '-' for x in df.reverse if x != '.'] # Convert to booleans. 
+    #  Both the start and end position are inclusive and one-indexed.
     df['nt_start'] = df.nt_start - 1 # Shift to zero-indexed.
-    df['nt_stop'] = df.nt_stop - 1 # Shift to zero-indexed.
+    # Not adjusting the upper bound means it can be used directly in a slice. 
+    # df['nt_stop'] = df.nt_stop - 1 # Shift to zero-indexed.
 
     # Fill blanks with NaNs. 
     df = df.replace('.', np.nan)
@@ -198,29 +221,39 @@ def dataframe_from_clstr(path:str) -> pd.DataFrame:
     return df
 
 
-def dataframe_from_blast(path:str) -> pd.DataFrame:
+def dataframe_from_m8(path:str) -> pd.DataFrame:
     '''Load a TSV file produced by running BLAST pairwise alignment.'''
     # Column names for output format 6. From https://www.metagenomics.wiki/tools/blast/blastn-output-format-6. 
     columns =['query_header', 'target_header', 'percentage_identical', 'align_length', 'num_mismatches', 'num_gap_openings', 
         'query_align_start', 'query_align_stop', 'target_align_start', 'target_align_stop', 'e_value', 'bit_score', 'query_align_seq', 'target_align_seq']
-    path = os.path.join(DATA_DIR, 'alignments', filename)
     # Read in the TSV file. 
     df = pd.read_csv(path, index_col=None, delimiter='\t', names=columns)
 
-    def parse_headers(headers:pd.Series) -> pd.DataFrame:
+    def parse_headers(headers:pd.Series, prefix:str) -> pd.DataFrame:
         '''Convert a series of headers into a pandas DataFrame.'''
         rows = []
         for header in headers:
-            # Assume the header is separated by semicolons, as for other FASTA files in this project. 
-            header = dict([item.split('=') for item in header.split(';')])
-            # Don't need all of the information contained in the header... 
-            # NOTE: The {seq}_domain_stop and {seq}_domain_start are remnants from the MMSeqs2 homology search. They mark the boundaries
-            # of the homologous regions detected by MMSeqs relative to the queries and targets. 
-            header = {key:val for key, val in header.items() if key in ['target_gene_id', 'query_gene_id']}
+            try:
+                # Assume the header is separated by semicolons, as for other FASTA files in this project. 
+                header = dict([item.split('=') for item in header.split(';')])
+            except: # For the MMSeqs2-generated files, the target_headers only contain the GTDB gene ID. 
+                header = {'id':header}
+            items = list(header.items())
+            for key, val in items: # Rename the header fields to indicate query or target.
+                del header[key] # Remove the old key from the header. 
+                # If query_ or target_ is already in the key, don't re-add it. 
+                if 'query' in key:
+                    # If the wrong prefix is in the string, replace with the correct prefix.
+                    # This can happen when a target from an MMSeqs run becomes a query during BLAST alignment.
+                    header[key.replace('query', prefix)] = to_numeric(val)
+                elif 'target' in key:
+                    header[key.replace('target', prefix)] = to_numeric(val)
+                else:
+                    header[f'{prefix}_{key}'] = to_numeric(val)
             rows.append(header)
         return pd.DataFrame(rows, index=np.arange(len(headers)))
 
-    headers = pd.concat([parse_headers(df.target_header), parse_headers(df.query_header)], axis=1)
+    headers = pd.concat([parse_headers(df.target_header, 'target'), parse_headers(df.query_header, 'query')], axis=1)
     df = df.drop(columns=['target_header', 'query_header'])
     df = pd.concat([df, headers], axis=1)
 

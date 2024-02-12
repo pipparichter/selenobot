@@ -51,7 +51,7 @@ def main(in_path:str, out_path:str):
     embedder = PlmEmbedder('Rostlab/prot_t5_xl_half_uniref50-enc')
 
     df = dataframe_from_fasta(in_path) # Load the FASTA file containing the sequences to embed. 
-    df.to_csv(out_path) # Write the DataFrame to a CSV file. 
+    df.set_index('id').to_csv(out_path) # Write the DataFrame to a CSV file. 
 
     seqs = list(df['seq'].values) # Get the amino acid sequences in the file as a list of strings. 
     ids = list(df['id'].values)

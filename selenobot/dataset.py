@@ -33,7 +33,7 @@ class Dataset(torch.utils.data.Dataset):
         else: # This means that the embeddings are already in the DataFrame (or at least, they should be)
             self.type = 'plm'
             # Drop all non-numeric columns from the DataFrame to isolate the embeddings. 
-            drop_cols = [col for col in df.columns if type(col) == str]
+            drop_cols = [col for col in df.columns if col not in [str(i) for i in range(1024)]]
             self.embeddings = torch.from_numpy(df.drop(columns=drop_cols).values).to(torch.float32)
 
         # Make sure the type of the tensor is the same as model weights.
@@ -68,13 +68,15 @@ class BalancedBatchSampler(torch.utils.data.BatchSampler):
     This class is used in conjunction with PyTorch DataLoaders.'''
 
     # TODO: Probably add some checks here, unexpected bahavior might occur if things are evenly divisible by batch size, for example.
-    def __init__(self, data_source:Dataset, batch_size:int=None,): 
+    def __init__(self, data_source:Dataset, batch_size:int=None, random_seed:int=42): 
         '''Initialize a custom BatchSampler object.
         
         :param data_source: A Dataset object containing the data to sample into batches. 
         :param batch_size: The size of the batches. 
+        :param random_seed: The value to seed the random number generator. 
         '''
         r = 0.5 # The fraction of truncated selenoproteins to include in each batch. 
+        random.seed(random_seed) # Seed the random number generator for consistent shuffling.
 
         sel_idxs = data_source.get_selenoprotein_indices() # Get the indices of all tagged selenoproteins in the Dataset. 
         non_sel_idxs = np.array(list(set(range(len(data_source))) - set(sel_idxs))) # Get the indices of all non-selenoproteins in the dataset. 
@@ -120,22 +122,16 @@ class BalancedBatchSampler(torch.utils.data.BatchSampler):
 def get_dataloader(
         dataset:Dataset, 
         batch_size:int=1024,
-        balance_batches:bool=True) -> torch.utils.data.DataLoader:
+        random_seed:int=42) -> torch.utils.data.DataLoader:
     '''Create a DataLoader from a CSV file containing sequence and/or PLM embedding data.
     
     :param dataset: The Dataset used to generate the DataLoader. 
     :param batch_size: The size of the batches which the training data will be split into. 
-    :param balance_batches: Whether or not to ensure that each batch has equal proportion of full-length and truncated proteins. 
     :return: A pytorch DataLoader object. 
     '''
-    assert dataloader.dataset.labeled, 'dataset.get_dataloader: The input Dataset must be labeled.'
-
-    if balance_batches:
-        # Providing batch_sampler will override batch_size, shuffle, sampler, and drop_last altogether.
-        batch_sampler = BalancedBatchSampler(dataset, batch_size=batch_size)
-        return torch.utils.data.DataLoader(dataset, batch_sampler=batch_sampler)
-    else:
-        return torch.utils.data.DataLoader(dataset, shuffle=True, batch_size=batch_size)
+    assert dataset.labeled, 'dataset.get_dataloader: The input Dataset must be labeled.'
+    batch_sampler = BalancedBatchSampler(dataset, batch_size=batch_size, random_seed=random_seed)
+    return torch.utils.data.DataLoader(dataset, batch_sampler=batch_sampler)
 
 
 

@@ -100,7 +100,7 @@ class PlmEmbedder():
         :param max_seq_length: The maximum length of a single sequence, past which we switch to single-sequence processing
         :return: A Tensor object containing all of the embedding data. 
         '''
-        seqs = [seq.replace('U', 'X').replace('Z', 'X').replace('O', 'X') for seq in seqs] # Replace non-standard amino acids with X token.
+        seqs = [s.replace('U', 'X').replace('Z', 'X').replace('O', 'X') for s in seqs] # Replace non-standard amino acids with X token.
         seqs = list(zip(ids, seqs)) # Store the IDs with the sequences as tuples in a list. 
         # Order the sequences in ascending order according to sequence length to avoid unnecessary padding. 
         seqs = sorted(seqs, key=lambda t : len(t[1]))
@@ -150,7 +150,10 @@ class PlmEmbedder():
         :param batch: A list of strings, each string being a tokenized sequence. 
         :return: A PyTorch tensor containing PLM embeddings for the batch. 
         '''
+        # Characters in the sequence need to be space-separated, apparently. 
+        batch = [' '.join(list(s)) for s in batch]
         # Should contain input_ids and attention_mask. Make sure everything's on the GPU. 
+        # The tokenizer defaults mean that add_special_tokens=True and padding=True is equivalent to padding='longest'
         inputs = {k:torch.tensor(v).to(device) for k, v in self.tokenizer(batch, padding=True).items()}
         try:
             with torch.no_grad():
