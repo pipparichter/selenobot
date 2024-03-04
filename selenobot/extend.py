@@ -79,6 +79,8 @@ def extend(df:pd.DataFrame, genome:str):
     '''Take a DataFrame containing gene names and nt_start/nt_stop coordinates, which is read in from
     a GFF file. Then, find the gene in the input genome and extend it to the next stop codon. Add the 
     extended sequence to the DataFrame.'''
+    # Need to do this, or else the original DataFrame is modified inplace. 
+    df = df.copy()
 
     # Information to add to the DataFrame. 
     seqs = []
@@ -93,7 +95,7 @@ def extend(df:pd.DataFrame, genome:str):
     for row in df.itertuples():
 
         # This code assumes the coding sequence frame starts at the first nucleotide. Confirm this is true. 
-        assert row.frame == 0, 'extend.extend: Expected reading frame to start at the first nucleotide position.'
+        assert int(row.frame) == 0, 'extend.extend: Expected reading frame to start at the first nucleotide position.'
         assert row.nt_start < row.nt_stop, 'extend.extend: Expected start to be to the left of the stop position.'
 
         # Check the original nucleotide sequence before extending.

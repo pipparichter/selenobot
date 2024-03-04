@@ -178,7 +178,6 @@ class Classifier(torch.nn.Module):
         '''Evaluate the Classifier on the data in the input Dataset. 
 
         :param dataset: The Dataset object containing the testing data. This Dataset can be either labeled or unlabeled.  
-        :param threshold: The threshold above which (inclusive) a classification is considered a '1.' 
         '''    
         self.eval() # Put the model in evaluation mode. 
         

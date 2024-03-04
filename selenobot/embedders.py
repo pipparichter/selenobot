@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from transformers import T5Tokenizer, T5EncoderModel
 
-from typing import List
+from typing import List, Tuple
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -108,15 +108,20 @@ class PlmEmbedder():
         embeddings = []
         curr_aa_count = 0
         curr_batch = []
-        for i, s in tqdm(seqs, desc='embedders.PlmEmbedder.__call__'):
+
+        def add_embeddings_to_list(outputs, batch:List[Tuple[int, str]]=None):
+            '''Extract the embeddings from model output and mean-pool across the length
+            of the sequence. Add the embeddings to the embeddings list.'''
+            if outputs is not None:
+                for (i, s), e in zip(batch, outputs.last_hidden_state): # Should iterate over each batch output, or the first dimension. 
+                    e = e[:len(s)].mean(dim=0) # Remove the padding and average over sequence length. 
+                    embeddings.append((i, e)) # Append the ID and embedding to the list. 
+
+        for i, s in tqdm(seqs, desc='PlmEmbedder.__call__'):
             # Switch to single-sequence processing if length limit is exceeded.
             if len(s) > max_seq_length:
                 outputs = self.embed_batch([s])
-
-                if outputs is not None:
-                    # Add information to the list. 
-                    e = outputs.last_hidden_state[0, :len(s)].mean(dim=0)
-                    embeddings.append((i, e))
+                add_embeddings_to_list(outputs, batch=[(i, s)])
                 continue
 
             # Add the sequence to the batch, and keep track of total amino acids in the batch. 
@@ -127,15 +132,16 @@ class PlmEmbedder():
                 # If any of the presepecified limits are exceeded, go ahead and embed the batch. 
                 # Make sure to only pass in the sequence. 
                 outputs = self.embed_batch([s for _, s in curr_batch])
+                add_embeddings_to_list(outputs, batch=curr_batch)
 
-                if outputs is not None:
-                    for (i, s), e in zip(curr_batch, outputs.last_hidden_state): # Should iterate over each batch output, or the first dimension. 
-                        e = e[:len(s)].mean(dim=0) # Remove the padding and average over sequence length. 
-                        embeddings.append((i, e)) # Append the ID and embedding to the list. 
+                # Reset the current batch and amino acid count. 
+                curr_batch = []
+                curr_aa_count = 0
 
-                        # Reset the current batch and amino acid count. 
-                        curr_batch = []
-                        curr_aa_count = 0
+        # Handles the case in which the minimum batch size is not reached.
+        if len(curr_batch) > 0:
+            outputs = self.embed_batch([s for _, s in curr_batch])
+            add_embeddings_to_list(outputs, batch=curr_batch)
 
         # Separate the IDs and embeddings in the list of tuples. 
         ids = [i for i, _ in embeddings]

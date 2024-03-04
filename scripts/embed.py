@@ -1,4 +1,4 @@
-'''A script for embedding protein sequences in a FASTA file. This should be run on the HPC.'''
+'''A script for embedding protein sequences in a FASTA file.'''
 import sys
 # Make the modules in the selenobot directory visible from this script. 
 sys.path.append('../selenobot/')
@@ -10,6 +10,7 @@ from typing import NoReturn
 import pandas as pd
 from tqdm import tqdm
 import numpy as np
+import argparse
 
 def add_embeddings(path:str, chunk_size:int=1000) -> NoReturn:
     '''Add embedding information to a dataset, and overwrite the original dataset with the
@@ -24,7 +25,7 @@ def add_embeddings(path:str, chunk_size:int=1000) -> NoReturn:
 
     is_first_chunk = True
     n_chunks = csv_size(path) // chunk_size + 1
-    for chunk in tqdm(reader, desc='embed.add_embeddings', total=n_chunks):
+    for chunk in tqdm(reader, desc='add_embeddings', total=n_chunks):
         # Get the indices of the embedding rows corresponding to the data chunk. Make sure to shift the index up by one to account for the header. 
         idxs = np.where(np.isin(embedding_ids, chunk.index, assume_unique=True))[0] + 1 
         idxs = [0] + list(idxs) # Add the header index so the column names are included. 
@@ -40,18 +41,26 @@ def add_embeddings(path:str, chunk_size:int=1000) -> NoReturn:
     subprocess.run(f'mv {tmp_file_path} {path}', shell=True, check=True)
 
 
-def main(in_path:str, out_path:str):
-    '''Generate PLM embeddings for sequences in the specified FASTA file.
-
-    :param in_path: The path to the FASTA file containing the amino acid sequences. 
-    :param out_path: The path to which to write the new dataset, with embeddings. 
-    '''
+if __name__ == '__main__':
     
-    # Instantiate the PLM embedder with the model name. 
-    embedder = PlmEmbedder('Rostlab/prot_t5_xl_half_uniref50-enc')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('input', help='The path to the FASTA file containing the sequences to embed.', type=str)
+    parser.add_argument('output', help='The path write the embeddings to.', type=str)
+    parser.add_argument('-m', '--model', help='The name of the protein language model to use for generating embeddings.', default='Rostlab/prot_t5_xl_half_uniref50-enc', type=str)
 
-    df = dataframe_from_fasta(in_path) # Load the FASTA file containing the sequences to embed. 
-    df.set_index('id').to_csv(out_path) # Write the DataFrame to a CSV file. 
+    args = parser.parse_args()
+
+    # Make sure the file types are correct. 
+    input_file_type = args.input.split('.')[-1]
+    output_file_type = args.output.split('.')[-1] 
+    assert input_file_type in ['fasta', 'faa', 'fa'], 'Unsupported input file type. Must be in FASTA format.'
+    assert output_file_type == 'csv', 'Unsupported input file type. Must be a CSV file.'
+
+    # Instantiate the PLM embedder with the model name. 
+    embedder = PlmEmbedder(args.model)
+
+    df = dataframe_from_fasta(args.input) # Load the FASTA file containing the sequences to embed. 
+    df.set_index('id').to_csv(args.output) # Write the DataFrame to a CSV file. 
 
     seqs = list(df['seq'].values) # Get the amino acid sequences in the file as a list of strings. 
     ids = list(df['id'].values)
@@ -63,15 +72,9 @@ def main(in_path:str, out_path:str):
     embeddings_df.set_index('id').to_csv('embeddings.csv')
 
     # Add the embeddings contained in embeddings.csv to the CSV at out_path.abs
-    add_embeddings(out_path)
+    add_embeddings(args.output)
 
     # Remove the embeddings.csv file, which is now redundant. 
     subprocess.run('rm embeddings.csv', shell=True, check=True)
-
-
-if __name__ == '__main__':
-
-    genome_id = 'GCF_000005845.2'
-    main('/home/prichter/data/protein.faa', f'/home/prichter/data/{genome_id}.csv')
 
 

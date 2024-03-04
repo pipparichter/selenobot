@@ -148,7 +148,7 @@ def dataframe_from_gff(path:str, cds_only:bool=True) -> pd.DataFrame:
     :return: A pandas DataFrame containing information in the GFF file.
     '''
     # GFF files are tab-separated. There are no column headers, but the fields are as follows.
-    cols = ['scaffold_id', 'source', 'feature', 'nt_start', 'nt_stop', 'score', 'reverse', 'frame', 'info']
+    cols = ['scaffold_id', 'feature', 'nt_start', 'nt_stop', 'score', 'reverse', 'frame', 'info']
 
     # id: The name of the chromosome or scaffold (must not contain assembly information)
     # source: The name of the program that generated this feature
@@ -179,7 +179,7 @@ def dataframe_from_gff(path:str, cds_only:bool=True) -> pd.DataFrame:
                 info_df['gene_id'].append(gene_id_match.group(1))
         # Drop the source column, as it can contains whitespaces that trip up MMSeqs2 (causes it to cut off some of the header when 
         # writing the results file).
-        return pd.DataFrame(info_df).drop(columns=['source'])
+        return pd.DataFrame(info_df)
 
     # Clean up the data a bit... 
     df['reverse'] = [x == '-' for x in df.reverse if x != '.'] # Convert to booleans. 
@@ -241,15 +241,7 @@ def dataframe_from_m8(path:str) -> pd.DataFrame:
             items = list(header.items())
             for key, val in items: # Rename the header fields to indicate query or target.
                 del header[key] # Remove the old key from the header. 
-                # If query_ or target_ is already in the key, don't re-add it. 
-                if 'query' in key:
-                    # If the wrong prefix is in the string, replace with the correct prefix.
-                    # This can happen when a target from an MMSeqs run becomes a query during BLAST alignment.
-                    header[key.replace('query', prefix)] = to_numeric(val)
-                elif 'target' in key:
-                    header[key.replace('target', prefix)] = to_numeric(val)
-                else:
-                    header[f'{prefix}_{key}'] = to_numeric(val)
+                header[f'{prefix}_{key}'] = to_numeric(val)
             rows.append(header)
         return pd.DataFrame(rows, index=np.arange(len(headers)))
 
