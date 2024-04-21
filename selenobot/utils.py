@@ -9,6 +9,10 @@ import configparser
 import pickle
 import subprocess
 
+# Define some important directories...
+CWD, _ = os.path.split(os.path.abspath(__file__))
+RESULTS_DIR = os.path.join(CWD, '..', 'results') # Get the path where results are stored.
+DATA_DIR = os.path.join(CWD, '..', 'data') # Get the path where results are stored. 
 
 def to_numeric(n:str):
     '''Try to convert a string to a numerical data type. Used when 
@@ -78,7 +82,7 @@ def fasta_seqs(path):
     return seqs
     
 
-def dataframe_from_fasta(path:str) -> pd.DataFrame:
+def dataframe_from_fasta(path:str, parse_header:bool=True) -> pd.DataFrame:
     '''Load the database FASTA file in as a pandas DataFrame.'''
     df = {'seq':[]}
     text = read(path)
@@ -91,7 +95,8 @@ def dataframe_from_fasta(path:str) -> pd.DataFrame:
     for seq, header in zip(seqs, headers):
         # Headers are of the form |>col=value|...|col=value
         header = header.replace('>', '') # Remove the header marker. 
-        for col, val in [entry.split('=') for entry in header.split(';')]:
+        header = [entry.split('=') for entry in header.split(';')] if parse_header else [('id', header)]
+        for col, val in header:
             if col not in df:
                 df[col] = []
             df[col].append(val)
@@ -119,8 +124,8 @@ def dataframe_to_fasta(df:pd.DataFrame, path:str, textwidth:int=80) -> NoReturn:
     :param textwidth: The length of lines in the FASTA file.     
     '''
     # Sometimes the ID column is the 
-    if df.index.name == 'id':
-        df['id'] = df.index
+    if df.index.name in ['gene_id', 'id']:
+        df[df.index.name] = df.index
 
     # Include all non-sequence fields in the FASTA header. 
     header_fields = [col for col in df.columns if col != 'seq']

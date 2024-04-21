@@ -1,10 +1,8 @@
 '''A script for embedding protein sequences in a FASTA file.'''
 import sys
-# Make the modules in the selenobot directory visible from this script. 
-sys.path.append('../selenobot/')
 
-from embedders import PlmEmbedder
-from utils import dataframe_from_fasta, csv_size
+from selenobot.embedders import PlmEmbedder
+from selenobot.utils import dataframe_from_fasta, csv_size
 import subprocess
 from typing import NoReturn
 import pandas as pd
@@ -12,16 +10,18 @@ from tqdm import tqdm
 import numpy as np
 import argparse
 
+TMP1 = 'tmp.1.csv' # Temporary file for the metadata. 
+TMP2 = 'tmp.2.csv' # Temporary file for the embeddings. 
+
 def add_embeddings(path:str, chunk_size:int=1000) -> NoReturn:
-    '''Add embedding information to a dataset, and overwrite the original dataset with the
-    modified dataset (with PLM embeddings added).
+    '''Combine the data stored in each temporary file (the embeddings and metadata) in chunks, and store in 
+    a new CSV file specified by the path parameter. 
     
-    :param path: The path to the dataset.
-    :chunk_size: The size of the chunks to split the dataset into for processing.
+    :param path: The path to the final embeddings dataset. .
+    :chunk_size: The size of the chunks for processing.
     '''
-    embedding_ids = pd.read_csv('embeddings.csv', usecols=['id'])['id'].values.ravel() # Read the IDs in the embedding file to avoid loading the entire thing into memory.
-    reader = pd.read_csv(path, index_col=['id'], chunksize=chunk_size) # Use read_csv to load the dataset one chunk at a time. 
-    tmp_file_path = 'tmp.csv' # The path to the temporary file to which the modified dataset will be written in chunks.
+    embedding_ids = pd.read_csv(TMP2, usecols=['id'])['id'].values.ravel() # Read the IDs in the embedding file to avoid loading the entire thing into memory.
+    reader = pd.read_csv(TMP1, index_col=['id'], chunksize=chunk_size) # Use read_csv to load the metadata one chunk at a time. 
 
     is_first_chunk = True
     n_chunks = csv_size(path) // chunk_size + 1
@@ -30,15 +30,12 @@ def add_embeddings(path:str, chunk_size:int=1000) -> NoReturn:
         idxs = np.where(np.isin(embedding_ids, chunk.index, assume_unique=True))[0] + 1 
         idxs = [0] + list(idxs) # Add the header index so the column names are included. 
         # Read in the embedding rows, skipping rows which do not match a gene ID in the chunk. 
-        chunk = chunk.merge(pd.read_csv('embeddings.csv', skiprows=lambda i : i not in idxs), on='id', how='inner')
+        chunk = chunk.merge(pd.read_csv(TMP2, skiprows=lambda i : i not in idxs), on='id', how='inner')
         # Check to make sure the merge worked as expected. Subtract 1 from len(idxs) to account for the header row.
         assert len(chunk) == (len(idxs) - 1), f'Data was lost while merging embedding data.'
         
-        chunk.to_csv(tmp_file_path, header=is_first_chunk, mode='w' if is_first_chunk else 'a') # Only write the header for the first file. 
+        chunk.to_csv(path, header=is_first_chunk, mode='w' if is_first_chunk else 'a') # Only write the header for the first file. 
         is_first_chunk = False
-    # Replace the old dataset with the temporary file. 
-    subprocess.run(f'rm {path}', shell=True, check=True)
-    subprocess.run(f'mv {tmp_file_path} {path}', shell=True, check=True)
 
 
 if __name__ == '__main__':
@@ -59,22 +56,23 @@ if __name__ == '__main__':
     # Instantiate the PLM embedder with the model name. 
     embedder = PlmEmbedder(args.model)
 
-    df = dataframe_from_fasta(args.input) # Load the FASTA file containing the sequences to embed. 
-    df.set_index('id').to_csv(args.output) # Write the DataFrame to a CSV file. 
+    df = dataframe_from_fasta(args.input, parse_header=False) # Load the FASTA file containing the sequences to embed. 
+    df.set_index('id').to_csv(TMP1) # Write the DataFrame to a temporary CSV file. 
 
     seqs = list(df['seq'].values) # Get the amino acid sequences in the file as a list of strings. 
     ids = list(df['id'].values)
 
-    # Write the embeddings and the corresponding IDs to a CSV output file. This file is temporary. 
-    embeddings, ids = embedder(seqs, ids)
+    # Write the embeddings and the corresponding IDs to a different CSV output file. This file is temporary. 
+    embeddings, ids = embedder(seqs, ids) # Note that IDs are redefined here, as the embedding process scrambles the order.
     embeddings_df = pd.DataFrame(embeddings)
-    embeddings_df['id'] = ids
-    embeddings_df.set_index('id').to_csv('embeddings.csv')
+    embeddings_df['id'] = ids # Set an ID column so the embeddings can be matched to the metadata. 
+    embeddings_df.set_index('id').to_csv(TMP2)
 
-    # Add the embeddings contained in embeddings.csv to the CSV at out_path.abs
-    add_embeddings(args.output)
+    # Combine the embeddings (in TMP2) with the metadata in TMP1 piece-by-piece (to avoid memory issues)
+    create_embedding_file(args.output)
 
-    # Remove the embeddings.csv file, which is now redundant. 
-    subprocess.run('rm embeddings.csv', shell=True, check=True)
+    # Remove the temporary files.
+    subprocess.run(f'rm {TMP1}', shell=True, check=True)
+    subprocess.run(f'rm {TMP2}', shell=True, check=True)
 
 

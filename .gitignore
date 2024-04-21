@@ -10,8 +10,8 @@
 **/*.pth
 **/.faa
 **/.pyc
-**/data/gtdb/**
-**/data/gtdb/
+**/data/**
+**/results/*
 .vscode/
 **/.ipynb_checkpoints/
 **/__pycache__
