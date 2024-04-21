@@ -56,7 +56,7 @@ if __name__ == '__main__':
     # Instantiate the PLM embedder with the model name. 
     embedder = PlmEmbedder(args.model)
 
-    df = dataframe_from_fasta(args.input, parse_header=False).iloc[:10] # Load the FASTA file containing the sequences to embed. 
+    df = dataframe_from_fasta(args.input, parse_header=False) # Load the FASTA file containing the sequences to embed. 
     df.set_index('id').to_csv(TMP1) # Write the DataFrame to a temporary CSV file. 
 
     seqs = list(df['seq'].values) # Get the amino acid sequences in the file as a list of strings. 
