@@ -1,4 +1,7 @@
 import setuptools
+import os
+
+modules = ['selenobot.' + f.replace('.py', '') for f in os.listdir('./selenobot')]
 
 setuptools.setup(
     name='selenobot',
@@ -7,7 +10,5 @@ setuptools.setup(
     url='https://github.com/pipparichter/selenobot',
     author='Philippa Richter',
     author_email='prichter@caltech.edu',
-    packages=['selenobot', 'selenobot.plot'],
-    install_requires=setuptools.find_packages(exclude=['selenobot', 'selenobot.plot']))
-
-
+    packages=['selenobot'],
+    install_requires=setuptools.find_packages(exclude=['selenobot'] + modules))
