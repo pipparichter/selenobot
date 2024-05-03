@@ -12,6 +12,7 @@ import subprocess
 # Define some important directories...
 CWD, _ = os.path.split(os.path.abspath(__file__))
 RESULTS_DIR = os.path.join(CWD, '..', 'results') # Get the path where results are stored.
+WEIGHTS_DIR = os.path.join(CWD, '..', 'weights')
 DATA_DIR = os.path.join(CWD, '..', 'data') # Get the path where results are stored. 
 
 def to_numeric(n:str):
@@ -82,9 +83,40 @@ def fasta_seqs(path):
     return seqs
     
 
+def dataframe_from_ko(path:str, parse_header:bool=False, drop_duplicates:bool=True) -> pd.DataFrame:
+    '''Load a KEGG annotation file, generated using kofamscan, into a pandas DataFrame.'''
+    cols = ['header', 'ko', 'threshold', 'score', 'e_value', 'ko_description']
+    # df = pd.read_csv(path, delimiter='\t', names=cols, header=0, skiprows=[2])
+    # File needs to be parsed manually, as it's too irregular for pandas read_csv. 
+    ko = read(path)
+    df = []
+    for line in ko.split('\n')[2:]: # Skip the first two lines, which are a header and separation line.
+        if len(line) < 1:
+            continue # A blank line is being read, for some reason?
+
+        # best_annotation = '*' in line # If there is an asterisk at the beginning, this is the preferred annotation. 
+        line = line.replace('*', '') # Remove the asterisk, if present. 
+        entries = line.split() # Split on the whitespace. 
+        # The first five entries should not contain whitespace, so can be read in directly from the split line. 
+        row = {col:entries[i] for i, col in enumerate(cols[:5])}
+        # Handle the description field differently, as the entry itself contains whitespace.
+        row['ko_description'] = ' '.join(entries[6:])
+        # row['best_annotation'] = best_annotation
+        df.append(row)
+
+    if parse_header: # Parse the FASTA header, if specified.
+        for row in df:
+            header = row.pop('header')
+            header = [entry.split('=') for entry in header.split(';')]
+            row.update(dict(header))
+
+    df = pd.DataFrame(df)
+    df = df.drop_duplicates('id', keep='first') if drop_duplicates else df
+    return df
+
 def dataframe_from_fasta(path:str, parse_header:bool=True) -> pd.DataFrame:
     '''Load the database FASTA file in as a pandas DataFrame.'''
-    df = {'seq':[]}
+    df = dict()
     text = read(path)
 
     seqs = re.split(r'^>.*', text, flags=re.MULTILINE)[1:]
@@ -92,16 +124,18 @@ def dataframe_from_fasta(path:str, parse_header:bool=True) -> pd.DataFrame:
     seqs = [s.replace('\n', '') for s in seqs]
     headers = re.findall(r'^>.*', text, re.MULTILINE)
 
-    for seq, header in zip(seqs, headers):
-        # Headers are of the form |>col=value|...|col=value
+    for header in headers:
+        # Headers are of the form >col=value;...;col=value
         header = header.replace('>', '') # Remove the header marker. 
         header = [entry.split('=') for entry in header.split(';')] if parse_header else [('id', header)]
-        for col, val in header:
+        header = dict(header)
+        for col in set(header.keys()).union(set(df.keys())):
             if col not in df:
                 df[col] = []
+            val = header.get(col, None) 
             df[col].append(val)
-        df['seq'].append(seq) # Add the sequence as well. 
 
+    df['seq'] = seqs
     df = pd.DataFrame(df) # Convert to a DataFrame
 
     # Convert to numerical datatypes. 
@@ -123,7 +157,6 @@ def dataframe_to_fasta(df:pd.DataFrame, path:str, textwidth:int=80) -> NoReturn:
     :param path: The path to write the FASTA file to. 
     :param textwidth: The length of lines in the FASTA file.     
     '''
-    # Sometimes the ID column is the 
     if df.index.name in ['gene_id', 'id']:
         df[df.index.name] = df.index
 

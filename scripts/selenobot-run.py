@@ -2,6 +2,8 @@
 embedding and annotation data is stored.'''
 
 from selenobot.classifiers import Classifier
+from selenobot.utils import WEIGHTS_DIR
+from selenobot.dataset import Dataset
 import os
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -15,77 +17,45 @@ import os
 import Bio.SeqIO as SeqIO
 from scipy.stats import fisher_exact
 from datetime import date
+import argparse
 
-classifier = EmbeddingClassifier()
-classifier.load("emb_model.state_dict")
 
 DATE = date.today().strftime('%d.%m.%y')
 ANNOTATION_DIR = '/groups/fischergroup/goldford/gtdb/ko_annotations/' # Path to KO annotations on HPC.
 EMBEDDING_DIR = '/groups/fischergroup/goldford/gtdb/embedding/' # Path to embeddings on HPC.
 
-def load_embedding(path:str):
-    '''Load PLM embeddings from a file at the specified path. Each file contains embedded sequences for a
-    single genome, stored as an HDF file.'''
-    f = h5py.File(file_name)
-    df = []
-    gene_ids = list(f.keys())
-    for key in gene_ids:
-        data.append(f[key][()]) # What is this doing?
-    f.close()
-    df = pd.DataFrame(np.asmatrix(df), index=gene_ids)
-    return df
+# def load_embedding(path:str):
+#     '''Load PLM embeddings from a file at the specified path. Each file contains embedded sequences for a
+#     single genome, stored as an HDF file.'''
+#     f = h5py.File(file_name)
+#     df = []
+#     gene_ids = list(f.keys())
+#     for key in gene_ids:
+#         data.append(f[key][()]) # What is this doing?
+#     f.close()
+#     df = pd.DataFrame(np.asmatrix(df), index=gene_ids)
+#     return df
 
 
 if __name__ == '__main__':
 
-    embedding_files = glob.glob(f'{EMBEDDING_DIR}*.h5') # Does this list the entire path?
-    genome_ids = [f.split('/')[-1].replace('_embedding.h5', '') for f in embedding_files]
-    # Map genome IDs to the corresponding embedding file. 
-    embedding_files = {g:f for f, g in zip(embedding_files, genome_ids)}
+    parser = argparse.ArgumentParser()
+    parser.add_argument('input', help='Path to the input embeddings on which to run the classifier.')
+    parser.add_argument('output', help='Path to the file where model predictions will be written.')
+    parser.add_argument('--genome-id', default=None, type=str, help='Genome ID of the organism for which predictions are being generated.')
+    # parser.add_argument('--add-annotations', default=0, type=bool, default=0)
+    parser.add_argument('--weights', type=str, default=os.path.join(WEIGHTS_DIR, 'plm_model_weights.pth'), help='The path to the stored model weights.')
+    args = parser.parse_args()
+
+    model = Classifier(latent_dim=1024, hidden_dim=512)
+    model.load_state_dict(torch.load(args.weights))
     
-    annotation_files = glob.glob(f'{EMBEDDING_DIR}*.tab') # Does this list the entire path?
-    genome_ids = [f.split('/')[-1].replace('_protein.ko.tab', '') for f in annotation_files]
-    # Map genome IDs to the corresponding embedding file. 
-    annotation_files = {g:f for f, g in zip(annotation_files, genome_ids)}
-
-
-
-df_embedding_annotations = annotation_df.set_index("gid").join(emebedding_file_df.set_index("gid"))
-df_embedding_annotations = df_embedding_annotations.dropna().join(pfam_df)
-
-
-# Initialize a dictionary to store the results
-
-results_dict = {}
-for genome, row in df_embedding_annotations.iterrows():
-    EmbeddingMatrix = getEmbedding(row.embedding_file)
-    #break
-    labels = classifier(torch.tensor(EmbeddingMatrix.values)).numpy().T[0]
-    
-    results = pd.DataFrame({"gene": EmbeddingMatrix.index,  "genome": genome, "selenoprotein": labels})
-    results["gene"] = results['gene'].apply(lambda x: x.split(" ")[0])
-    annots = pd.read_csv(row.annotation_file, sep="\t", skiprows=[1]).dropna()
-    annots["gene name"] = annots["gene name"].apply(lambda x: x.replace(".", "_"))
-    annots = annots.set_index("gene name")
-    hits = results[results.selenoprotein > 0.5]
-    hits_with_annotation = hits.set_index("gene").join(annots)
-    ko_map = hits_with_annotation.dropna().groupby("KO").count()["genome"].to_dict()
-
-    
-    # Record the required details
-    results_dict[genome] = {
-        "total_hits": len(hits),
-        "hits_with_annotation": len(hits_with_annotation.dropna()),
-        "total_genes": EmbeddingMatrix.shape[0],
-        "total_genes_with_annotation": len(annots),
-        "hits_with_annotation": ko_map,
-        "selD_copy_num":len(annots[annots.KO == "K01008"])
-    }
-    
-
-# Convert the results dictionary to a DataFrame for easier viewing
-results_df = pd.DataFrame(results_dict).T
-results_df.to_pickle("selenoprotein_results.30Sep2023.pkl")
+    dataset = Dataset(pd.read_csv(args.input)) # Instantiate a Dataset object with the embeddings. 
+    reporter = model.predict(dataset)
+    predictions = reporter.apply_threshold()
+    df = pd.DataFrame({'id':dataset.ids, 'confidence':reporter.outputs, 'prediction':predictions})
+    df['seq'] = dataset.seqs # Add sequences to the DataFrame. 
+    df.set_index('id').to_csv(args.output)
 
 
 

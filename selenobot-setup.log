@@ -1,0 +1,21 @@
+Truncating selenoproteins in sec.fasta.
+	Average number of selenocysteines per protein: 1.0526121761112281
+	Mean length of truncation: 354.84284811459867
+	Largest truncation: 1424
+	Smallest truncation: 1
+Running CD-HIT on sequences in uniprot.fasta.
+CD-HIT run completed in 128.67 seconds.
+	Number of clusters: 278786
+	Mean cluster size: 2.110640419533262
+	Minimum cluster size: 1
+	Maximum cluster size: 1324
+	Number of sequences not assigned clusters: 110
+Dividing data into training, testing, and validation sets.
+	Number of sequences dropped from uniprot.fasta: 110
+	Size of training dataset: 374888
+	Size of testing dataset: 119510
+	Size of validation dataset: 94019
+Adding PLM embeddings to train.csv.
+Adding PLM embeddings to test.csv.
+Adding PLM embeddings to val.csv.
+Selenobot set-up complete in 20284.6 seconds.

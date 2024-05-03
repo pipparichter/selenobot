@@ -161,7 +161,8 @@ class Classifier(torch.nn.Module):
 
         self.to(DEVICE)
         self.loss_func = WeightedBCELoss(weight=bce_loss_weight)
-
+        
+    # TODO: Do I still need the batch size parameter here?
     def forward(self, inputs:torch.FloatTensor, batch_size:int=None):
         '''A forward pass of the Classifier.'''
         assert inputs.dtype == torch.float32, f'classifiers.Classifier.forward: Expected input embedding of type torch.float32, not {inputs.dtype}.'

@@ -5,6 +5,7 @@ import numpy as np
 import torch
 import torch.utils.data
 from typing import List, Dict, NoReturn, Iterator
+import re
 import subprocess
 import time
 
@@ -21,31 +22,28 @@ class Dataset(torch.utils.data.Dataset):
         :param embedder: The embedder to apply to the amino acid sequences in the DataFrame. 
             If None, it is assumed that the embeddings are already present in the file. 
         '''
+        self.seqs = None if 'seq' not in df.columns else df.seq.values
 
         # Check to make sure all expected fields are present in the input DataFrame. 
-        if embedder is not None:
-            assert 'seq' in df.columns, f'dataset.Dataset.__init__: Input DataFrame missing required field seq.'
+        assert (self.seqs is not None) or (embedder is None), f'dataset.Dataset.__init__: Input DataFrame missing required field seq.'
         assert 'id' in df.columns, f'dataset.Dataset.__init__: Input DataFrame missing required field id.'
 
-        if embedder is not None:
-            self.embeddings = embedder(list(df['seq'].values))
-            self.type = embedder.type # Type of data contained by the Dataset.
-        else: # This means that the embeddings are already in the DataFrame (or at least, they should be)
-            self.type = 'plm'
-            # Drop all non-numeric columns from the DataFrame to isolate the embeddings. 
-            drop_cols = [col for col in df.columns if col not in [str(i) for i in range(1024)]]
-            self.embeddings = torch.from_numpy(df.drop(columns=drop_cols).values).to(torch.float32)
-
-        # Make sure the type of the tensor is the same as model weights.
-        # Set the labels to None if no labels are given. 
+        self.embeddings = self._extract_embeddings(df) if embedder is None else embedder(list(self.seqs))
+        self.type = 'plm' if embedder is None else embedder.type # Type of data contained by the Dataset.
         self.labels = None if 'label' not in df.columns else torch.from_numpy(df['label'].values).type(torch.float32)
         self.labeled = 'label' in df.columns # Boolean value indicating whether or not the data is labeled. 
-
         self.ids = df['id'].values
         self.latent_dim = self.embeddings.shape[-1]
 
         self.length = len(df)
 
+    def _extract_embeddings(self, df:pd.DataFrame) -> torch.FloatTensor:
+        '''Extract embeddings from an input DataFrame.'''
+        # Detect which columns mark an embedding feature. 
+        cols = [col for col in df.columns if re.fullmatch('\d+', col) is not None]
+        embeddings = torch.from_numpy(df[cols].values).to(torch.float32)
+        return embeddings
+        
     def __len__(self) -> int:
         return self.length
 

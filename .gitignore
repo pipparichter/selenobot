@@ -7,8 +7,8 @@
 **/*.pickle
 **/*.tree
 **/*.tsv
-**/*.pth
 **/.faa
+**/.fa
 **/.pyc
 **/data/**
 **/results/*
