@@ -8,9 +8,15 @@
 **/*.tree
 **/*.tsv
 **/.faa
-**/.fa
 **/.pyc
-**/data/**
+**/.ko
+**/data/validation/v1
+**/data/validation/v2
+**/data/validation/v3/fitness
+**/data/validation/v3/aaseqs.fa
+**/data/validation/v3/metadata
+**/data/validation/v3/t_values
+**/data/validation/v3/embeddings
 **/results/*
 .vscode/
 **/.ipynb_checkpoints/
