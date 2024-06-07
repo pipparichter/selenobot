@@ -4,16 +4,18 @@ import numpy as np
 import os
 from tqdm import tqdm
 import re
-from typing import Dict, NoReturn
+from typing import Dict, NoReturn, List
 import configparser
 import pickle
 import subprocess
 
 # Define some important directories...
-CWD, _ = os.path.split(os.path.abspath(__file__))
-RESULTS_DIR = os.path.join(CWD, '..', 'results') # Get the path where results are stored.
-WEIGHTS_DIR = os.path.join(CWD, '..', 'weights')
-DATA_DIR = os.path.join(CWD, '..', 'data') # Get the path where results are stored. 
+cwd, _ = os.path.split(os.path.abspath(__file__))
+RESULTS_DIR = os.path.join(cwd, '..', 'results') # Get the path where results are stored.
+WEIGHTS_DIR = os.path.join(cwd, '..', 'weights')
+DATA_DIR = os.path.join(cwd, '..', 'data') # Get the path where results are stored. 
+SCRIPTS_DIR = os.path.join(cwd, '..', 'scripts') # Get the path where results are stored. 
+
 
 def to_numeric(n:str):
     '''Try to convert a string to a numerical data type. Used when 
@@ -114,40 +116,81 @@ def dataframe_from_ko(path:str, parse_header:bool=False, drop_duplicates:bool=Tr
     df = df.drop_duplicates('id', keep='first') if drop_duplicates else df
     return df
 
-def dataframe_from_fasta(path:str, parse_header:bool=True) -> pd.DataFrame:
-    '''Load the database FASTA file in as a pandas DataFrame.'''
-    df = dict()
+
+def ncbi_parser(headers:List[str]) -> pd.DataFrame:
+    '''This function takes a list of FASTA header strings as input and parses them. It a pandas DataFrame
+    with the header information. This is for use within the dataframe_from_fasta function. 
+
+    :param headers: A list of headers from a FASTA file. 
+    :return: A pandas DataFrame containint header metadata.  
+    '''
+    # Headers in the downloaded file are of the following form... 
+    # lcl|NC_000913.3_prot_NP_414542.1_1 [gene=thrL] [locus_tag=b0001] [db_xref=UniProtKB/Swiss-Prot:P0AD86] [protein=thr operon leader peptide] [protein_id=NP_414542.1] [location=190..255] [gbkey=CDS]
+    header_df = []
+    for header in headers:
+        gene_id = re.search('gene=([a-zA-Z\d]+)', header) # .group(1)
+        gene_id = None if gene_id is None else gene_id.group(1) # Sometimes there are "Untitled" genes. Also skipping these. 
+        
+        if re.search('location=complement\((\d+)\.\.(\d+)\)', header) is not None:
+            location = re.search('location=complement\((\d+)\.\.(\d+)\)', header)
+            start, stop = int(location.group(1)), int(location.group(2))
+            orientation = '-'
+        elif re.search('location=(\d+)\.\.(\d+)', header) is not None:
+            location = re.search('location=(\d+)\.\.(\d+)', header)
+            start, stop = int(location.group(1)), int(location.group(2))
+            orientation = '+' 
+        else:
+            # This happens with Joins... Don't really know how to handle them, so just passing over them. 
+            start, stop, orientation = None, None, None
+        header_df.append({'start':start, 'stop':stop, 'gene_id':gene_id, 'orientation':orientation})
+    return pd.DataFrame(header_df)
+
+
+def default_parser(headers:List[str]) -> pd.DataFrame:
+    '''This function takes a list of FASTA header strings as input and parses them. It a pandas DataFrame
+    with the header information. This is for use within the dataframe_from_fasta function. 
+    
+    Assumes header strings are of the form >col=val;col=val..., which is the format produced by the 
+    dataframe_to_fasta function.
+
+    :param headers: A list of headers from a FASTA file. 
+    :return: A pandas DataFrame containint header metadata.  
+    '''
+    header_df = []
+    for header in headers:
+        # Headers are of the form >col=value;...;col=value
+        header = header.replace('>', '') # Remove the header marker. 
+        header_df.append(dict([entry.split('=') for entry in header.split(';')]))
+    header_df = pd.DataFrame(header_df)
+    return header_df.fillna('None') # Fill in any null cells. 
+
+
+def dataframe_from_fasta(path:str, parser=default_parser) -> pd.DataFrame:
+    '''Load the a FASTA file into a pandas DataFrame.'''
     text = read(path)
 
     seqs = re.split(r'^>.*', text, flags=re.MULTILINE)[1:]
     # Strip all of the newline characters from the amino acid sequences. 
     seqs = [s.replace('\n', '') for s in seqs]
+    
     headers = re.findall(r'^>.*', text, re.MULTILINE)
+    if parser is not None:
+        df = parser(headers)
+    else: # If no parser is specified, just lump the entire header in to a single column. 
+        df = pd.DataFrame({'id':[h.replace('>', '') for h in headers]})
 
-    for header in headers:
-        # Headers are of the form >col=value;...;col=value
-        header = header.replace('>', '') # Remove the header marker. 
-        header = [entry.split('=') for entry in header.split(';')] if parse_header else [('id', header)]
-        header = dict(header)
-        for col in set(header.keys()).union(set(df.keys())):
-            if col not in df:
-                df[col] = []
-            val = header.get(col, None) 
-            df[col].append(val)
-
-    df['seq'] = seqs
-    df = pd.DataFrame(df) # Convert to a DataFrame
-
-    # Convert to numerical datatypes. 
-    num_fields = ['aa_length', 'nt_start', 'nt_stop', 'nt_ext']
-    for field in num_fields:
-        if field in df.columns:
-            df[field] = df[field].apply(pd.to_numeric)
-    if 'reverse' in df.columns:
-        df['reverse'] = df['reverse'].apply(bool)
+    df['seq'] = seqs # Add the sequences to the DataFrame. 
+    df = pd.DataFrame(df) # Convert to a DataFrame.
 
     return df
 
+    # # Convert to numerical datatypes. 
+    # num_fields = ['aa_length', 'nt_start', 'nt_stop', 'nt_ext']
+    # for field in num_fields:
+    #     if field in df.columns:
+    #         df[field] = df[field].apply(pd.to_numeric)
+    # if 'reverse' in df.columns:
+    #     df['reverse'] = df['reverse'].apply(bool)
 
 def dataframe_to_fasta(df:pd.DataFrame, path:str, textwidth:int=80) -> NoReturn:
     '''Convert a pandas DataFrame containing FASTA data to a FASTA file format.

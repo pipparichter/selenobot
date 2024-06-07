@@ -9,7 +9,19 @@ import re
 import subprocess
 import time
 
+# TODO: Probably want to split into an EmbeddingDataset and SequenceDataset.
+
 # device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+class BaseDataset(torch.utils.data.Dataset):
+    pass
+
+class SequenceDataset(BaseDataset):
+    pass
+
+class EmbeddingDataset(BaseDataset):
+    pass
+
 
 class Dataset(torch.utils.data.Dataset):
     '''A map-style dataset which  Dataset objects which provide extra functionality for producing sequence embeddings

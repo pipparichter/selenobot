@@ -7,6 +7,8 @@ from typing import NoReturn, List, Tuple, Dict
 import re
 from Bio.Seq import Seq
 
+# TODO: Put more thought into the "orientation" column name. Would strand be better or more clear? What is convention?
+
 START_CODONS = {'+':['ATG', 'GTG', 'TTG'], '-':['CAT', 'CAC', 'CAA']}
 STOP_CODONS = {'+':['TAA', 'TAG', 'TGA'], '-':['TTA', 'CTA', 'TCA']}
 
@@ -34,7 +36,7 @@ def get_stop_codon(seq:str, orientation:str='+') -> str:
 
 
 def get_codons(seq:str, orientation:str='+') -> List[str]:
-    offset = len(seq) % 3
+    offset = len(seq) % 3 # Why did I allow for sequences with lengths that are not divisible by 3?
     if (orientation == '+') and (offset > 0):
         seq = seq[:-offset]
     elif (orientation == '-') and (offset > 0):
@@ -46,18 +48,22 @@ def get_codons(seq:str, orientation:str='+') -> List[str]:
     return codons
 
 
-def check_gene(seq:str, orientation:str='+') -> NoReturn:
-    '''Checks to make sure a sequence of nucleotide bases has a valid start and stop codon, and
-    has a length divisible by three.'''
+def check_start_codon(seq:str, orientation:str='+'):
+    '''Check a gene to make sure it has a valid start codon.'''
     assert len(seq) % 3 == 0, 'is_valid_gene: Length of nucleotide sequence is not divisible by three.'
     start_codon = get_start_codon(seq, orientation=orientation)
+    assert start_codon in START_CODONS[orientation], f'is_valid_gene: {start_codon} is not a valid start codon. Orientation is {orientation}.'
+
+
+def check_stop_codon(seq:str, orientation:str='+'):
+    '''Check a gene to make sure it has a valid stop codon.'''
+    assert len(seq) % 3 == 0, 'is_valid_gene: Length of nucleotide sequence is not divisible by three.'
     stop_codon = get_stop_codon(seq, orientation=orientation)
-    assert start_codon in START_CODONS[orientation], f'is_valid_gene:: {start_codon} is not a valid start codon.'
-    assert stop_codon in STOP_CODONS[orientation] , f'is_valid_gene:: {stop_codon} is not a valid stop codon.'
+    assert start_codon in START_CODONS[orientation], f'is_valid_gene: {start_codon} is not a valid start codon. Orientation is {orientation}.'
 
 
 # NOTE: Does the range include the stop codon?
-def extend(start:int=None, stop:int=None, contig:str=None, orientation:str='+', verbose:bool=False) -> Dict:
+def extend(start:int=None, stop:int=None, contig:str=None, orientation:str='+', verbose:bool=False, **kwargs) -> Dict:
     '''Scan the DNA strand until the next stop codon is encountered.    
 
     :param start: The starting location of the gene in the sequence. Assumed to be inclusive.
@@ -71,14 +77,18 @@ def extend(start:int=None, stop:int=None, contig:str=None, orientation:str='+', 
 
     gene = contig[start:stop]
     results = {'seq':gene}
-    check_gene(gene, orientation=orientation) # Make sure the gene is valid. 
+
+    check_start_codon(gene, orientation=orientation) # Make sure the gene has a start codon. 
+
     original_length, original_stop_codon = len(gene), get_stop_codon(gene, orientation=orientation)
 
     if orientation == '+':
         step = 1
+        # Get the codons from the original stop location (the end of the stop codon) to the end of the sequence. 
         codons = get_codons(contig[stop:], orientation=orientation)
     if orientation == '-':
         step = -1
+        # Get the codons from the beginning of the contig to right before the stop codon. 
         codons = get_codons(contig[:start], orientation=orientation)
         original_stop_codon = get_reverse_complement(original_stop_codon)
 
@@ -98,11 +108,19 @@ def extend(start:int=None, stop:int=None, contig:str=None, orientation:str='+', 
         aa_ext = nt_ext // 3 # Get the extension size in amino acids. 
         
         if verbose: print(f'extend: Gene extended by {nt_ext} nucleotides.')
-        check_gene(gene, orientation=orientation)
+        return {'seq_ext':gene, 'original_stop_codon':original_stop_codon, 'nt_ext':nt_ext, 'aa_ext':aa_ext}
 
-        return {'seq':gene, 'stop_codon':original_stop_codon, 'nt_ext':nt_ext, 'aa_ext':aa_ext}
+df_ext = []
+for id_, id_df in df.groupby('id'): # Each id_df should only have one row. 
+    row = id_df.as_dict(orient='records')[0]
+    scaffold_id = id_df.scaffoldId.item()
+    contig = genome_df[genome_df.scaffold_id.str.fullmatch(scaffold_id)].seq.item()
+    row.update(extend(contig=contig, **row))
+    extensions_df.append(row)
 
-    
+extensions_df = pd.DataFrame(extensions_df)
+extensions_df['seq'] = extensions_df.apply(lambda row : translate(row['seq'], orientation=row['orientation']), axis=1)
+
 
 def translate(seq, orientation:str='+'):
     '''Translate a nucleotide sequence.'''
@@ -117,14 +135,10 @@ def translate(seq, orientation:str='+'):
     seq = seq[:-1] # Remove the terminal * character. 
 
     seq = str(seq).replace('*', 'U') # Replace the first in-frame stop with a selenocysteine.
+    seq = 'M' + seq[1:] # Not sure why this is always methionine in NCBI, but doesn't always get translated as M. 
 
     assert '*' not in seq, 'translate: Too many in-frame stop codons in translated sequence.'
     return seq
-
-
-    
-
-
 
 
 # def extend(df:pd.DataFrame, genome:str):
