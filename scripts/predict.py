@@ -3,7 +3,7 @@ each embedded sequence is a truncated selenoprotein.'''
 
 from selenobot.classifiers import Classifier
 from selenobot.utils import WEIGHTS_DIR
-from selenobot.dataset import Dataset
+from selenobot.datasets import Dataset
 import os
 import numpy as np
 import os

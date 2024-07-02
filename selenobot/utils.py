@@ -134,15 +134,15 @@ def ncbi_parser(headers:List[str]) -> pd.DataFrame:
         if re.search('location=complement\((\d+)\.\.(\d+)\)', header) is not None:
             location = re.search('location=complement\((\d+)\.\.(\d+)\)', header)
             start, stop = int(location.group(1)), int(location.group(2))
-            orientation = '-'
+            strand = '-'
         elif re.search('location=(\d+)\.\.(\d+)', header) is not None:
             location = re.search('location=(\d+)\.\.(\d+)', header)
             start, stop = int(location.group(1)), int(location.group(2))
-            orientation = '+' 
+            strand = '+' 
         else:
             # This happens with Joins... Don't really know how to handle them, so just passing over them. 
-            start, stop, orientation = None, None, None
-        header_df.append({'start':start, 'stop':stop, 'gene_id':gene_id, 'orientation':orientation})
+            start, stop, strand = None, None, None
+        header_df.append({'start':start, 'stop':stop, 'id':gene_id, 'strand':strand})
     return pd.DataFrame(header_df)
 
 
@@ -183,14 +183,6 @@ def dataframe_from_fasta(path:str, parser=default_parser) -> pd.DataFrame:
     df = pd.DataFrame(df) # Convert to a DataFrame.
 
     return df
-
-    # # Convert to numerical datatypes. 
-    # num_fields = ['aa_length', 'nt_start', 'nt_stop', 'nt_ext']
-    # for field in num_fields:
-    #     if field in df.columns:
-    #         df[field] = df[field].apply(pd.to_numeric)
-    # if 'reverse' in df.columns:
-    #     df['reverse'] = df['reverse'].apply(bool)
 
 def dataframe_to_fasta(df:pd.DataFrame, path:str, textwidth:int=80) -> NoReturn:
     '''Convert a pandas DataFrame containing FASTA data to a FASTA file format.
