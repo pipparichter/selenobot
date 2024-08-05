@@ -136,7 +136,7 @@ class Classifier(torch.nn.Module):
         dataloader = get_dataloader(train_dataset, batch_size=batch_size)
         for epoch in tqdm(range(epochs), desc='Classifier.fit'):
             train_loss = []
-            for batch in dataloader:
+            for batch in tqdm(dataloader, dec='Classifier.fit: Processing batches...'):
                 # Evaluate the model on the batch in the training dataloader. 
                 outputs, targets = self(batch['embedding']), batch['label']
                 loss = self.loss_func(outputs, targets)
