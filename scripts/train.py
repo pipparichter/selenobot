@@ -3,11 +3,11 @@ from selenobot.datasets import *
 import subprocess
 import argparse
 import logging
-from selenobot.utils import DATA_DIR, WEIGHTS_DIR
+from selenobot.utils import DATA_DIR, WEIGHTS_DIR, ROOT_DIR
 import os 
 
 # Set up a log file for the training process. Also write stuff to terminal. 
-logging.basicConfig(filename='/home/prichter/Documents/selenobot/train.log', level=logging.INFO, force=True, format='%(message)s')
+logging.basicConfig(filename=os.path.join(ROOT_DIR, 'train.log'), level=logging.INFO, force=True, format='%(message)s')
 
 TRAIN_PATH = os.path.join(DATA_DIR, 'train.csv')
 VAL_PATH = os.path.join(DATA_DIR, 'val.csv')

@@ -14,10 +14,11 @@ import torch
 
 # Define some important directories...
 cwd, _ = os.path.split(os.path.abspath(__file__))
-RESULTS_DIR = os.path.join(cwd, '..', 'results') # Get the path where results are stored.
-WEIGHTS_DIR = os.path.join(cwd, '..', 'weights')
-DATA_DIR = os.path.join(cwd, '..', 'data') # Get the path where results are stored. 
-SCRIPTS_DIR = os.path.join(cwd, '..', 'scripts') # Get the path where results are stored. 
+ROOT_DIR = os.path.join(cwd, '..')
+RESULTS_DIR = os.path.join(ROOT_DIR, 'results') # Get the path where results are stored.
+WEIGHTS_DIR = os.path.join(ROOT_DIR, 'weights')
+DATA_DIR = os.path.join(ROOT_DIR, 'data') # Get the path where results are stored. 
+SCRIPTS_DIR = os.path.join(ROOT_DIR, 'scripts') # Get the path where results are stored.
 
 
 def to_numeric(n:str):
