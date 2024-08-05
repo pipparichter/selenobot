@@ -167,7 +167,6 @@ class Classifier(torch.nn.Module):
         for attr in Classifier.attrs:
             info[attr] = getattr(self, attr)
         info['state_dict'] = self.state_dict() #.numpy()
-        print(info)
 
         with open(path, 'w') as f:
             json.dump(info, f, cls=NumpyEncoder)
