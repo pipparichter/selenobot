@@ -134,7 +134,9 @@ class Classifier(torch.nn.Module):
         val_losses, train_losses = [np.inf], [np.inf]
 
         dataloader = get_dataloader(train_dataset, batch_size=batch_size)
-        for epoch in tqdm(range(epochs), desc='Classifier.fit'):
+        pbar = tqdm(total=epochs * batch_size, desc=f'Classifier.fit: Training classifier, epoch 0/{epochs}.') # Make sure the progress bar updates for each batch. 
+
+        for epoch in range(epochs):
             train_loss = []
             # for batch in tqdm(dataloader, desc='Classifier.fit: Processing batches...'):
             for batch in dataloader:
@@ -146,6 +148,8 @@ class Classifier(torch.nn.Module):
                 train_loss.append(loss.item()) # Store the batch loss to compute training loss across the epoch. 
                 optimizer.step()
                 optimizer.zero_grad()
+                pbar.update(1) # Update progress bar after each batch. 
+            pbar.set_description(f'Classifier.fit: Training classifier, epoch {epoch}/{epochs}.')
             
             train_losses.append(np.mean(train_loss))
             val_losses.append(self._loss(val_dataset).item())
