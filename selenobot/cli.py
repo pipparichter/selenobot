@@ -1,45 +1,41 @@
-'''A script for embedding protein sequences in a FASTA file.'''
-import sys
-
-from selenobot.embedders import PlmEmbedder
-from selenobot.utils import dataframe_from_fasta, csv_size
-import subprocess
-from typing import NoReturn
-import pandas as pd
-from tqdm import tqdm
+from selenobot.classifiers import Classifier
+from selenobot.utils import WEIGHTS_DIR, DATA_DIR
+from selenobot.files import FastaFile, ProteinsFile
+from selenobot.datasets import Dataset
+import os
 import numpy as np
+import os
 import argparse
+import torch
+import pandas as pd
+import sys, re, os, time, wget
+from typing import NoReturn, Tuple
+import numpy as np
+from tqdm import tqdm
+from sklearn.model_selection import GroupShuffleSplit
+import subprocess
 
-TMP1 = 'tmp.1.csv' # Temporary file for the metadata. 
-TMP2 = 'tmp.2.csv' # Temporary file for the embeddings. 
 
-def create_embedding_file(path:str, chunk_size:int=100) -> NoReturn:
-    '''Combine the data stored in each temporary file (the embeddings and metadata) in chunks, and store in 
-    a new CSV file specified by the path parameter. 
+def predict():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('input', help='Path to the input embeddings on which to run the classifier.')
+    parser.add_argument('output', help='Path to the file where model predictions will be written.')
+    parser.add_argument('--weights', type=str, default=os.path.join(WEIGHTS_DIR, 'plm_model_weights.pth'), help='The path to the stored model weights.')
+    args = parser.parse_args()
+
+    model = Classifier(input_dim=1024, hidden_dim=512)
+    model.load_state_dict(torch.load(args.weights))
     
-    :param path: The path to the final embeddings dataset. .
-    :chunk_size: The size of the chunks for processing.
-    '''
-    embedding_ids = pd.read_csv(TMP2, usecols=['id'])['id'].values.ravel() # Read the IDs in the embedding file to avoid loading the entire thing into memory.
-    reader = pd.read_csv(TMP1, index_col=['id'], chunksize=chunk_size) # Use read_csv to load the metadata one chunk at a time. 
+    dataset = Dataset(pd.read_csv(args.input)) # Instantiate a Dataset object with the embeddings. 
+    reporter = model.predict(dataset)
+    predictions = reporter.apply_threshold()
 
-    is_first_chunk = True
-    n_chunks = csv_size(TMP1) // chunk_size + 1
-    for chunk in tqdm(reader, desc='add_embeddings', total=n_chunks):
-        # Get the indices of the embedding rows corresponding to the data chunk. Make sure to shift the index up by one to account for the header. 
-        idxs = np.where(np.isin(embedding_ids, chunk.index, assume_unique=True))[0] + 1 
-        idxs = [0] + list(idxs) # Add the header index so the column names are included. 
-        # Read in the embedding rows, skipping rows which do not match a gene ID in the chunk. 
-        chunk = chunk.merge(pd.read_csv(TMP2, skiprows=lambda i : i not in idxs), on='id', how='inner')
-        # Check to make sure the merge worked as expected. Subtract 1 from len(idxs) to account for the header row.
-        assert len(chunk) == (len(idxs) - 1), f'Data was lost while merging embedding data.'
-        
-        chunk.to_csv(path, header=is_first_chunk, mode='w' if is_first_chunk else 'a') # Only write the header for the first file. 
-        is_first_chunk = False
+    df = pd.DataFrame({'id':dataset.ids, 'model_output':reporter.outputs, 'prediction':predictions})
+    df['seq'] = dataset.seqs # Add sequences to the DataFrame. 
+    df.set_index('id').to_csv(args.output)
 
 
-if __name__ == '__main__':
-    
+def embed():
     parser = argparse.ArgumentParser()
     parser.add_argument('input', help='The path to the FASTA file containing the sequences to embed.', type=str)
     parser.add_argument('output', help='The path write the embeddings to.', type=str)
@@ -81,5 +77,4 @@ if __name__ == '__main__':
     # Remove the temporary files.
     subprocess.run(f'rm {TMP1}', shell=True, check=True)
     subprocess.run(f'rm {TMP2}', shell=True, check=True)
-
 

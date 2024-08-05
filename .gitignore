@@ -1,17 +1,8 @@
-data/**.csv
-data/**.pkl
-data/**.fasta
-data/**.ko
-data/**.clstr
-# Need to do this to make sure the directory structure gets pushed.
-data/val3/*
-data/val2/*
-data/val1/*
-
+data/
+data/*
+data.zip
 .vscode/
 **/.ipynb_checkpoints/
 **/__pycache__
 **/selenobot.egg-info
 selenobot-local.cfg
-ncbi-blast-2.15.0+
-ncbi-blast-2.15.0+-x64-linux.tar.gz

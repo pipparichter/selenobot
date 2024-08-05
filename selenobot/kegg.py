@@ -40,9 +40,10 @@ def get_genome_with_ncbi_id(genome_id:str, path:str=None, organism:str=None):
 def parse_genes(genes:List[str]):
     parsed_genes = []
     for gene in genes:
+        gene = re.sub('\((.*?)\)', '', gene) # Remove anything in parentheses (stuff like (fdnG)).
         organism, entries = gene.split(':')
-        entries = re.sub('\([^)]*\)', '', entries) # Remove anything in parentheses (stuff like (fdnG)).
         entries = entries.strip().split()
+        # There can be multiple genes per organism, so this accounts for this. 
         parsed_genes += [f'{organism.lower()}:{entry}' for entry in entries]
     return parsed_genes
 
@@ -66,7 +67,8 @@ def parse_position(position:str):
         start = int(match.group(1))
         stop = int(match.group(2))
     else: 
-        print(f'parse_position: Could not extract position from string {position}.')
+       # print(f'parse_position: Could not extract position from string {position}.')
+       pass
     return start, stop, strand
 
 
@@ -89,6 +91,7 @@ def parse_ko_file(text:str=None, path:str=None) -> Dict:
             genes = []
             genes.append(text[i].replace('GENES', '').strip())
             i += 1
+            # Read in all of the genes in the list.
             while re.match('^ {6}.+', text[i]) is not None:
                 genes.append(text[i].strip())
                 i += 1
@@ -126,6 +129,11 @@ def parse_gene_file(text:str) -> Dict:
         if 'ENTRY' in text[i]: # Get the code for the genome ID. 
             genome_id = 'gn:' + text[i].split()[-1].strip()
             info['genome_id'] = genome_id
+            i += 1
+        if 'ORTHOLOGY' in text[i]:
+            ko = text[i].split()[1]
+            ko_description = ' '.join(text[i].split()[2:])
+            info['ko'], info['ko_description'] = ko, ko_description
             i += 1
         elif 'POSITION' in text[i]:
             position = text[i].replace('POSITION', '').strip()
@@ -245,6 +253,7 @@ def get_genomes_by_ko(ko:str, genes_path:str=None, output_path:str='/home/pricht
 
 
 def get_metadata_by_ko(ko:str, n:int=None):
+    '''Retrieves metadata for all genes in a specified KO group.'''
     url = f'https://rest.kegg.jp/get/ko:{ko}'
     text = requests.get(url).text
     assert text is not None, 'get_metadata_by_ko: Something went wrong with HTTP request to KEGG.'
@@ -252,7 +261,7 @@ def get_metadata_by_ko(ko:str, n:int=None):
 
     df = []
     genes = ko_info['genes'] if (n is None) else ko_info['genes'][:n]
-    for gene in tqdm.tqdm(genes, desc='get_metadata_by_ko: Retrieving genes from KEGG...'):
+    for gene in tqdm.tqdm(genes, desc=f'get_metadata_by_ko: Retrieving genes from KEGG for KO group {ko}...'):
         url = f'https://rest.kegg.jp/get/{gene}'
         text = requests.get(url).text
         assert text is not None, 'get_metadata_by_ko: Something went wrong with HTTP request to KEGG.'
@@ -262,6 +271,18 @@ def get_metadata_by_ko(ko:str, n:int=None):
     df = pd.DataFrame(df)
     df['ko'] = ko
     return df
+
+
+def get_metadata_by_genes(ids:List[str]):
+    df = []
+    for id_ in tqdm.tqdm(ids, desc='get_metadata_by_genes: Retrieving gene data from KEGG'):
+        url = f'https://rest.kegg.jp/get/{id_}'
+        text = requests.get(url).text
+        assert text is not None, 'get_metadata_by_ko: Something went wrong with HTTP request to KEGG.'
+        row = parse_gene_file(text=text)  
+        row['id'] = id_
+        df.append(row)
+    return pd.DataFrame(df)    
 
 
 def check_genome(path:str) -> NoReturn:

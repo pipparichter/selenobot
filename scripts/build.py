@@ -1,7 +1,4 @@
-
-
 import sys, re, os, time, wget
-from selenobot.utils import dataframe_from_fasta, dataframe_to_fasta, dataframe_from_clstr, fasta_size, csv_size # Some functions for reading and writing FASTA files. 
 from selenobot.utils import DATA_DIR
 import pandas as pd
 from typing import NoReturn, Tuple
@@ -15,7 +12,7 @@ import logging
 CDHIT = '/home/prichter/cd-hit-v4.8.1-2019-0228/cd-hit' # Path to the CD-HIT command.import logging
 
 # Set up a log file for the set-up process. Also write stuff to terminal. 
-logging.basicConfig(filename='/home/prichter/Documents/selenobot/selenobot-setup.log', level=logging.INFO, force=True, format='%(message)s')
+logging.basicConfig(filename='/home/prichter/Documents/selenobot/build.log', level=logging.INFO, force=True, format='%(message)s')
 
 
 def download_swissprot(filename:str='sprot.fasta.tar.gz') -> NoReturn:
@@ -207,11 +204,6 @@ def add_embeddings(filename:str, chunk_size:int=1000) -> NoReturn:
     subprocess.run(f'mv {tmp_path} {dataset_path}', shell=True, check=True)
 
 if __name__ == '__main__':
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--skip-download', type=bool, default=False, help='Whether or not to re-download the data to the directory.')
-    parser.add_argument('--skip-cdhit', type=bool, default=False, help='Whether or not to run CD-HIT.')
-    args = parser.parse_args()
 
     t1 = time.perf_counter()
 

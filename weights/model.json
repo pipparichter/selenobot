@@ -1,0 +1,1 @@
+{"epochs": 1, "batch_size": 8, "lr": null, "val_losses": [Infinity, 0.05649750679731369], "train_losses": [Infinity, 0.031026241056293837], "best_epoch": 0, "state_dict": {"classifier.0.weight": 

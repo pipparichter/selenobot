@@ -38,18 +38,17 @@ class Dataset(torch.utils.data.Dataset):
 
         # Check to make sure all expected fields are present in the input DataFrame. 
         assert (self.seqs is not None) or (embedder is None), f'dataset.Dataset.__init__: Input DataFrame missing required field seq.'
-        assert 'id' in df.columns, f'dataset.Dataset.__init__: Input DataFrame missing required field id.'
 
-        self.embeddings = self._extract_embeddings(df) if embedder is None else embedder(list(self.seqs))
+        self.embeddings = self._get_embeddings(df) if embedder is None else embedder(list(self.seqs))
         self.type = 'plm' if embedder is None else embedder.type # Type of data contained by the Dataset.
         self.labels = None if 'label' not in df.columns else torch.from_numpy(df['label'].values).type(torch.float32)
         self.labeled = 'label' in df.columns # Boolean value indicating whether or not the data is labeled. 
-        self.ids = df['id'].values
+        self.gene_ids = df.index.values
         self.latent_dim = self.embeddings.shape[-1]
 
         self.length = len(df)
 
-    def _extract_embeddings(self, df:pd.DataFrame) -> torch.FloatTensor:
+    def _get_embeddings(self, df:pd.DataFrame) -> torch.FloatTensor:
         '''Extract embeddings from an input DataFrame.'''
         # Detect which columns mark an embedding feature. 
         cols = [col for col in df.columns if re.fullmatch('\d+', col) is not None]
@@ -62,14 +61,14 @@ class Dataset(torch.utils.data.Dataset):
     def __getitem__(self, idx:int) -> Dict:
         '''Returns an item from the Dataset. Also returns the underlying index for testing purposes.'''
         label = self.labels[idx]
-        item = {'embedding':self.embeddings[idx], 'id':self.ids[idx], 'idx':idx}
+        item = {'embedding':self.embeddings[idx], 'gene_id':self.gene_ids[idx], 'idx':idx}
         if self.labeled: # Include the label if the Dataset is labeled.
             item['label'] = self.labels[idx]
         return item
 
     def get_selenoprotein_indices(self) -> List[int]:
         '''Obtains the indices of selenoproteins in the Dataset.'''
-        return list(np.where([']' in i for i in self.ids])[0])
+        return list(np.where([']' in i for i in self.gene_ids])[0])
 
 
 # A BatchSampler should have an __iter__ method which returns the indices of the next batch once called.
