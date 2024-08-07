@@ -162,7 +162,6 @@ def get_dataloader(
     :param batch_size: The size of the batches which the training data will be split into. 
     :return: A pytorch DataLoader object. 
     '''
-    assert dataset.labeled, 'dataset.get_dataloader: The input Dataset must be labeled.'
     batch_sampler = BalancedBatchSampler(dataset, batch_size=batch_size, random_seed=random_seed)
     return torch.utils.data.DataLoader(dataset, batch_sampler=batch_sampler)
 
