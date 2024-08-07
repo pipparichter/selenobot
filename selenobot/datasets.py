@@ -56,7 +56,7 @@ class Dataset(torch.utils.data.Dataset):
         else:
             # NOTE: Should I be using t-test, as there are technically only two categories?
             kbest = SelectKBest(f_classif, k='all') # Use ANOVA to select the best features. 
-            kbest.fit(X, y)
+            kbest.fit(self.embeddings, self.labels)
             # Scores are the ANOVA F-statistic, which is the ratio of the between-group variability to the within-group variability.
             # The larger this value, the "better" the groups, in a sense. 
             feature_scores = kbest.scores_
