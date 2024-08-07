@@ -15,7 +15,7 @@ from selenobot.utils import NumpyEncoder
 import warnings
 import copy
 from sklearn.preprocessing import StandardScaler
-from sklearn.feature_selection import SelectKBest, f_classif
+
 
 
 warnings.simplefilter('ignore')
