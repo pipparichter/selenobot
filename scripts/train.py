@@ -32,4 +32,7 @@ if __name__ == '__main__':
 
     model.fit(train_dataset, val_dataset, batch_size=args.batch_size, epochs=args.epochs, lr=args.lr)
     model.save(os.path.join(WEIGHTS_DIR, args.file_name))
+    print(f'Model training complete. Model data saved to {os.path.join(WEIGHTS_DIR, args.file_name)}')
+    print('Final training loss:', model.train_losses[-1])
+    print('Best validation loss:', min(model.val_losses))
 
