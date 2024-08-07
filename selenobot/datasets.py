@@ -63,8 +63,7 @@ class Dataset(torch.utils.data.Dataset):
             # The larger this value, the "better" the groups, in a sense. 
             feature_scores = kbest.scores_
             idxs = np.argsort(feature_scores) # argsort sorts in ascending order.
-            print(idxs)
-            return idxs[:-self.n_features], feature_scores # Grab the n_features features with the highest F-scores. 
+            return idxs[-self.n_features:], feature_scores # Grab the n_features features with the highest F-scores. 
 
     def _get_embeddings_from_dataframe(self, df:pd.DataFrame) -> torch.FloatTensor:
         '''Extract embeddings from an input DataFrame.'''
