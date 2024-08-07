@@ -124,7 +124,7 @@ class Classifier(torch.nn.Module):
         return outputs
 
     def _loss(self, dataset):
-        outputs, targets = self(dataset.embeddings), dataset.labels 
+        outputs, targets = self(dataset.get_embeddings()), dataset.labels 
         return self.loss_func(outputs, targets)
 
     def fit(self, train_dataset, val_dataset, epochs:int=10, lr:float=0.01, batch_size:int=16):

@@ -72,9 +72,9 @@ class Dataset(torch.utils.data.Dataset):
         embeddings = torch.from_numpy(df[cols].values).to(torch.float32)
         return embeddings
 
-    # def get_embeddings(self):
-    #     '''Return the embeddings stored in the object, filtering for significant features.'''
-    #     return self.embeddings[:, self.features]
+    def get_embeddings(self):
+        '''Return the embeddings stored in the object, filtering for significant features.'''
+        return self.embeddings[:, self.features]
         
     def __len__(self) -> int:
         return self.length
