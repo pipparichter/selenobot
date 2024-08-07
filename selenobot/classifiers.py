@@ -14,6 +14,9 @@ import json
 from selenobot.utils import NumpyEncoder
 import warnings
 import copy
+from sklearn.preprocessing import StandardScaler
+from sklearn.feature_selection import SelectKBest, f_classif
+
 
 warnings.simplefilter('ignore')
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -43,22 +46,30 @@ class Classifier(torch.nn.Module):
     '''Class defining the binary classification head.'''
 
     attrs = ['epochs', 'batch_size', 'lr', 'val_losses', 'train_losses', 'best_epoch']
+    params = ['hidden_dim', 'input_dim', 'bce_loss_weight', 'standardize']
 
     def __init__(self, 
         hidden_dim:int=512,
         input_dim:int=1024,
         bce_loss_weight:float=1,
-        random_seed:int=42):
+        random_seed:int=42, 
+        standardize:bool=True):
         '''
         Initializes a two-layer linear classification head. 
 
         :param bce_loss_weight: The weight applied to false negatives in the BCE loss function. 
         :param hidden_dim: The number of nodes in the second linear layer of the two-layer classifier.
         :param input_dim: The dimensionality of the input embedding. 
+        :param standardize: Whether or not to standardize the data before training the model. 
         '''
         # Initialize the torch Module
         super().__init__()
         torch.manual_seed(random_seed)
+
+        self.input_dim = input_dim 
+        self.hidden_dim = hidden_dim 
+        self.bce_loss_weight = bce_loss_weight 
+        self.standardize = standardize 
 
         self.classifier = torch.nn.Sequential(
             torch.nn.Linear(input_dim, hidden_dim),
@@ -80,6 +91,9 @@ class Classifier(torch.nn.Module):
         self.batch_size = None
         self.train_losses, self.val_losses = None, None
         
+        self.scaler = StandardScaler(use_std=True, use_mean=True)
+        # self.scaler_mean, self.scaler_scale, self.scaler_var = None, None, None
+
     # TODO: Do I still need the batch size parameter here?
     def forward(self, inputs:torch.FloatTensor, low_memory:bool=True):
         '''A forward pass of the Classifier.'''
@@ -116,16 +130,18 @@ class Classifier(torch.nn.Module):
     def fit(self, train_dataset, val_dataset, epochs:int=10, lr:float=0.01, batch_size:int=16):
         '''Train Classifier model on the data in the DataLoader.
 
-        :param dataloader: The DataLoader object containing the training data. 
-        :param val_dataset: The Dataset object containing the validation data. Expected to be a Dataset as defined in datasets.py.
-        :param epochs: The number of epochs to train for. 
+        :param train_dataset: The Dataset object containing the training data. 
+        :param val_dataset: The Dataset object containing the validation data.
+        :param epochs: The maximum number of epochs to train for. 
         :param lr: The learning rate. 
         :param bce_loss_weight: The weight to be passed into the WeightedBCELoss constructor.
         :param batch_size: The size of the batches to use for model training.
         '''
-
         self.train() # Put the model in train mode.
-
+        
+        train_dataset.embeddings = self.scaler.fit_transform(train_dataset.embeddings)
+        val_dataset.embeddings = self.scaler.transform(val_dataset.embeddings)
+        
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
 
         best_epoch, best_model_weights = 0, None
@@ -158,27 +174,51 @@ class Classifier(torch.nn.Module):
                 best_epoch = epoch
                 best_model_weights = copy.deepcopy(self.state_dict())
 
-        print(f'Classifier.fit: Best model weights encountered at epoch {epoch}.')
+        print(f'Classifier.fit: Best model weights encountered at epoch {best_epoch}.')
         self.load_state_dict(best_model_weights) # Load the best model weights. 
 
         # Save training values in the model. 
         self.best_epoch = best_epoch
-        self.val_losses = val_losses
-        self.train_losses = train_losses
+        self.val_losses = val_losses[1:] # Don't include the initializing np.inf loss. 
+        self.train_losses = train_losses[1:] # Don't include the initializing np.inf loss. 
         self.epochs = epochs
         self.batch_size = batch_size
+        self.lr = lr
 
     def save(self, path:str):
         info = dict()
         for attr in Classifier.attrs:
             info[attr] = getattr(self, attr)
         info['state_dict'] = self.state_dict() #.numpy()
+        # Save information for re-loading the scaler. 
+        info['scaler_mean'] = self.scaler.mean_
+        info['scaler_scale'] = self.scaler.scale_
 
         with open(path, 'w') as f:
             json.dump(info, f, cls=NumpyEncoder)
 
-    def load(self, path:str):
-        pass
+    @classmethod
+    def load(cls, path:str):
+        with open(path, 'r') as f:
+            info = json.load(f)
+        
+        params = {param:json.get(param) for param in Classifier.params}
+        obj = cls(**params) # Initialize a new object with the stored parameters. 
+
+        obj.load_state_dict(info['state_dict']) # Load the saved state dict. NOTE: Might need to convert to a tensor. 
+        
+        # Set all the other model parameters. 
+        for attr in Classifier.attrs:
+            setattr(obj, attr, info.get(attr))
+
+        # Load in the values from the fitted scaler, if the saved model had been normalized. 
+        if obj.normalize:
+            obj.scaler.mean_ = np.array(info.get('scaler_mean'))
+            obj.scaler.scale_ = np.array(info.get('scaler_scale'))
+        
+        return obj
+
+
         
 
 

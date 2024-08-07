@@ -27,7 +27,7 @@ class Dataset(torch.utils.data.Dataset):
     '''A map-style dataset which  Dataset objects which provide extra functionality for producing sequence embeddings
     and accessing information about selenoprotein content.'''
     
-    def __init__(self, df:pd.DataFrame, embedder=None):
+    def __init__(self, df:pd.DataFrame, embedder=None, n_features:int=None):
         '''Initializes a Dataset from a pandas DataFrame containing embeddings and labels.
         
         :param df: A pandas DataFrame containing the data to store in the Dataset. 
@@ -39,31 +39,54 @@ class Dataset(torch.utils.data.Dataset):
         # Check to make sure all expected fields are present in the input DataFrame. 
         assert (self.seqs is not None) or (embedder is None), f'dataset.Dataset.__init__: Input DataFrame missing required field seq.'
 
-        self.embeddings = self._get_embeddings(df) if embedder is None else embedder(list(self.seqs))
+        self.embeddings = self._get_embeddings_from_dataframe(df) if embedder is None else embedder(list(self.seqs))
         self.type = 'plm' if embedder is None else embedder.type # Type of data contained by the Dataset.
         self.labels = None if 'label' not in df.columns else torch.from_numpy(df['label'].values).type(torch.float32)
-        self.labeled = 'label' in df.columns # Boolean value indicating whether or not the data is labeled. 
         self.gene_ids = df.index.values
         self.latent_dim = self.embeddings.shape[-1]
+        self.n_features = n_features
+        self.features, self.feature_scores = self._select_features()
 
         self.length = len(df)
 
-    def _get_embeddings(self, df:pd.DataFrame) -> torch.FloatTensor:
+    def _select_features(self):
+        if self.n_features is None:
+            return np.arange(self.embeddings.shape[1]), None
+        else:
+            # NOTE: Should I be using t-test, as there are technically only two categories?
+            kbest = SelectKBest(f_classif, k='all') # Use ANOVA to select the best features. 
+            kbest.fit(X, y)
+            # Scores are the ANOVA F-statistic, which is the ratio of the between-group variability to the within-group variability.
+            # The larger this value, the "better" the groups, in a sense. 
+            feature_scores = kbest.scores_
+            idxs = np.argsort(feature_scores) # argsort sorts in ascending order.
+            return idxs[:-self.n_features], feature_scores # Grab the n_features features with the highest F-scores. 
+
+    def _get_embeddings_from_dataframe(self, df:pd.DataFrame) -> torch.FloatTensor:
         '''Extract embeddings from an input DataFrame.'''
         # Detect which columns mark an embedding feature. 
         cols = [col for col in df.columns if re.fullmatch('\d+', col) is not None]
         embeddings = torch.from_numpy(df[cols].values).to(torch.float32)
         return embeddings
+
+    # def get_embeddings(self):
+    #     '''Return the embeddings stored in the object, filtering for significant features.'''
+    #     return self.embeddings[:, self.features]
         
     def __len__(self) -> int:
         return self.length
+    
+    def shape(self):
+        return (len(self), len(self.features))
 
     def __getitem__(self, idx:int) -> Dict:
         '''Returns an item from the Dataset. Also returns the underlying index for testing purposes.'''
-        label = self.labels[idx]
-        item = {'embedding':self.embeddings[idx], 'gene_id':self.gene_ids[idx], 'idx':idx}
-        if self.labeled: # Include the label if the Dataset is labeled.
+        embeddings = self.embeddings[:, self.features] # Make sure to filter embeddings by selected features. 
+
+        item = {'embedding':embeddings[idx], 'gene_id':self.gene_ids[idx], 'idx':idx}
+        if self.labels is not None: # Include the label if the Dataset is labeled.
             item['label'] = self.labels[idx]
+
         return item
 
     def get_selenoprotein_indices(self) -> List[int]:

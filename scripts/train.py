@@ -20,12 +20,13 @@ if __name__ == '__main__':
     parser.add_argument('--lr', default=0.01, type=float, help='The learning rate for training the model.')
     parser.add_argument('--batch-size', default=16, type=int, help='The size of batches used to train the model.')
     parser.add_argument('--file-name', default='model.json', help='The path where the model training info will be saved.')
+    parser.add_argument('--n-features', default=100)
     args = parser.parse_args()
 
-    model = Classifier(input_dim=1024, hidden_dim=512)
+    model = Classifier(input_dim=args.n_features, hidden_dim=512)
 
-    train_dataset = Dataset(pd.read_csv(TRAIN_PATH, index_col=0))
-    test_dataset = Dataset(pd.read_csv(TEST_PATH, index_col=0))
+    train_dataset = Dataset(pd.read_csv(TRAIN_PATH, index_col=0), n_features=args.n_features)
+    # test_dataset = Dataset(pd.read_csv(TEST_PATH, index_col=0))
     val_dataset = Dataset(pd.read_csv(VAL_PATH, index_col=0))
     print('Loaded training, testing, and validation datasets.')
 
