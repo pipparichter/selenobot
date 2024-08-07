@@ -152,14 +152,13 @@ class Classifier(torch.nn.Module):
         val_losses, train_losses = [np.inf], [np.inf]
 
         dataloader = get_dataloader(train_dataset, batch_size=batch_size)
-        pbar = tqdm(total=epochs * batch_size, desc=f'Classifier.fit: Training classifier, epoch 0/{epochs}.') # Make sure the progress bar updates for each batch. 
+        pbar = tqdm(total=epochs * len(dataloader), desc=f'Classifier.fit: Training classifier, epoch 0/{epochs}.') # Make sure the progress bar updates for each batch. 
 
         for epoch in range(epochs):
             train_loss = []
             # for batch in tqdm(dataloader, desc='Classifier.fit: Processing batches...'):
             for batch in dataloader:
                 # Evaluate the model on the batch in the training dataloader. 
-                print('shape', batch['embedding'].shape)
                 outputs, targets = self(batch['embedding']), batch['label']
                 # print('Classifier.fit: Computed train loss for the batch.')
                 loss = self.loss_func(outputs, targets)
