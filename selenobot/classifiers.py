@@ -91,8 +91,7 @@ class Classifier(torch.nn.Module):
         self.batch_size = None
         self.train_losses, self.val_losses = None, None
         
-        self.scaler = StandardScaler(use_std=True, use_mean=True)
-        # self.scaler_mean, self.scaler_scale, self.scaler_var = None, None, None
+        self.scaler = StandardScaler()
 
     # TODO: Do I still need the batch size parameter here?
     def forward(self, inputs:torch.FloatTensor, low_memory:bool=True):
