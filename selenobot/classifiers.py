@@ -159,6 +159,7 @@ class Classifier(torch.nn.Module):
             # for batch in tqdm(dataloader, desc='Classifier.fit: Processing batches...'):
             for batch in dataloader:
                 # Evaluate the model on the batch in the training dataloader. 
+                print('shape', batch['embedding'].shape)
                 outputs, targets = self(batch['embedding']), batch['label']
                 # print('Classifier.fit: Computed train loss for the batch.')
                 loss = self.loss_func(outputs, targets)

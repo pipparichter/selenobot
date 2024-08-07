@@ -63,6 +63,7 @@ class Dataset(torch.utils.data.Dataset):
             # The larger this value, the "better" the groups, in a sense. 
             feature_scores = kbest.scores_
             idxs = np.argsort(feature_scores) # argsort sorts in ascending order.
+            print(idxs)
             return idxs[:-self.n_features], feature_scores # Grab the n_features features with the highest F-scores. 
 
     def _get_embeddings_from_dataframe(self, df:pd.DataFrame) -> torch.FloatTensor:
@@ -96,11 +97,9 @@ class Dataset(torch.utils.data.Dataset):
     def __getitem__(self, idx:int) -> Dict:
         '''Returns an item from the Dataset. Also returns the underlying index for testing purposes.'''
         embeddings = self.embeddings[:, self.features] # Make sure to filter embeddings by selected features. 
-
         item = {'embedding':embeddings[idx], 'gene_id':self.gene_ids[idx], 'idx':idx}
         if self.labels is not None: # Include the label if the Dataset is labeled.
             item['label'] = self.labels[idx]
-
         return item
 
     def get_selenoprotein_indices(self) -> List[int]:
