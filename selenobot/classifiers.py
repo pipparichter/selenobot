@@ -138,9 +138,12 @@ class Classifier(torch.nn.Module):
         '''
         self.train() # Put the model in train mode.
         
-        train_dataset.embeddings = self.scaler.fit_transform(train_dataset.embeddings)
-        val_dataset.embeddings = self.scaler.transform(val_dataset.embeddings)
-        
+        self.scaler.fit(train_dataset.embeddings)
+        train_dataset.standardize(self.scaler)
+        val_dataset.standardize(self.scaler)
+        train_dataset.to_device(DEVICE)
+        val_dataset.to_device(DEVICE)
+
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
 
         best_epoch, best_model_weights = 0, None

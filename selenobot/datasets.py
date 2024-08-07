@@ -48,6 +48,8 @@ class Dataset(torch.utils.data.Dataset):
         self.n_features = n_features
         self.features, self.feature_scores = self._select_features()
 
+        self.standardized = False
+
         self.length = len(df)
 
     def _select_features(self):
@@ -76,6 +78,17 @@ class Dataset(torch.utils.data.Dataset):
         
     def __len__(self) -> int:
         return self.length
+
+    def standardize(self, scaler):
+        assert not self.standardized, 'Dataset.standardize: Dataset has already been standardized.'
+        self.standardized = True 
+        embeddings = scaler.transform(self.embeddings)
+        self.embeddings = torch.Tensor(embeddings).to(torch.float32)
+
+    def to_device(self, device):
+        '''Put the data stored in the dataset on the device specified on input.'''
+        self.embeddings.to(device)
+        self.labels.to(device)
     
     def shape(self):
         return (len(self), len(self.features))
