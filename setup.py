@@ -2,6 +2,7 @@ import setuptools
 import os
 
 modules = ['selenobot.' + f.replace('.py', '') for f in os.listdir('./selenobot')]
+scripts = ['selenobot.' + f.replace('.py', '') for f in os.listdir('./scripts')]
 
 setuptools.setup(
     name='selenobot',
@@ -11,4 +12,4 @@ setuptools.setup(
     author='Philippa Richter',
     author_email='prichter@caltech.edu',
     packages=['selenobot'],
-    install_requires=setuptools.find_packages(exclude=['selenobot'] + modules))
+    install_requires=setuptools.find_packages(exclude=['selenobot'] + modules + scripts))

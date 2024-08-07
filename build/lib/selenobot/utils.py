@@ -14,7 +14,7 @@ import torch
 
 # Define some important directories...
 # cwd, _ = os.path.split(os.path.abspath(__file__))
-ROOT_DIR = '/home/prichter/Documents/selenobot'
+ROOT_DIR = '/home/Documents/selenobot'
 RESULTS_DIR = os.path.join(ROOT_DIR, 'results') # Get the path where results are stored.
 WEIGHTS_DIR = os.path.join(ROOT_DIR, 'weights')
 DATA_DIR = os.path.join(ROOT_DIR, 'data') # Get the path where results are stored. 

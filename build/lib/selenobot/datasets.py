@@ -68,7 +68,7 @@ class Dataset(torch.utils.data.Dataset):
     def _get_embeddings_from_dataframe(self, df:pd.DataFrame) -> torch.FloatTensor:
         '''Extract embeddings from an input DataFrame.'''
         # Detect which columns mark an embedding feature. 
-        cols = [col for col in df.columns if re.fullmatch(r'\d+', col) is not None]
+        cols = [col for col in df.columns if re.fullmatch('\d+', col) is not None]
         embeddings = torch.from_numpy(df[cols].values).to(torch.float32)
         return embeddings
 
@@ -167,8 +167,7 @@ class BalancedBatchSampler(torch.utils.data.BatchSampler):
 def get_dataloader(
         dataset:Dataset, 
         batch_size:int=1024,
-        random_seed:int=42, 
-        num_workers:int=1) -> torch.utils.data.DataLoader:
+        random_seed:int=42) -> torch.utils.data.DataLoader:
     '''Create a DataLoader from a CSV file containing sequence and/or PLM embedding data.
     
     :param dataset: The Dataset used to generate the DataLoader. 
@@ -176,7 +175,7 @@ def get_dataloader(
     :return: A pytorch DataLoader object. 
     '''
     batch_sampler = BalancedBatchSampler(dataset, batch_size=batch_size, random_seed=random_seed)
-    return torch.utils.data.DataLoader(dataset, batch_sampler=batch_sampler, num_workers=num_workers)
+    return torch.utils.data.DataLoader(dataset, batch_sampler=batch_sampler)
 
 
 

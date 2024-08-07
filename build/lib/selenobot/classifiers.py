@@ -18,7 +18,8 @@ import copy
 from sklearn.preprocessing import StandardScaler
 
 
-# warnings.simplefilter('ignore')
+
+warnings.simplefilter('ignore')
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
@@ -32,13 +33,12 @@ class WeightedBCELoss(torch.nn.Module):
     def forward(self, outputs, targets):
         '''Update the internal states keeping track of the loss.'''
         # Make sure the outputs and targets have the same shape.
-        # outputs = outputs.reshape(targets.shape)
-        outputs = outputs.view(targets.shape)
+        outputs = outputs.reshape(targets.shape)
         # reduction specifies the reduction to apply to the output. If 'none', no reduction will be applied, if 'mean,' the weighted mean of the output is taken.
         ce = torch.nn.functional.binary_cross_entropy(outputs, targets, reduction='none')
         # Seems to be generating a weight vector, so that the weight is applied to indices marked with a 1. This
         # should have the effect of increasing the cost of a false negative.
-        w = torch.where(targets == 1, self.w, 1) # .to(DEVICE)
+        w = torch.where(targets == 1, self.w, 1).to(DEVICE)
 
         return (ce * w).mean()
 
@@ -138,7 +138,6 @@ class Classifier(torch.nn.Module):
         :param batch_size: The size of the batches to use for model training.
         '''
         self.train() # Put the model in train mode.
-        print(f'Classifier.fit: Training on device {DEVICE}.')
         
         self.scaler.fit(train_dataset.embeddings)
         train_dataset.standardize(self.scaler)
@@ -153,7 +152,7 @@ class Classifier(torch.nn.Module):
         # Want to log the initial training and validation metrics.
         val_losses, train_losses = [np.inf], [np.inf]
 
-        dataloader = get_dataloader(train_dataset, batch_size=batch_size, num_workers=10 if DEVICE == 'cpu' else 1)
+        dataloader = get_dataloader(train_dataset, batch_size=batch_size)
         pbar = tqdm(total=epochs * len(dataloader), desc=f'Classifier.fit: Training classifier, epoch 0/{epochs}.') # Make sure the progress bar updates for each batch. 
 
         for epoch in range(epochs):
@@ -161,19 +160,18 @@ class Classifier(torch.nn.Module):
             # for batch in tqdm(dataloader, desc='Classifier.fit: Processing batches...'):
             for batch in dataloader:
                 # Evaluate the model on the batch in the training dataloader. 
-                outputs, targets = self(batch['embedding']), batch['label'] # Takes about 30 percent of total batch time. 
+                outputs, targets = self(batch['embedding']), batch['label']
+                # print('Classifier.fit: Computed train loss for the batch.')
                 loss = self.loss_func(outputs, targets)
-                loss.backward() # Takes about 10 percent of total batch time. 
+                loss.backward()
                 train_loss.append(loss.item()) # Store the batch loss to compute training loss across the epoch. 
                 optimizer.step()
                 optimizer.zero_grad()
                 pbar.update(1) # Update progress bar after each batch. 
-
+            pbar.set_description(f'Classifier.fit: Training classifier, epoch {epoch}/{epochs}.')
             
             train_losses.append(np.mean(train_loss))
             val_losses.append(self._loss(val_dataset).item())
-            
-            pbar.set_description(f'Classifier.fit: Training classifier, epoch {epoch}/{epochs}. Validation loss {val_losses[-1]}')
 
             if val_losses[-1] < min(val_losses[:-1]):
                 best_epoch = epoch
