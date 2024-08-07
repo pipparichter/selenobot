@@ -168,7 +168,7 @@ def get_dataloader(
         dataset:Dataset, 
         batch_size:int=1024,
         random_seed:int=42, 
-        num_workers:int=1) -> torch.utils.data.DataLoader:
+        num_workers:int=0) -> torch.utils.data.DataLoader:
     '''Create a DataLoader from a CSV file containing sequence and/or PLM embedding data.
     
     :param dataset: The Dataset used to generate the DataLoader. 

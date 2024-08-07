@@ -153,7 +153,7 @@ class Classifier(torch.nn.Module):
         # Want to log the initial training and validation metrics.
         val_losses, train_losses = [np.inf], [np.inf]
 
-        dataloader = get_dataloader(train_dataset, batch_size=batch_size, num_workers=1 if DEVICE == 'cpu' else 1)
+        dataloader = get_dataloader(train_dataset, batch_size=batch_size) # , num_workers=0 if DEVICE == 'cpu' else 0)
         pbar = tqdm(total=epochs * len(dataloader), desc=f'Classifier.fit: Training classifier, epoch 0/{epochs}.') # Make sure the progress bar updates for each batch. 
 
         for epoch in range(epochs):
