@@ -20,7 +20,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr', default=0.01, type=float, help='The learning rate for training the model.')
     parser.add_argument('--batch-size', default=16, type=int, help='The size of batches used to train the model.')
     parser.add_argument('--file-name', default='model.json', help='The path where the model training info will be saved.')
-    parser.add_argument('--n-features', default=100)
+    parser.add_argument('--n-features', default=100, type=int)
     args = parser.parse_args()
 
     model = Classifier(input_dim=args.n_features, hidden_dim=512)
