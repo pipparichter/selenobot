@@ -52,13 +52,13 @@ class ClstrFile(File):
 
     def dataframe(self) -> pd.DataFrame:
         '''Convert a ClstrFile to a pandas DataFrame.'''
-        df = {'id':[], 'cluster':[]}
+        df = {'gene_id':[], 'cluster':[]}
         # Split on the newline. 
         for i, cluster in enumerate(self.clusters()):
-            pattern = '>id=([\w\d_\[\]]+)' # Pattern to extract gene ID from line. 
-            ids = [re.search(pattern, x).group(1) for x in cluster.split('\n') if x != '']
-            df['id'] += ids
-            df['cluster'] += [i] * len(ids)
+            pattern = r'>gene_id=([\w\d_\[\]]+)' # Pattern to extract gene ID from line. 
+            gene_ids = [re.search(pattern, x).group(1) for x in cluster.split('\n') if x != '']
+            df['gene_id'] += ids
+            df['cluster'] += [i] * len(gene_ids)
 
         df = pd.DataFrame(df) # .set_index('id')
         df.cluster = df.cluster.astype(int) # This will speed up grouping clusters later on. 
@@ -81,10 +81,10 @@ class FastaFile(File):
         if path is not None:
             with open(path, 'r') as f:
                 self.content = f.read()
-            self.genome_id = re.search('GC[AF]_\d{9}\.\d{1}', self.file_name).group(0)
+            # self.genome_id = re.search(r'GC[AF]_\d{9}\.\d{1}', self.file_name).group(0)
         else:
             self.content = content
-            self.genome_id = genome_id
+        self.genome_id = genome_id
 
 
     def parse_header(self, header:str) -> dict:
@@ -102,7 +102,7 @@ class FastaFile(File):
 
         return seqs
 
-    def size(self):
+    def __len__(self):
         # Avoid re-computing the number of entries each time. 
         if self.n_entries is None:
             self.n_entries = len(self.headers())
@@ -131,8 +131,8 @@ class EmbeddingsFile(File):
         _, self.file_type = os.path.splitext(self.file_name)
 
         self.genome_id = None
-        if re.search('GC[AF]_\d{9}\.\d{1}', self.file_name) is not None:
-            self.genome_id = re.search('GC[AF]_\d{9}\.\d{1}', self.file_name).group(0)
+        if re.search(r'GC[AF]_\d{9}\.\d{1}', self.file_name) is not None:
+            self.genome_id = re.search(r'GC[AF]_\d{9}\.\d{1}', self.file_name).group(0)
 
         if self.file_type == 'h5':
             data = h5py.File(path, 'r')
@@ -188,15 +188,15 @@ class NcbiProteinsFile(FastaFile):
         # lcl|NC_000913.3_prot_NP_414542.1_1 [gene=thrL] [locus_tag=b0001] [db_xref=UniProtKB/Swiss-Prot:P0AD86] [protein=thr operon leader peptide] [protein_id=NP_414542.1] [location=190..255] [gbkey=CDS]
         header_df = []
         for header in headers:
-            gene_id = re.search('gene=([a-zA-Z\d]+)', header) # .group(1)
+            gene_id = re.search(r'gene=([a-zA-Z\d]+)', header) # .group(1)
             gene_id = None if gene_id is None else gene_id.group(1) # Sometimes there are "Untitled" genes. Also skipping these. 
             
-            if re.search('location=complement\((\d+)\.\.(\d+)\)', header) is not None:
-                location = re.search('location=complement\((\d+)\.\.(\d+)\)', header)
+            if re.search(r'location=complement\((\d+)\.\.(\d+)\)', header) is not None:
+                location = re.search(r'location=complement\((\d+)\.\.(\d+)\)', header)
                 start, stop = int(location.group(1)), int(location.group(2))
                 strand = '-'
-            elif re.search('location=(\d+)\.\.(\d+)', header) is not None:
-                location = re.search('location=(\d+)\.\.(\d+)', header)
+            elif re.search(r'location=(\d+)\.\.(\d+)', header) is not None:
+                location = re.search(r'location=(\d+)\.\.(\d+)', header)
                 start, stop = int(location.group(1)), int(location.group(2))
                 strand = '+' 
             else:

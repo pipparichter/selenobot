@@ -17,44 +17,23 @@ import warnings
 import copy
 from sklearn.preprocessing import StandardScaler
 
-
 # warnings.simplefilter('ignore')
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-
-class WeightedBCELoss(torch.nn.Module):
-    '''Defining a class for easily working with weighted Binary Cross Entropy loss.'''
-    def __init__(self, weight=1):
-
-        super(WeightedBCELoss, self).__init__()
-        self.w = weight
-
-    def forward(self, outputs, targets):
-        '''Update the internal states keeping track of the loss.'''
-        # Make sure the outputs and targets have the same shape.
-        # outputs = outputs.reshape(targets.shape)
-        outputs = outputs.view(targets.shape)
-        # reduction specifies the reduction to apply to the output. If 'none', no reduction will be applied, if 'mean,' the weighted mean of the output is taken.
-        ce = torch.nn.functional.binary_cross_entropy(outputs, targets, reduction='none')
-        # Seems to be generating a weight vector, so that the weight is applied to indices marked with a 1. This
-        # should have the effect of increasing the cost of a false negative.
-        w = torch.where(targets == 1, self.w, 1) # .to(DEVICE)
-
-        return (ce * w).mean()
 
 
 class Classifier(torch.nn.Module):
     '''Class defining the binary classification head.'''
 
     attrs = ['epochs', 'batch_size', 'lr', 'val_losses', 'train_losses', 'best_epoch']
-    params = ['hidden_dim', 'input_dim', 'bce_loss_weight', 'standardize']
+    params = ['hidden_dim', 'input_dim', 'bce_loss_weight', 'standardize', 'half_precision']
 
     def __init__(self, 
         hidden_dim:int=512,
         input_dim:int=1024,
         bce_loss_weight:float=1,
-        random_seed:int=42, 
-        standardize:bool=True):
+        random_seed:int=42,
+        standardize:bool=True,
+        half_precision:bool=True):
         '''
         Initializes a two-layer linear classification head. 
 
@@ -67,23 +46,26 @@ class Classifier(torch.nn.Module):
         super().__init__()
         torch.manual_seed(random_seed)
 
+        self.dtype = torch.float16 if half_precision else torch.float32
+
+        self.half_precision = half_precision
         self.input_dim = input_dim 
         self.hidden_dim = hidden_dim 
         self.bce_loss_weight = bce_loss_weight 
         self.standardize = standardize 
 
         self.classifier = torch.nn.Sequential(
-            torch.nn.Linear(input_dim, hidden_dim),
+            torch.nn.Linear(input_dim, hidden_dim, dtype=self.dtype),
             torch.nn.ReLU(),
-            torch.nn.Linear(hidden_dim, 1),
-            torch.nn.Sigmoid())
+            torch.nn.Linear(hidden_dim, 1, dtype=self.dtype))
+            # torch.nn.Sigmoid())
 
         # Initialize model weights according to which activation is used.'''
         torch.nn.init.kaiming_normal_(self.classifier[0].weight)
         torch.nn.init.xavier_normal_(self.classifier[2].weight)
 
         self.to(DEVICE)
-        self.loss_func = WeightedBCELoss(weight=bce_loss_weight)
+        self.loss_func = torch.nn.functional.binary_cross_entropy_with_logits
 
         # Parameters to be populated when the model has been fitted. 
         self.best_epoch = None
@@ -97,7 +79,6 @@ class Classifier(torch.nn.Module):
     # TODO: Do I still need the batch size parameter here?
     def forward(self, inputs:torch.FloatTensor, low_memory:bool=True):
         '''A forward pass of the Classifier.'''
-        assert inputs.dtype == torch.float32, f'classifiers.Classifier.forward: Expected input embedding of type torch.float32, not {inputs.dtype}.'
 
         # if low_memory:
         #     outputs = []
@@ -107,15 +88,22 @@ class Classifier(torch.nn.Module):
         #         chunk = inputs[i:(i + 1) * chunk_size]
         #         outputs.append(self.classifier(chunk))
         #     return torch.concat(outputs)
-        
-        # else:
-        return self.classifier(inputs) 
+
+        if low_memory:
+            batch_size = 32
+            outputs = [self.classifier(batch) for batch in torch.split(inputs, batch_size)]
+            return torch.concat(outputs)
+        else:
+            return self.classifier(inputs) 
 
     def predict(self, dataset, threshold:float=None) -> torch.Tensor:
         '''Evaluate the Classifier on the data in the input Dataset.'''   
         self.eval() # Put the model in evaluation mode. 
         outputs = self(dataset.embeddings) # Run a forward pass of the model. Batch to limit memory usage. 
         self.train() # Put the model back in train mode.
+
+        # Apply sigmoid activation, which is usually applied as a part of the loss function. 
+        outputs = torch.nn.functional.sigmoid(outputs)
 
         if threshold is not None: # Apply the threshold to the output values. 
             outputs = np.ones(outputs.shape) # Initialize an array of ones. 
@@ -146,12 +134,13 @@ class Classifier(torch.nn.Module):
         train_dataset.to_device(DEVICE)
         val_dataset.to_device(DEVICE)
 
-        optimizer = torch.optim.Adam(self.parameters(), lr=lr)
+        # NOTE: What does the epsilon parameter do?
+        optimizer = torch.optim.Adam(self.parameters(), lr=lr, eps=1e-4 if self.half_precision else 1e-8)
 
         best_epoch, best_model_weights = 0, None
 
         # Want to log the initial training and validation metrics.
-        val_losses, train_losses = [np.inf], [np.inf]
+        val_losses, train_losses = [np.inf], [np.inf]       
 
         dataloader = get_dataloader(train_dataset, batch_size=batch_size) # , num_workers=0 if DEVICE == 'cpu' else 0)
         pbar = tqdm(total=epochs * len(dataloader), desc=f'Classifier.fit: Training classifier, epoch 0/{epochs}.') # Make sure the progress bar updates for each batch. 
@@ -161,17 +150,20 @@ class Classifier(torch.nn.Module):
             # for batch in tqdm(dataloader, desc='Classifier.fit: Processing batches...'):
             for batch in dataloader:
                 # Evaluate the model on the batch in the training dataloader. 
-                outputs, targets = self(batch['embedding']), batch['label'] # Takes about 30 percent of total batch time. 
-                loss = self.loss_func(outputs, targets)
+                outputs, targets = self(batch['embedding'], low_memory=False), batch['label'] # Takes about 30 percent of total batch time. 
+                loss = self.loss_func(outputs.ravel(), targets)
                 loss.backward() # Takes about 10 percent of total batch time. 
                 train_loss.append(loss.item()) # Store the batch loss to compute training loss across the epoch. 
                 optimizer.step()
                 optimizer.zero_grad()
                 pbar.update(1) # Update progress bar after each batch. 
-
             
             train_losses.append(np.mean(train_loss))
-            val_losses.append(self._loss(val_dataset).item())
+
+            # self.eval()
+            outputs, targets = self(val_dataset.embeddings), val_dataset.labels 
+            val_losses.append(self.loss_func(outputs.ravel(), targets).item())
+            # self.train()
             
             pbar.set_description(f'Classifier.fit: Training classifier, epoch {epoch}/{epochs}. Validation loss {val_losses[-1]}')
 
@@ -224,9 +216,6 @@ class Classifier(torch.nn.Module):
         return obj
 
 
-        
-
-
 class SimpleClassifier(Classifier):
     '''Class defining a simplified version of the binary classification head.'''
 
@@ -250,6 +239,29 @@ class SimpleClassifier(Classifier):
 
         self.loss_func = WeightedBCELoss(weight=bce_loss_weight)
 
+
+
+# class WeightedBCELoss(torch.nn.Module):
+#     '''Defining a class for easily working with weighted Binary Cross Entropy loss.'''
+#     def __init__(self, weight=1):
+
+#         super(WeightedBCELoss, self).__init__()
+#         self.w = weight
+
+#     def forward(self, outputs, targets):
+#         '''Update the internal states keeping track of the loss.'''
+#         # Make sure the outputs and targets have the same shape.
+#         # outputs = outputs.reshape(targets.shape)
+#         outputs = outputs.view(targets.shape)
+#         # reduction specifies the reduction to apply to the output. If 'none', no reduction will be applied, if 'mean,' the weighted mean of the output is taken.
+#         # ce = torch.nn.functional.binary_cross_entropy(outputs, targets, reduction='none')
+#         # NOTE: Switch to with_logits for numerical stability, see https://pytorch.org/docs/stable/generated/torch.nn.BCEWithLogitsLoss.html 
+#         ce = torch.nn.functional.binary_cross_entropy_with_logits(outputs, targets, reduction='none')
+#         # Seems to be generating a weight vector, so that the weight is applied to indices marked with a 1. This
+#         # should have the effect of increasing the cost of a false negative.
+#         w = torch.where(targets == 1, self.w, 1) # .to(DEVICE)
+
+#         return (ce * w).mean()
 
 
 # def optimize(dataloader, val_dataset:Dataset, n_calls:int=50): 

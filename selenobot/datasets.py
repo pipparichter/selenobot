@@ -27,8 +27,8 @@ class EmbeddingDataset(BaseDataset):
 class Dataset(torch.utils.data.Dataset):
     '''A map-style dataset which  Dataset objects which provide extra functionality for producing sequence embeddings
     and accessing information about selenoprotein content.'''
-    
-    def __init__(self, df:pd.DataFrame, embedder=None, n_features:int=None):
+
+    def __init__(self, df:pd.DataFrame, embedder=None, n_features:int=None, half_precision:bool=True):
         '''Initializes a Dataset from a pandas DataFrame containing embeddings and labels.
         
         :param df: A pandas DataFrame containing the data to store in the Dataset. 
@@ -36,45 +36,43 @@ class Dataset(torch.utils.data.Dataset):
             If None, it is assumed that the embeddings are already present in the file. 
         '''
         self.seqs = None if 'seq' not in df.columns else df.seq.values
+        self.dtype = torch.float16 if half_precision else torch.float32
 
         # Check to make sure all expected fields are present in the input DataFrame. 
         assert (self.seqs is not None) or (embedder is None), f'dataset.Dataset.__init__: Input DataFrame missing required field seq.'
 
-        self.embeddings = self._get_embeddings_from_dataframe(df) if embedder is None else embedder(list(self.seqs))
+        self.labels = None if 'label' not in df.columns else torch.from_numpy(df['label'].values).type(self.dtype)
+        self.n_features = n_features
+        embeddings = self._get_embeddings_from_dataframe(df) if embedder is None else embedder(list(self.seqs))
+        self.embeddings = self._select_features(embeddings)
+        
         self.type = 'plm' if embedder is None else embedder.type # Type of data contained by the Dataset.
-        self.labels = None if 'label' not in df.columns else torch.from_numpy(df['label'].values).type(torch.float32)
         self.gene_ids = df.index.values
         self.latent_dim = self.embeddings.shape[-1]
-        self.n_features = n_features
-        self.features, self.feature_scores = self._select_features()
 
         self.standardized = False
 
         self.length = len(df)
 
-    def _select_features(self):
+    def _select_features(self, embeddings:torch.Tensor) -> torch.Tensor:
         if self.n_features is None:
-            return np.arange(self.embeddings.shape[1]), None
+            return embeddings
         else:
             # NOTE: Should I be using t-test, as there are technically only two categories?
             kbest = SelectKBest(f_classif, k='all') # Use ANOVA to select the best features. 
-            kbest.fit(self.embeddings, self.labels)
+            kbest.fit(embeddings, self.labels)
             # Scores are the ANOVA F-statistic, which is the ratio of the between-group variability to the within-group variability.
             # The larger this value, the "better" the groups, in a sense. 
             feature_scores = kbest.scores_
-            idxs = np.argsort(feature_scores) # argsort sorts in ascending order.
-            return idxs[-self.n_features:], feature_scores # Grab the n_features features with the highest F-scores. 
+            idxs = np.argsort(feature_scores)[:, -self.n_features:] # argsort sorts in ascending order.
+            return embeddings[idxs] # Grab the n_features features with the highest F-scores. 
 
     def _get_embeddings_from_dataframe(self, df:pd.DataFrame) -> torch.FloatTensor:
         '''Extract embeddings from an input DataFrame.'''
-        # Detect which columns mark an embedding feature. 
+        # Detect which columns mark an embedding feature (integer column labels). 
         cols = [col for col in df.columns if re.fullmatch(r'\d+', col) is not None]
-        embeddings = torch.from_numpy(df[cols].values).to(torch.float32)
+        embeddings = torch.from_numpy(df[cols].values).to(self.dtype)
         return embeddings
-
-    def get_embeddings(self):
-        '''Return the embeddings stored in the object, filtering for significant features.'''
-        return self.embeddings[:, self.features]
         
     def __len__(self) -> int:
         return self.length
@@ -83,7 +81,7 @@ class Dataset(torch.utils.data.Dataset):
         assert not self.standardized, 'Dataset.standardize: Dataset has already been standardized.'
         self.standardized = True 
         embeddings = scaler.transform(self.embeddings)
-        self.embeddings = torch.Tensor(embeddings).to(torch.float32)
+        self.embeddings = torch.Tensor(embeddings).to(self.dtype)
 
     def to_device(self, device):
         '''Put the data stored in the dataset on the device specified on input.'''
@@ -92,12 +90,12 @@ class Dataset(torch.utils.data.Dataset):
             self.labels = self.labels.to(device)
     
     def shape(self):
-        return (len(self), len(self.features))
+        return self.embeddings.shape
 
     def __getitem__(self, idx:int) -> Dict:
         '''Returns an item from the Dataset. Also returns the underlying index for testing purposes.'''
-        embeddings = self.embeddings[:, self.features] # Make sure to filter embeddings by selected features. 
-        item = {'embedding':embeddings[idx], 'gene_id':self.gene_ids[idx], 'idx':idx}
+        # embeddings = self.embeddings[:, self.features] # Make sure to filter embeddings by selected features. 
+        item = {'embedding':self.embeddings[idx], 'gene_id':self.gene_ids[idx], 'idx':idx}
         if self.labels is not None: # Include the label if the Dataset is labeled.
             item['label'] = self.labels[idx]
         return item
