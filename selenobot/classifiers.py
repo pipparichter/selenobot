@@ -25,12 +25,12 @@ class Classifier(torch.nn.Module):
     '''Class defining the binary classification head.'''
 
     attrs = ['epochs', 'batch_size', 'lr', 'val_losses', 'train_losses', 'best_epoch']
-    params = ['hidden_dim', 'input_dim', 'bce_loss_weight', 'standardize', 'half_precision']
+    params = ['hidden_dim', 'input_dim', 'standardize', 'half_precision']
 
     def __init__(self, 
         hidden_dim:int=512,
         input_dim:int=1024,
-        bce_loss_weight:float=1,
+        # bce_loss_weight:float=1,
         random_seed:int=42,
         standardize:bool=True,
         half_precision:bool=True):
@@ -51,7 +51,7 @@ class Classifier(torch.nn.Module):
         self.half_precision = half_precision
         self.input_dim = input_dim 
         self.hidden_dim = hidden_dim 
-        self.bce_loss_weight = bce_loss_weight 
+        # self.bce_loss_weight = bce_loss_weight 
         self.standardize = standardize 
 
         self.classifier = torch.nn.Sequential(
@@ -186,6 +186,9 @@ class Classifier(torch.nn.Module):
         info = dict()
         for attr in Classifier.attrs:
             info[attr] = getattr(self, attr)
+        for param in Classifier.params:
+            info[param] = getattr(self, param)
+
         info['state_dict'] = self.state_dict() #.numpy()
         # Save information for re-loading the scaler. 
         info['scaler_mean'] = self.scaler.mean_
@@ -199,17 +202,19 @@ class Classifier(torch.nn.Module):
         with open(path, 'r') as f:
             info = json.load(f)
         
-        params = {param:json.get(param) for param in Classifier.params}
+        params = {param:info.get(param) for param in Classifier.params}
         obj = cls(**params) # Initialize a new object with the stored parameters. 
 
-        obj.load_state_dict(info['state_dict']) # Load the saved state dict. NOTE: Might need to convert to a tensor. 
+        state_dict = {k:torch.Tensor(v) for k, v in info['state_dict'].items()}
+        state_dict = {k:v.to(torch.float16) if obj.half_precision else v for k, v in state_dict.items()} # Convert to half-precision if specified. 
+        obj.load_state_dict(state_dict) # Load the saved state dict. NOTE: Might need to convert to a tensor. 
         
         # Set all the other model parameters. 
         for attr in Classifier.attrs:
             setattr(obj, attr, info.get(attr))
 
         # Load in the values from the fitted scaler, if the saved model had been normalized. 
-        if obj.normalize:
+        if obj.standardize:
             obj.scaler.mean_ = np.array(info.get('scaler_mean'))
             obj.scaler.scale_ = np.array(info.get('scaler_scale'))
         
