@@ -130,9 +130,9 @@ class EmbeddingsFile(File):
         super().__init__(path)
         _, self.file_type = os.path.splitext(self.file_name)
 
-        self.genome_id = None
-        if re.search(r'GC[AF]_\d{9}\.\d{1}', self.file_name) is not None:
-            self.genome_id = re.search(r'GC[AF]_\d{9}\.\d{1}', self.file_name).group(0)
+        # self.genome_id = None
+        # if re.search(r'GC[AF]_\d{9}\.\d{1}', self.file_name) is not None:
+        #     self.genome_id = re.search(r'GC[AF]_\d{9}\.\d{1}', self.file_name).group(0)
 
         if self.file_type == 'h5':
             data = h5py.File(path, 'r')
@@ -147,9 +147,7 @@ class EmbeddingsFile(File):
             data.close()
 
         elif self.file_type == 'csv':
-            data = pd.read_csv(path, index_col=0)
-            self.gene_ids = list(data.index)
-            self.embeddings = data.values
+            raise Exception('TODO')
         else:
             raise Exception(f'EmbeddingsFile.__init__: Invalid file type {self.file_type}.')
         

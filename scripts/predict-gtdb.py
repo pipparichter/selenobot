@@ -73,12 +73,9 @@ if __name__ == '__main__':
 
 
     model = Classifier(latent_dim=1024, hidden_dim=512)
-    model.load_state_dict(torch.load(WEIGHTS_PATH))
+    model = model.load(path)
 
-
-    df = pd.DataFrame({'id':dataset.ids, 'model_output':reporter.outputs, 'prediction':predictions})
-    df['seq'] = dataset.seqs # Add sequences to the DataFrame. 
-    df.set_index('id').to_csv(args.output)
+    dfs = []
 
     embedding_file_names = os.listdir(EMBEDDINGS_PATH) # Filenames are the RS_ or GB_ prefix followed by the genome ID. 
     genome_ids = [re.search('GC[AF]_\d{9}\.\d{1}', self.file_name).group(0) for file in embedding_files]
@@ -92,7 +89,12 @@ if __name__ == '__main__':
             
         dataset = Dataset(embedding_file_name.dataframe()) # Instantiate a Dataset object with the embeddings. 
         predictions_raw = model.predict(dataset, threshold=None)
-        predictions_threshold = 
+        predictions_threshold = [1 if p > threshold else 0 for p in predictions_raw]
+
+        df = pd.DataFrame({'gene_id':dataset.ids, 'model_output':predictions_raw, 'prediction':predictions_threshold})
+        df['seq'] = dataset.seqs # Add sequences to the DataFrame. 
+        df['genome_id'] = genome_id
+        df.set_index('gene_id').to_csv(args.output)
 
 
 
