@@ -129,9 +129,10 @@ class Classifier(torch.nn.Module):
         '''Evaluate the Classifier on the data in the input Dataset.'''   
         self.eval() # Put the model in evaluation mode. This changes the forward behavior of the model (e.g. disables dropout).
         with torch.no_grad(): # Turn off gradient computation, which reduces memory usage. 
-            outputs = self(dataset.embeddings).cpu().numpy() # Run a forward pass of the model. Batch to limit memory usage.
+            outputs = self(dataset.embeddings) # Run a forward pass of the model. Batch to limit memory usage.
             # Apply sigmoid activation, which is usually applied as a part of the loss function. 
             outputs = torch.nn.functional.sigmoid(outputs).ravel()
+            outputs = outputs.cpu().numpy()
 
             if threshold is not None: # Apply the threshold to the output values. 
                 outputs_with_threshold = np.ones(outputs.shape) # Initialize an array of ones. 
