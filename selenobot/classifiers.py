@@ -173,7 +173,7 @@ class Classifier(torch.nn.Module):
         best_epoch, best_model_weights = 0, copy.deepcopy(self.state_dict())
 
         # Want to log the initial training and validation metrics. 
-        val_accs = [balanced_accuracy_score(val_dataset.labels, self.predict(val_dataset))]
+        val_accs = [balanced_accuracy_score(val_dataset.labels.cpu().numpy(), self.predict(val_dataset))]
         train_losses = [self.loss_func(self(train_dataset.embeddings).ravel(), train_dataset.labels).item()]
 
         dataloader = get_dataloader(train_dataset, batch_size=batch_size)
@@ -193,7 +193,7 @@ class Classifier(torch.nn.Module):
                 pbar.update(1) # Update progress bar after each batch. 
             
             train_losses.append(np.mean(train_loss))
-            val_accs.append(balanced_accuracy_score(val_dataset.labels, self.predict(val_dataset)))
+            val_accs.append(balanced_accuracy_score(val_dataset.labels.cpu().numpy(), self.predict(val_dataset)))
             
             pbar.set_description(f'Classifier.fit: Training classifier, epoch {epoch}/{epochs}. Validation accuracy {np.round(val_accs[-1], 2)}')
 
