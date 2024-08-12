@@ -28,7 +28,7 @@ class Dataset(torch.utils.data.Dataset):
     '''A map-style dataset which  Dataset objects which provide extra functionality for producing sequence embeddings
     and accessing information about selenoprotein content.'''
 
-    def __init__(self, df:pd.DataFrame, embedder=None, n_features:int=None, half_precision:bool=True):
+    def __init__(self, df:pd.DataFrame, embedder=None, n_features:int=None, half_precision:bool=False):
         '''Initializes a Dataset from a pandas DataFrame containing embeddings and labels.
         
         :param df: A pandas DataFrame containing the data to store in the Dataset. 
@@ -102,7 +102,7 @@ class Dataset(torch.utils.data.Dataset):
 
     def get_selenoprotein_indices(self) -> List[int]:
         '''Obtains the indices of selenoproteins in the Dataset.'''
-        return list(np.where([']' in i for i in self.gene_ids])[0])
+        return list(np.where(['[1]' in i for i in self.gene_ids])[0])
 
 
 # A BatchSampler should have an __iter__ method which returns the indices of the next batch once called.
@@ -165,16 +165,14 @@ class BalancedBatchSampler(torch.utils.data.BatchSampler):
 def get_dataloader(
         dataset:Dataset, 
         batch_size:int=1024,
-        random_seed:int=42, 
-        num_workers:int=0) -> torch.utils.data.DataLoader:
-    '''Create a DataLoader from a CSV file containing sequence and/or PLM embedding data.
-    
-    :param dataset: The Dataset used to generate the DataLoader. 
-    :param batch_size: The size of the batches which the training data will be split into. 
-    :return: A pytorch DataLoader object. 
-    '''
-    batch_sampler = BalancedBatchSampler(dataset, batch_size=batch_size, random_seed=random_seed)
-    return torch.utils.data.DataLoader(dataset, batch_sampler=batch_sampler, num_workers=num_workers)
+        num_workers:int=0, 
+        balance_batches:bool=False) -> torch.utils.data.DataLoader:
+
+    if balance_batches:
+        batch_sampler = BalancedBatchSampler(dataset, batch_size=batch_size)
+        return torch.utils.data.DataLoader(dataset, batch_sampler=batch_sampler, num_workers=num_workers)
+    else:
+        return torch.utils.data.DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, shuffle=True)
 
 
 

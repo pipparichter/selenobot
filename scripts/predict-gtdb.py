@@ -91,8 +91,9 @@ if __name__ == '__main__':
         stop_codons = [get_stop_codon(gene_id) for gene_id in embedding_file_name.keys()]
             
         dataset = Dataset(embedding_file_name.dataframe()) # Instantiate a Dataset object with the embeddings. 
-        reporter = model.predict(dataset)
-        predictions = reporter.apply_threshold()
+        predictions_raw = model.predict(dataset, threshold=None)
+        predictions_threshold = 
+
 
 
 
