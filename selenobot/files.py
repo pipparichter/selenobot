@@ -134,7 +134,7 @@ class EmbeddingsFile(File):
         # if re.search(r'GC[AF]_\d{9}\.\d{1}', self.file_name) is not None:
         #     self.genome_id = re.search(r'GC[AF]_\d{9}\.\d{1}', self.file_name).group(0)
 
-        if self.file_type == 'h5':
+        if self.file_type == '.h5':
             data = h5py.File(path, 'r')
             self.gene_ids = [key.split('#')[0].replace('_', '.', 1) for key in f.keys()] # The keys in the data are the entire Prodigal header string. 
             # Read in the embeddings from the H5 file, one at a time. Each embedding is stored under a separate key. 
@@ -146,7 +146,7 @@ class EmbeddingsFile(File):
             self.embeddings = np.concatenate(embeddings, axis=0)
             data.close()
 
-        elif self.file_type == 'csv':
+        elif self.file_type == '.csv':
             raise Exception('TODO')
         else:
             raise Exception(f'EmbeddingsFile.__init__: Invalid file type {self.file_type}.')
