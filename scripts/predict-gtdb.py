@@ -72,7 +72,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    model = model.load(os.path.join(MODELS_DIR, args.model)) # Load the pre-trained model. 
+    model = Classifier.load(os.path.join(MODELS_DIR, args.model)) # Load the pre-trained model. 
     print(f'Loaded model {args.model}.')
 
     results = []
