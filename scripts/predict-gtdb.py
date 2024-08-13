@@ -36,17 +36,20 @@ def get_copy_numbers(genome_id:str):
     query.equal_to('ko', [SELA_KO, SELB_KO, SELD_KO])
 
     page_df = query.next()
-    print(page_df)
     df = []
     while page_df is not None:
         df.append(page_df)
         page_df = query.next()
 
-    df = pd.concat(df)
-    seld_copy_num = len(df.ko == SELD_KO)
-    sela_copy_num = len(df.ko == SELA_KO)
-    selb_copy_num = len(df.ko == SELB_KO)
-    return seld_copy_num, sela_copy_num, selb_copy_num
+    if len(df) == 0:
+        print(f'get_copy_numbers: No selA, selB, or selD found in genome {genome_id}.')
+        return 0, 0, 0
+    else:
+        df = pd.concat(df)
+        seld_copy_num = len(df.ko == SELD_KO)
+        sela_copy_num = len(df.ko == SELA_KO)
+        selb_copy_num = len(df.ko == SELB_KO)
+        return seld_copy_num, sela_copy_num, selb_copy_num
 
 
 def get_sec_trna_count(genome_id:str):
