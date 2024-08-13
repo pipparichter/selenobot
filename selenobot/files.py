@@ -136,7 +136,7 @@ class EmbeddingsFile(File):
 
         if self.file_type == '.h5':
             data = h5py.File(path, 'r')
-            self.gene_ids = [key.split('#')[0].replace('_', '.', 1) for key in f.keys()] # The keys in the data are the entire Prodigal header string. 
+            self.gene_ids = [key.split('#')[0].replace('_', '.', 1) for key in data.keys()] # The keys in the data are the entire Prodigal header string. 
             # Read in the embeddings from the H5 file, one at a time. Each embedding is stored under a separate key. 
             embeddings = []
             for key in data.keys():
