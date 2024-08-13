@@ -64,10 +64,13 @@ def get_sec_trna_count(genome_id:str):
 def get_stop_codon(gene_id:str):
     '''Retrieve the gene's stop codon.'''
     query = GetQuery('proteins')
-    query.equal_to('gene_id', gene_id) 
+    query.equal_to('gene_id', gene_id)
 
-    df = query.submit()
-    return df.stop_codon.values[0]
+    try:
+        df = query.submit()
+        return df.stop_codon.values[0]
+    except Exception:
+        raise RuntimeError(f'get_stop_codon: Failed on URL {query.get_url()}')
 
 
 if __name__ == '__main__':
