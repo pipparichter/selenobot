@@ -36,6 +36,7 @@ def get_copy_numbers(genome_id:str):
     query.equal_to('ko', [SELA_KO, SELB_KO, SELD_KO])
 
     page_df = query.next()
+    print(page_df)
     df = []
     while page_df is not None:
         df.append(page_df)
