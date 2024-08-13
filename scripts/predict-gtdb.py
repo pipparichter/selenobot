@@ -2,8 +2,8 @@ import os
 import re
 from tqdm import tqdm 
 from fabapi import * 
-from files import EmbeddingsFile
-from utils import MODELS_DIR, DATA_DIR
+from selenobot.files import EmbeddingsFile
+from selenobot.utils import MODELS_DIR, DATA_DIR
 import argparse
 
 EMBEDDINGS_PATH = '/central/groups/fischergroup/prichter/gtdb/embeddings'
@@ -73,6 +73,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     model = model.load(os.path.join(MODELS_DIR, args.model)) # Load the pre-trained model. 
+    print(f'Loaded model {args.model}.')
 
     results = []
 
