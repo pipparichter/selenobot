@@ -68,7 +68,7 @@ def get_stop_codon(gene_id:str):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', default='', type=str)
+    parser.add_argument('--model', default='model_epochs_100_lr_e8.pkl', type=str)
     parser.add_argument('--output-path', default=os.path.join(DATA_DIR, 'gtdb_results.csv'), type=str)
 
     args = parser.parse_args()
