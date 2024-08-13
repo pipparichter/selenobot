@@ -1,13 +1,12 @@
 import os
 import re
-import tqdm 
+from tqdm import tqdm 
 from fabapi import * 
 from files import EmbeddingsFile
-from utils import WEIGHTS_DIR
-import h5py
+from utils import MODELS_DIR, DATA_DIR
+import argparse
 
 EMBEDDINGS_PATH = '/central/groups/fischergroup/prichter/gtdb/embeddings'
-WEIGHTS_PATH = os.path.join(WEIGHTS_DIR, 'plm_model_weights.pth')
 
 # Fields to include along with the predictions:
 #   sec_trna_count (metadata table)
@@ -66,21 +65,21 @@ def get_stop_codon(gene_id:str):
     return df.stop_codon.values[0]
 
 
-
-
-
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model', default='', type=str)
+    parser.add_argument('--output-path', default=os.path.join(DATA_DIR, 'gtdb_results.csv'), type=str)
 
+    args = parser.parse_args()
 
-    model = Classifier(latent_dim=1024, hidden_dim=512)
-    model = model.load(path)
+    model = model.load(os.path.join(MODELS_DIR, args.model)) # Load the pre-trained model. 
 
-    dfs = []
+    results = []
 
     embedding_file_names = os.listdir(EMBEDDINGS_PATH) # Filenames are the RS_ or GB_ prefix followed by the genome ID. 
     genome_ids = [re.search('GC[AF]_\d{9}\.\d{1}', self.file_name).group(0) for file in embedding_files]
 
-    for embedding_file_name, genome_id in zip(embedding_file, genome_ids):
+    for embedding_file_name, genome_id in tqdm(zip(embedding_file, genome_ids), desc='Processing genomes...'):
         seld_copy_num, sela_copy_num, selb_copy_num = get_copy_numbers()
         sec_trna_count = get_sec_trna_count()
         
@@ -94,7 +93,20 @@ if __name__ == '__main__':
         df = pd.DataFrame({'gene_id':dataset.ids, 'model_output':predictions_raw, 'prediction':predictions_threshold})
         df['seq'] = dataset.seqs # Add sequences to the DataFrame. 
         df['genome_id'] = genome_id
-        df.set_index('gene_id').to_csv(args.output)
+        df['sec_trna_count'] = sec_trna_count
+        df['seld_copy_num'] = seld_copy_num
+        df['sela_copy_num'] = sela_copy_num
+        df['selb_copy_num'] = selb_copy_num
+        df.set_index('gene_id')
+
+        results.append(df)
+
+    results = pd.concat(dfs)
+    results.to_csv(args.output_path)
+    print(f'Results written to {args.output_path}')
+
+
+
 
 
 

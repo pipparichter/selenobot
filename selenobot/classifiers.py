@@ -16,11 +16,20 @@ from sklearn.metrics import balanced_accuracy_score
 from selenobot.utils import NumpyEncoder
 import warnings
 import copy
+import io
 import pickle
 from sklearn.preprocessing import StandardScaler
 
 # warnings.simplefilter('ignore')
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+class Unpickler(pickle.Unpickler):
+    '''https://github.com/pytorch/pytorch/issues/16797'''
+    def find_class(self, module, name):
+        if module == 'torch.storage' and name == '_load_from_bytes':
+            return lambda b: torch.load(io.BytesIO(b), weights_only=False, map_location='cpu')
+        else: return super().find_class(module, name)
+
 
 class WeightedBCELoss(torch.nn.Module):
     '''Defining a class for easily working with weighted Binary Cross Entropy loss.'''
@@ -219,7 +228,8 @@ class Classifier(torch.nn.Module):
     @classmethod
     def load(cls, path:str):
         with open(path, 'rb') as f:
-            obj = pickle.load(f)
+            # obj = pickle.load(f)
+            obj = Unpickler(f).load()
         return obj    
 
 

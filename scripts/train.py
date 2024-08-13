@@ -3,7 +3,7 @@ from selenobot.datasets import *
 import subprocess
 import argparse
 import logging
-from selenobot.utils import DATA_DIR, WEIGHTS_DIR, ROOT_DIR
+from selenobot.utils import DATA_DIR, MODELS_DIR, ROOT_DIR
 import os 
 
 # Set up a log file for the training process. Also write stuff to terminal. 
@@ -32,9 +32,9 @@ if __name__ == '__main__':
     model = Classifier(input_dim=train_dataset.shape()[-1], hidden_dim=args.hidden_dim, half_precision=args.half_precision)
 
     model.fit(train_dataset, val_dataset, batch_size=args.batch_size, epochs=args.epochs, lr=args.lr)
-    model.save(os.path.join(WEIGHTS_DIR, args.file_name))
+    model.save(os.path.join(MODELS_DIR, args.file_name))
 
-    print(f'Model training complete. Model data saved to {os.path.join(WEIGHTS_DIR, args.file_name)}')
+    print(f'Model training complete. Model data saved to {os.path.join(MODELS_DIR, args.file_name)}')
     print('Final training loss:', model.train_losses[-1])
     print('Best validation accuracy:', max(model.val_accs))
 

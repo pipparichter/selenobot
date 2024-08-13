@@ -17,7 +17,7 @@ import torch
 # ROOT_DIR = '/home/prichter/Documents/selenobot'
 ROOT_DIR = '/central/groups/fischergroup/prichter/selenobot'
 RESULTS_DIR = os.path.join(ROOT_DIR, 'results') # Get the path where results are stored.
-WEIGHTS_DIR = os.path.join(ROOT_DIR, 'weights')
+MODELS_DIR = os.path.join(ROOT_DIR, 'weights')
 DATA_DIR = os.path.join(ROOT_DIR, 'data') # Get the path where results are stored. 
 SCRIPTS_DIR = os.path.join(ROOT_DIR, 'scripts') # Get the path where results are stored.
 
