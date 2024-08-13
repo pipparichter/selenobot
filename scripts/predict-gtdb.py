@@ -4,6 +4,7 @@ from tqdm import tqdm
 from fabapi import * 
 from selenobot.files import EmbeddingsFile
 from selenobot.utils import MODELS_DIR, DATA_DIR
+from selenobot.classifiers import Classifier
 import argparse
 
 EMBEDDINGS_PATH = '/central/groups/fischergroup/prichter/gtdb/embeddings'
