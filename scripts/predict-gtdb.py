@@ -78,17 +78,17 @@ if __name__ == '__main__':
 
     results = []
 
-    embedding_file_names = os.listdir(EMBEDDINGS_PATH) # Filenames are the RS_ or GB_ prefix followed by the genome ID. 
-    genome_ids = [re.search('GC[AF]_\d{9}\.\d{1}', file_name).group(0) for file_name in embedding_file_names]
+    embeddings_file_names = os.listdir(EMBEDDINGS_PATH) # Filenames are the RS_ or GB_ prefix followed by the genome ID. 
+    genome_ids = [re.search('GC[AF]_\d{9}\.\d{1}', file_name).group(0) for file_name in embeddings_file_names]
 
-    for embedding_file_name, genome_id in tqdm(zip(embedding_file_names, genome_ids), desc='Processing genomes...'):
-        seld_copy_num, sela_copy_num, selb_copy_num = get_copy_numbers()
-        sec_trna_count = get_sec_trna_count()
+    for embeddings_file_name, genome_id in tqdm(zip(embeddings_file_names, genome_ids), desc='Processing genomes...'):
+        seld_copy_num, sela_copy_num, selb_copy_num = get_copy_numbers(genome_id)
+        sec_trna_count = get_sec_trna_count(genome_id)
         
-        embeddings_file = EmbeddingsFile(os.path.join(EMBEDDINGS_PATH, embedding_file_name))
-        stop_codons = [get_stop_codon(gene_id) for gene_id in embedding_file_name.keys()]
+        embeddings_file = EmbeddingsFile(os.path.join(EMBEDDINGS_PATH, embeddings_file_name))
+        stop_codons = [get_stop_codon(gene_id) for gene_id in embeddings_file.keys()]
             
-        dataset = Dataset(embedding_file_name.dataframe()) # Instantiate a Dataset object with the embeddings. 
+        dataset = Dataset(embeddings_file_name.dataframe()) # Instantiate a Dataset object with the embeddings. 
         predictions_raw = model.predict(dataset, threshold=None)
         predictions_threshold = [1 if p > threshold else 0 for p in predictions_raw]
 
