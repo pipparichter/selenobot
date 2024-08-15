@@ -98,7 +98,7 @@ if __name__ == '__main__':
             
         dataset = Dataset(embeddings_file.dataframe()) # Instantiate a Dataset object with the embeddings. 
         predictions_raw = model.predict(dataset, threshold=None)
-        predictions_threshold = [1 if p > threshold else 0 for p in predictions_raw]
+        predictions_threshold = [1 if p > 0.5 else 0 for p in predictions_raw]
 
         df = pd.DataFrame({'gene_id':dataset.ids, 'model_output':predictions_raw, 'prediction':predictions_threshold})
         df['seq'] = dataset.seqs # Add sequences to the DataFrame. 
