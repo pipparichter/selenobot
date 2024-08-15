@@ -109,7 +109,6 @@ if __name__ == '__main__':
         df['selb_copy_num'] = selb_copy_num
         df.set_index('gene_id')
         results.append(df)
-        break
 
     results = pd.concat(results)
     results = results.set_index('gene_id')
