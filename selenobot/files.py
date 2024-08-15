@@ -124,6 +124,22 @@ class FastaFile(File):
 
 class EmbeddingsFile(File):
     '''Handles reading files containing Prot-T5 embeddings, which are stored on HPC as HDF files'''
+    @staticmethod
+    def fix_gene_id(gene_id:str) -> str:
+        '''Josh replaced all the periods in the gene IDs with underscores, for some reason, so need to get them back into 
+        the normal form...'''
+        # The keys in the data are the entire Prodigal header string, so need to first get the gene ID out. 
+        gene_id = gene_id.split('#')[0].strip()
+        if gene_id.count('_') > 2:
+            # If there are more than two underscores, then there is an underscore in the main part of the gene ID. 
+            # In this case, we want to replace the second underscore. 
+            idx = gene_id.find('_') # Get the first occurrence of the underscore. 
+            first_part = gene_id[:idx + 1]
+            second_part = gene_id[idx + 1:].replace('_', '.', 1) # Replace the underscore in the second part of the ID. 
+            return first_part + second_part
+        else:
+            return gene_id.replace('_', '.', 1)
+
 
     def __init__(self, path:str):
         
@@ -137,7 +153,8 @@ class EmbeddingsFile(File):
         if self.file_type == '.h5':
             data = h5py.File(path, 'r')
             # NOTE: Gene IDs have trailing whitespace, so make sure to remove. 
-            self.gene_ids = [key.split('#')[0].replace('_', '.', 1).strip() for key in data.keys()] # The keys in the data are the entire Prodigal header string. 
+            # self.gene_ids = [key.split('#')[0].replace('_', '.', 1).strip() for key in data.keys()]
+            self.gene_ids = [EmbeddingsFile.fix_gene_id(key) for key in data.keys()]
             # Read in the embeddings from the H5 file, one at a time. Each embedding is stored under a separate key. 
             embeddings = []
             for key in data.keys():
