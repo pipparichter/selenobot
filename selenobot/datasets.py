@@ -69,8 +69,11 @@ class Dataset(torch.utils.data.Dataset):
 
     def _get_embeddings_from_dataframe(self, df:pd.DataFrame) -> torch.FloatTensor:
         '''Extract embeddings from an input DataFrame.'''
+
+        for col in df.columns:
+            print(type(col), col)
         # Detect which columns mark an embedding feature (integer column labels). 
-        cols = [col for col in df.columns if re.fullmatch(r'\d+', col) is not None]
+        cols = [col for col in df.columns if re.fullmatch(r'\d+', str(col)) is not None]
         embeddings = torch.from_numpy(df[cols].values).to(self.dtype)
         return embeddings
         
