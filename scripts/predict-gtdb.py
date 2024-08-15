@@ -6,6 +6,7 @@ from selenobot.files import EmbeddingsFile
 from selenobot.utils import MODELS_DIR, DATA_DIR
 from selenobot.classifiers import Classifier
 import argparse
+from selenobot.datasets import Dataset 
 
 EMBEDDINGS_PATH = '/central/groups/fischergroup/prichter/gtdb/embeddings'
 
@@ -95,7 +96,7 @@ if __name__ == '__main__':
         embeddings_file = EmbeddingsFile(os.path.join(EMBEDDINGS_PATH, embeddings_file_name))
         stop_codons = [get_stop_codon(gene_id) for gene_id in embeddings_file.keys()]
             
-        dataset = Dataset(embeddings_file_name.dataframe()) # Instantiate a Dataset object with the embeddings. 
+        dataset = Dataset(embeddings_file.dataframe()) # Instantiate a Dataset object with the embeddings. 
         predictions_raw = model.predict(dataset, threshold=None)
         predictions_threshold = [1 if p > threshold else 0 for p in predictions_raw]
 
@@ -109,6 +110,7 @@ if __name__ == '__main__':
         df.set_index('gene_id')
 
         results.append(df)
+        break
 
     results = pd.concat(dfs)
     results.to_csv(args.output_path)
