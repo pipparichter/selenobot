@@ -56,8 +56,8 @@ class ClstrFile(File):
         # Split on the newline. 
         for i, cluster in enumerate(self.clusters()):
             pattern = r'>gene_id=([\w\d_\[\]]+)' # Pattern to extract gene ID from line. 
-            gene_ids = [re.search(pattern, x).group(1) for x in cluster.split('\n') if x != '']
-            df['gene_id'] += ids
+            gene_ids = [re.search(pattern, x).group(1).strip() for x in cluster.split('\n') if x != '']
+            df['gene_id'] += gene_ids
             df['cluster'] += [i] * len(gene_ids)
 
         df = pd.DataFrame(df) # .set_index('id')
@@ -136,7 +136,8 @@ class EmbeddingsFile(File):
 
         if self.file_type == '.h5':
             data = h5py.File(path, 'r')
-            self.gene_ids = [key.split('#')[0].replace('_', '.', 1) for key in data.keys()] # The keys in the data are the entire Prodigal header string. 
+            # NOTE: Gene IDs have trailing whitespace, so make sure to remove. 
+            self.gene_ids = [key.split('#')[0].replace('_', '.', 1).strip() for key in data.keys()] # The keys in the data are the entire Prodigal header string. 
             # Read in the embeddings from the H5 file, one at a time. Each embedding is stored under a separate key. 
             embeddings = []
             for key in data.keys():

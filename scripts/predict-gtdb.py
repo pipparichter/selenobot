@@ -55,7 +55,7 @@ def get_copy_numbers(genome_id:str):
 def get_sec_trna_count(genome_id:str):
     '''Retrieve the number of selenocysteine tRNAs in the genome.'''
     query = GetQuery('metadata')
-    query.equal_to('genome_id', genome_id) 
+    query.equal_to('genome_id', genome_id.strip()) 
 
     df = query.submit()
     return df.sec_trna_count.values[0]
