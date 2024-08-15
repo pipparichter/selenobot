@@ -100,7 +100,7 @@ if __name__ == '__main__':
         predictions_raw = model.predict(dataset, threshold=None)
         predictions_threshold = [1 if p > 0.5 else 0 for p in predictions_raw]
 
-        df = pd.DataFrame({'gene_id':dataset.ids, 'model_output':predictions_raw, 'prediction':predictions_threshold})
+        df = pd.DataFrame({'gene_id':dataset.gene_ids, 'model_output':predictions_raw, 'prediction':predictions_threshold})
         df['seq'] = dataset.seqs # Add sequences to the DataFrame. 
         df['genome_id'] = genome_id
         df['sec_trna_count'] = sec_trna_count
