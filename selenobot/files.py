@@ -143,7 +143,7 @@ class EmbeddingsFile(File):
             for key in data.keys():
                 emb = np.empty(data[key].shape)
                 data[key].read_direct(emb)
-                embeddings.append(emb)
+                embeddings.append(np.expand_dims(emb)) # Expand dimensions so concatenation works correctly. 
             self.embeddings = np.concatenate(embeddings, axis=0)
             data.close()
 
