@@ -108,7 +108,7 @@ if __name__ == '__main__':
         df['sela_copy_num'] = sela_copy_num
         df['selb_copy_num'] = selb_copy_num
         df.set_index('gene_id')
-
+        print(df)
         results.append(df)
         break
 
