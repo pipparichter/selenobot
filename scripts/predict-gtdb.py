@@ -89,7 +89,7 @@ if __name__ == '__main__':
     embeddings_file_names = os.listdir(EMBEDDINGS_PATH) # Filenames are the RS_ or GB_ prefix followed by the genome ID. 
     genome_ids = [re.search('GC[AF]_\d{9}\.\d{1}', file_name).group(0) for file_name in embeddings_file_names]
 
-    for embeddings_file_name, genome_id in tqdm(zip(embeddings_file_names, genome_ids), total=len(embeddings_file_name), desc='Processing genomes...'):
+    for embeddings_file_name, genome_id in tqdm(zip(embeddings_file_names, genome_ids), total=len(embeddings_file_names), desc='Processing genomes...'):
         seld_copy_num, sela_copy_num, selb_copy_num = get_copy_numbers(genome_id)
         sec_trna_count = get_sec_trna_count(genome_id)
         
