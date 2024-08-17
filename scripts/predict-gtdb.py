@@ -51,10 +51,9 @@ def get_copy_numbers():
     pbar = tqdm(total=total, desc='get_copy_numbers: Retrieving selenoprotein gene copy numbers... (page 0)')
     while page_df is not None:
         df.append(page_df)
-        page_df = query.next() 
-
         pbar.update(len(page_df))
         pbar.set_description(f'get_copy_numbers: Retrieving selenoprotein gene copy numbers... (page {len(df)})')
+        page_df = query.next() 
     df = pd.concat(df)
 
     copy_nums_df = []
