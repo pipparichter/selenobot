@@ -117,7 +117,6 @@ if __name__ == '__main__':
     parser.add_argument('--model', default='model_epochs_100_lr_e8.pkl', type=str)
     parser.add_argument('--output-path', default=os.path.join(RESULTS_DIR, 'gtdb_results.csv'), type=str)
 
-    get_copy_numbers()
     args = parser.parse_args()
 
     if not os.path.exists(os.path.join(RESULTS_DIR, 'gtdb_predictions.csv')):
