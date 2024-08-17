@@ -96,7 +96,6 @@ def get_predictions(model:str):
     for embeddings_file_name, genome_id in tqdm(zip(embeddings_file_names, genome_ids), total=len(embeddings_file_names), desc='get_predictions: Processing genomes...'):
         
         embeddings_file = EmbeddingsFile(os.path.join(EMBEDDINGS_DIR, embeddings_file_name))
-        stop_codons = [get_stop_codon(gene_id) for gene_id in embeddings_file.keys()]
             
         dataset = Dataset(embeddings_file.dataframe()) # Instantiate a Dataset object with the embeddings. 
         predictions_raw = model.predict(dataset, threshold=None)
