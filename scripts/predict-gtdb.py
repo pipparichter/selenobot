@@ -68,7 +68,7 @@ def get_copy_numbers():
 
     copy_nums_df = pd.DataFrame(copy_nums_df).set_index('genome_id')
     copy_nums_df.to_csv(os.path.join(RESULTS_DIR, 'gtdb_copy_nums.csv'))
-    print(f'get_copy_numbers: Copy number information written to {os.path.join(RESULTS_DIR, 'gtdb_copy_nums.csv')}')
+    print(f"get_copy_numbers: Copy number information written to {os.path.join(RESULTS_DIR, 'gtdb_copy_nums.csv')}")
 
 
 def get_stop_codons(gene_ids:List[str], batch_size=50):
@@ -121,7 +121,7 @@ if __name__ == '__main__':
 
     get_copy_numbers()
     args = parser.parse_args()
-    
+
     if not os.path.exists(os.path.join(RESULTS_DIR, 'gtdb_predictions.csv')):
         get_predictions(args.model)
     predictions_df = pd.read_csv(os.path.join(RESULTS_DIR, 'gtdb_predictions.csv'))
