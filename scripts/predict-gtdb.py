@@ -6,6 +6,8 @@ from selenobot.files import EmbeddingsFile
 from selenobot.utils import MODELS_DIR, RESULTS_DIR
 from selenobot.classifiers import Classifier
 import argparse
+import numpy as np 
+import pandas as pd
 from selenobot.datasets import Dataset 
 from typing import List 
 
