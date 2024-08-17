@@ -81,7 +81,7 @@ def get_stop_codons(gene_ids:List[str], batch_size=50):
     
     stop_codons_df = pd.concat(stop_codons_df).set_index('gene_id')
     stop_codons_df.to_csv(os.path.join(RESULTS_DIR, 'gtdb_stop_codons.csv'))
-    print(f'get_stop_codons: Copy number information written to {os.path.join(RESULTS_DIR, 'gtdb_stop_codons.csv')}')
+    print(f"get_stop_codons: Copy number information written to {os.path.join(RESULTS_DIR, 'gtdb_stop_codons.csv')}")
 
 
 def get_predictions(model:str):
@@ -111,7 +111,7 @@ def get_predictions(model:str):
 
     predictions_df = pd.concat(predictions_df).set_index('gene_id')
     predictions_df.to_csv(os.path.join(RESULTS_DIR, 'gtdb_predictions.csv'))
-    print(f'get_predictions: Predicted selenoproteins written to {os.path.join(RESULTS_DIR, 'gtdb_predictions.csv')}')
+    print(f"get_predictions: Predicted selenoproteins written to {os.path.join(RESULTS_DIR, 'gtdb_predictions.csv')}")
 
 
 if __name__ == '__main__':
