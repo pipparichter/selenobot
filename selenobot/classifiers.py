@@ -134,7 +134,7 @@ class Classifier(torch.nn.Module):
     def predict(self, dataset, threshold:float=0.5) -> np.ndarray:
         '''Evaluate the Classifier on the data in the input Dataset.'''   
         self.eval() # Put the model in evaluation mode. This changes the forward behavior of the model (e.g. disables dropout).
-        dataset.apply_scaler(self.scaler)
+        dataset.apply_scaler(self.scaler, device=DEVICE)
         with torch.no_grad(): # Turn off gradient computation, which reduces memory usage. 
             outputs = self(dataset.embeddings) # Run a forward pass of the model. Batch to limit memory usage.
             # Apply sigmoid activation, which is usually applied as a part of the loss function. 
@@ -167,7 +167,7 @@ class Classifier(torch.nn.Module):
         
         self.scaler.fit(train_dataset.embeddings) # Fit the scaler on the training dataset. 
         self.loss_func.fit(train_dataset) # Set the weights of the loss function. 
-        train_dataset.apply_scaler(self.scaler)
+        train_dataset.apply_scaler(self.scaler, device=DEVICE)
 
         train_dataset.to_device(DEVICE)
         val_dataset.to_device(DEVICE)

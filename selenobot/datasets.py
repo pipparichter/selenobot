@@ -71,6 +71,7 @@ class Dataset(torch.utils.data.Dataset):
         if not self.scaler_applied:
             self.scaler_applied = True 
             embeddings = scaler.transform(self.embeddings.cpu().numpy())
+            # If device is not CPU, make sure to put the dataset back on to the device. 
             self.embeddings = torch.Tensor(embeddings).to(self.dtype).to(device)
 
     def to_device(self, device):
