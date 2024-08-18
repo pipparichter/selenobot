@@ -28,7 +28,7 @@ class Dataset(torch.utils.data.Dataset):
     '''A map-style dataset which  Dataset objects which provide extra functionality for producing sequence embeddings
     and accessing information about selenoprotein content.'''
 
-    def __init__(self, df:pd.DataFrame, embedder=None, n_features:int=None, half_precision:bool=False):
+    def __init__(self, df:pd.DataFrame, embedder=None, n_features:int=None, half_precision:bool=False, device:str='cpu'):
         '''Initializes a Dataset from a pandas DataFrame containing embeddings and labels.
         
         :param df: A pandas DataFrame containing the data to store in the Dataset. 
@@ -51,8 +51,8 @@ class Dataset(torch.utils.data.Dataset):
         self.latent_dim = self.embeddings.shape[-1]
 
         self.scaler_applied = False
-
         self.length = len(df)
+        self.to_device(device)
 
 
     def _get_embeddings_from_dataframe(self, df:pd.DataFrame) -> torch.FloatTensor:
@@ -66,15 +66,16 @@ class Dataset(torch.utils.data.Dataset):
     def __len__(self) -> int:
         return self.length
 
-    def apply_scaler(self, scaler):
+    def apply_scaler(self, scaler, device:str='cpu'):
         # assert not self.scaler_applied, 'Dataset.standardize: Dataset has already been standardized.'
         if not self.scaler_applied:
             self.scaler_applied = True 
-            embeddings = scaler.transform(self.embeddings)
-            self.embeddings = torch.Tensor(embeddings).to(self.dtype)
+            embeddings = scaler.transform(self.embeddings.cpu().numpy())
+            self.embeddings = torch.Tensor(embeddings).to(self.dtype).to(device)
 
     def to_device(self, device):
         '''Put the data stored in the dataset on the device specified on input.'''
+        self.device = device
         self.embeddings = self.embeddings.to(device)
         if self.labels is not None:
             self.labels = self.labels.to(device)
