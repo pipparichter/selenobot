@@ -121,8 +121,9 @@ def get_predictions(model:str, embeddings_dir:str=EMBEDDINGS_DIR, models_dir:str
         df['seq'] = dataset.seqs # Add sequences to the DataFrame. 
         df['genome_id'] = genome_id
         df = df[df.prediction == 1] # Filter for the predicted selenoproteins. 
-        if len(df) == 0:
-            print(f'get_predictions: No predicted selenoproteins in genome {genome_id}.')
+
+        print(f'get_predictions: {len(df)} predicted selenoproteins in genome {genome_id}.')
+
 
         predictions_df.append(df)
 
