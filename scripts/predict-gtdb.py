@@ -72,7 +72,20 @@ def get_copy_numbers():
     print(f"get_copy_numbers: Copy number information written to {os.path.join(RESULTS_DIR, 'gtdb_copy_nums.csv')}")
 
 
-def get_stop_codons(gene_ids:List[str], batch_size=50):
+def get_sec_trna_counts(genome_ids:List[str], batch_size=50, output_path:str=os.path.join(RESULTS_DIR, 'gtdb_sec_trna_counts.csv')):
+    '''Retrieve the count of selenocysteine tRNAs in the genome.'''
+    sec_trna_counts_df = []
+    for batch in [gene_ids[i * batch_size:(i + 1) * batch_size] for i in range(len(genome_ids) // batch_size + 1)]:
+        query = Query('metadata')
+        query.equal_to('genome_id', batch)
+        sec_trna_counts_df.append(query.get()[['genome_id', 'sec_trna_count']])
+    
+    sec_trna_counts_df = pd.concat(sec_trna_counts_df).set_index('gene_id')
+    sec_trna_counts_df.to_csv(output_path)
+    print(f"get_sec_trna_counts: Sec tRNA count information written to {output_path}")
+
+
+def get_stop_codons(gene_ids:List[str], batch_size=50, output_path:str=os.path.join(RESULTS_DIR, 'gtdb_stop_codons.csv')):
     '''Retrieve the gene's stop codon.'''
     stop_codons_df = []
     for batch in [gene_ids[i * batch_size:(i + 1) * batch_size] for i in range(len(gene_ids) // batch_size + 1)]:
@@ -81,23 +94,24 @@ def get_stop_codons(gene_ids:List[str], batch_size=50):
         stop_codons_df.append(query.get()[['gene_id', 'stop_codon']])
     
     stop_codons_df = pd.concat(stop_codons_df).set_index('gene_id')
-    stop_codons_df.to_csv(os.path.join(RESULTS_DIR, 'gtdb_stop_codons.csv'))
-    print(f"get_stop_codons: Copy number information written to {os.path.join(RESULTS_DIR, 'gtdb_stop_codons.csv')}")
+    stop_codons_df.to_csv(output_path)
+    print(f"get_stop_codons: Stop codon information written to {output_path}")
 
 
-def get_predictions(model:str):
+def get_predictions(model:str, embeddings_dir:str=EMBEDDINGS_DIR, models_dir:str=MODELS_DIR, output_path:str=os.path.join(RESULTS_DIR, 'gtdb_predictions.csv')):
+    '''Run the trained model on all embedded genomes in the embeddings directory.'''
 
-    model = Classifier.load(os.path.join(MODELS_DIR, model)) # Load the pre-trained model. 
+    model = Classifier.load(os.path.join(models_dir, model)) # Load the pre-trained model. 
     print(f'get_predictions: Loaded model {args.model}.')
 
-    embeddings_file_names = os.listdir(EMBEDDINGS_DIR) # Filenames are the RS_ or GB_ prefix followed by the genome ID. 
+    embeddings_file_names = os.listdir(embeddings_dir) # Filenames are the RS_ or GB_ prefix followed by the genome ID. 
     genome_ids = [re.search(r'GC[AF]_\d{9}\.\d{1}', file_name).group(0) for file_name in embeddings_file_names]
 
     predictions_df = []
 
     for embeddings_file_name, genome_id in tqdm(zip(embeddings_file_names, genome_ids), total=len(embeddings_file_names), desc='get_predictions: Processing genomes...'):
         
-        embeddings_file = EmbeddingsFile(os.path.join(EMBEDDINGS_DIR, embeddings_file_name))
+        embeddings_file = EmbeddingsFile(os.path.join(embeddings_dir, embeddings_file_name))
             
         dataset = Dataset(embeddings_file.dataframe()) # Instantiate a Dataset object with the embeddings. 
         predictions_raw = model.predict(dataset, threshold=None)
@@ -107,11 +121,14 @@ def get_predictions(model:str):
         df['seq'] = dataset.seqs # Add sequences to the DataFrame. 
         df['genome_id'] = genome_id
         df = df[df.prediction == 1] # Filter for the predicted selenoproteins. 
+        if len(df) == 0:
+            print(f'get_predictions: No predicted selenoproteins in genome {genome_id}.')
+
         predictions_df.append(df)
 
     predictions_df = pd.concat(predictions_df).set_index('gene_id')
-    predictions_df.to_csv(os.path.join(RESULTS_DIR, 'gtdb_predictions.csv'))
-    print(f"get_predictions: Predicted selenoproteins written to {os.path.join(RESULTS_DIR, 'gtdb_predictions.csv')}")
+    predictions_df.to_csv(output_path)
+    print(f"get_predictions: Predicted selenoproteins written to {output_path}")
 
 
 if __name__ == '__main__':
@@ -125,12 +142,12 @@ if __name__ == '__main__':
         get_predictions(args.model)
     predictions_df = pd.read_csv(os.path.join(RESULTS_DIR, 'gtdb_predictions.csv'))
 
-    if not os.path.exists(os.path.join(RESULTS_DIR, 'gtdb_copy_nums.csv')):
+    if not os.path.exists(os.path.join(RESULTS_DIR, 'gtdb_stop_codons.csv')):
         get_stop_codons(predictions.gene_id.values)   
     if not os.path.exists(os.path.join(RESULTS_DIR, 'gtdb_copy_nums.csv')):
         get_copy_numbers()
     if not os.path.exists(os.path.join(RESULTS_DIR, 'gtdb_sec_trna_counts.csv')):
-        get_sec_trna_counts(predictions.genome_id.values)    
+        get_sec_trna_counts(predictions.genome_id.unique())    
 
 
     copy_nums_df = pd.read_csv(os.path.join(RESULTS_DIR, 'gtdb_copy_nums.csv')) # , index_col=0)
