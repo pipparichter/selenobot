@@ -4,7 +4,9 @@ import subprocess
 import argparse
 import logging
 from selenobot.utils import DATA_DIR, MODELS_DIR, ROOT_DIR
-import os 
+import os
+
+# sbatch --time 10:00:00 --mem 100GB --gres gpu:1 --partition gpu --wrap "python train.py"
 
 # Set up a log file for the training process. Also write stuff to terminal. 
 logging.basicConfig(filename=os.path.join(ROOT_DIR, 'train.log'), level=logging.INFO, force=True, format='%(message)s')
