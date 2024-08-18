@@ -123,9 +123,11 @@ def get_predictions(model:str, embeddings_dir:str=EMBEDDINGS_DIR, models_dir:str
         df = df[df.prediction == 1] # Filter for the predicted selenoproteins. 
 
         print(f'get_predictions: {len(df)} predicted selenoproteins in genome {genome_id}.')
-
+        break
 
         predictions_df.append(df)
+
+    print(df)
 
     predictions_df = pd.concat(predictions_df).set_index('gene_id')
     predictions_df.to_csv(output_path)
