@@ -77,7 +77,6 @@ class Classifier(torch.nn.Module):
         input_dim:int=1024,
         # bce_loss_weight:float=1,
         random_seed:int=42,
-        standardize:bool=True,
         half_precision:bool=True):
         '''
         Initializes a two-layer linear classification head. 
@@ -85,7 +84,6 @@ class Classifier(torch.nn.Module):
         :param bce_loss_weight: The weight applied to false negatives in the BCE loss function. 
         :param hidden_dim: The number of nodes in the second linear layer of the two-layer classifier.
         :param input_dim: The dimensionality of the input embedding. 
-        :param standardize: Whether or not to standardize the data before training the model. 
         '''
         # Initialize the torch Module
         super().__init__()
@@ -97,7 +95,6 @@ class Classifier(torch.nn.Module):
         self.input_dim = input_dim 
         self.hidden_dim = hidden_dim 
         # self.bce_loss_weight = bce_loss_weight 
-        self.standardize = standardize 
 
         self.classifier = torch.nn.Sequential(
             torch.nn.Linear(input_dim, hidden_dim, dtype=self.dtype),
@@ -137,6 +134,7 @@ class Classifier(torch.nn.Module):
     def predict(self, dataset, threshold:float=0.5) -> np.ndarray:
         '''Evaluate the Classifier on the data in the input Dataset.'''   
         self.eval() # Put the model in evaluation mode. This changes the forward behavior of the model (e.g. disables dropout).
+        dataset.apply_scaler(self.scaler)
         with torch.no_grad(): # Turn off gradient computation, which reduces memory usage. 
             outputs = self(dataset.embeddings) # Run a forward pass of the model. Batch to limit memory usage.
             # Apply sigmoid activation, which is usually applied as a part of the loss function. 
@@ -169,9 +167,7 @@ class Classifier(torch.nn.Module):
         
         self.scaler.fit(train_dataset.embeddings) # Fit the scaler on the training dataset. 
         self.loss_func.fit(train_dataset) # Set the weights of the loss function. 
-
-        train_dataset.standardize(self.scaler)
-        val_dataset.standardize(self.scaler)
+        train_dataset.apply_scaler(self.scaler)
 
         train_dataset.to_device(DEVICE)
         val_dataset.to_device(DEVICE)
