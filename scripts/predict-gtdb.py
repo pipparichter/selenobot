@@ -112,13 +112,13 @@ def get_predictions(model:str, embeddings_dir:str=EMBEDDINGS_DIR, models_dir:str
     for embeddings_file_name, genome_id in tqdm(zip(embeddings_file_names, genome_ids), total=len(embeddings_file_names), desc='get_predictions: Processing genomes...'):
         
         embeddings_file = EmbeddingsFile(os.path.join(embeddings_dir, embeddings_file_name))
-        print(embeddings_file.dataframe())
             
-        dataset = Dataset(embeddings_file.dataframe()) # Instantiate a Dataset object with the embeddings. 
+        dataset = Dataset(embeddings_file.dataframe().set_index('gene_id')) # Instantiate a Dataset object with the embeddings. 
         predictions_raw = model.predict(dataset, threshold=None)
         predictions_threshold = np.array([1 if p > 0.5 else 0 for p in predictions_raw])
 
         df = pd.DataFrame({'gene_id':dataset.gene_ids, 'model_output':predictions_raw, 'prediction':predictions_threshold})
+        print(df)
         df['genome_id'] = genome_id
         df = df[df.prediction == 1] # Filter for the predicted selenoproteins. 
         # print(f'get_predictions: {len(df)} predicted selenoproteins in genome {genome_id}.')

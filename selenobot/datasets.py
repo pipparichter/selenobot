@@ -47,6 +47,7 @@ class Dataset(torch.utils.data.Dataset):
         # self.embeddings = self._select_features(embeddings)
         
         self.type = 'plm' if embedder is None else embedder.type # Type of data contained by the Dataset.
+        assert df.index.name == 'gene_id', 'Dataset.__init__: Expecting the DataFrame index to consist of gene ID.'
         self.gene_ids = df.index.values
         self.latent_dim = self.embeddings.shape[-1]
 
