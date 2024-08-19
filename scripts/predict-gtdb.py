@@ -112,9 +112,9 @@ def get_predictions(model:str, embeddings_dir:str=EMBEDDINGS_DIR, models_dir:str
     for embeddings_file_name, genome_id in tqdm(zip(embeddings_file_names, genome_ids), total=len(embeddings_file_names), desc='get_predictions: Processing genomes...'):
         
         embeddings_file = EmbeddingsFile(os.path.join(embeddings_dir, embeddings_file_name))
+        print(embeddings_file.dataframe())
             
         dataset = Dataset(embeddings_file.dataframe()) # Instantiate a Dataset object with the embeddings. 
-        print(dataset.gene_ids)
         predictions_raw = model.predict(dataset, threshold=None)
         predictions_threshold = np.array([1 if p > 0.5 else 0 for p in predictions_raw])
 
