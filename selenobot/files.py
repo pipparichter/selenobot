@@ -154,10 +154,7 @@ class EmbeddingsFile(File):
             data = h5py.File(path, 'r')
             # NOTE: Gene IDs have trailing whitespace, so make sure to remove. 
             # self.gene_ids = [key.split('#')[0].replace('_', '.', 1).strip() for key in data.keys()]
-            print(list(data.keys()))
             self.gene_ids = [EmbeddingsFile.fix_gene_id(key) for key in data.keys()]
-            print(self.gene_ids)
-            exit()
             # Read in the embeddings from the H5 file, one at a time. Each embedding is stored under a separate key. 
             embeddings = []
             for key in data.keys():
