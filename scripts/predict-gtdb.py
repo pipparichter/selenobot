@@ -91,7 +91,7 @@ def get_stop_codons(gene_ids:List[str], batch_size=50, output_path:str=os.path.j
     for batch in [gene_ids[i * batch_size:(i + 1) * batch_size] for i in range(len(gene_ids) // batch_size + 1)]:
         query = Query('proteins')
         query.equal_to('gene_id', batch)
-        stop_codons_df.append(query.get()[['gene_id', 'stop_codon']])
+        stop_codons_df.append(query.get(print_url=True)[['gene_id', 'stop_codon']])
     
     stop_codons_df = pd.concat(stop_codons_df).set_index('gene_id')
     stop_codons_df.to_csv(output_path)
@@ -136,12 +136,12 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    if not os.path.exists(os.path.join(RESULTS_DIR, 'gtdb_predictions.csv')):
-        get_predictions(args.model)
+    # if not os.path.exists(os.path.join(RESULTS_DIR, 'gtdb_predictions.csv')):
+    get_predictions(args.model)
     predictions_df = pd.read_csv(os.path.join(RESULTS_DIR, 'gtdb_predictions.csv'))
 
     if not os.path.exists(os.path.join(RESULTS_DIR, 'gtdb_stop_codons.csv')):
-        get_stop_codons(predictions.gene_id.values)   
+        get_stop_codons(predictions_df.gene_id.values)   
     if not os.path.exists(os.path.join(RESULTS_DIR, 'gtdb_copy_nums.csv')):
         get_copy_numbers()
     if not os.path.exists(os.path.join(RESULTS_DIR, 'gtdb_sec_trna_counts.csv')):

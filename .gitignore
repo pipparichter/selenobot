@@ -6,3 +6,4 @@ data.zip
 **/__pycache__
 **/selenobot.egg-info
 selenobot-local.cfg
+results/*
