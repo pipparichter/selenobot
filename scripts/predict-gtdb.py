@@ -118,8 +118,6 @@ def get_predictions(model:str, embeddings_dir:str=EMBEDDINGS_DIR, models_dir:str
         predictions_threshold = np.array([1 if p > 0.5 else 0 for p in predictions_raw])
 
         df = pd.DataFrame({'gene_id':dataset.gene_ids, 'model_output':predictions_raw, 'prediction':predictions_threshold})
-        print(df)
-        df['genome_id'] = genome_id
         df = df[df.prediction == 1] # Filter for the predicted selenoproteins. 
         # print(f'get_predictions: {len(df)} predicted selenoproteins in genome {genome_id}.')
 
