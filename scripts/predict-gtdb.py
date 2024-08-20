@@ -3,7 +3,7 @@ import re
 from tqdm import tqdm 
 from fabapi import * 
 from selenobot.files import EmbeddingsFile
-from selenobot.utils import MODELS_DIR, RESULTS_DIR
+from selenobot.utils import MODELS_DIR
 from selenobot.classifiers import Classifier
 import argparse
 import numpy as np 
@@ -68,11 +68,11 @@ def get_copy_numbers():
         copy_nums_df.append(row)
 
     copy_nums_df = pd.DataFrame(copy_nums_df).set_index('genome_id')
-    copy_nums_df.to_csv(os.path.join(RESULTS_DIR, 'gtdb_copy_nums.csv'))
-    print(f"get_copy_numbers: Copy number information written to {os.path.join(RESULTS_DIR, 'gtdb_copy_nums.csv')}")
+    copy_nums_df.to_csv(os.path.join(args.results_dir, 'gtdb_copy_nums.csv'))
+    print(f"get_copy_numbers: Copy number information written to {os.path.join(args.results_dir, 'gtdb_copy_nums.csv')}")
 
 
-def get_sec_trna_counts(genome_ids:List[str], batch_size=50, output_path:str=os.path.join(RESULTS_DIR, 'gtdb_sec_trna_counts.csv')):
+def get_sec_trna_counts(genome_ids:List[str], batch_size=50, output_path:str=None):
     '''Retrieve the count of selenocysteine tRNAs in the genome.'''
     sec_trna_counts_df = []
     for batch in [gene_ids[i * batch_size:(i + 1) * batch_size] for i in range(len(genome_ids) // batch_size + 1)]:
@@ -85,20 +85,21 @@ def get_sec_trna_counts(genome_ids:List[str], batch_size=50, output_path:str=os.
     print(f"get_sec_trna_counts: Sec tRNA count information written to {output_path}")
 
 
-def get_stop_codons(gene_ids:List[str], batch_size=50, output_path:str=os.path.join(RESULTS_DIR, 'gtdb_stop_codons.csv')):
+def get_stop_codons(gene_ids:List[str], batch_size=100, output_path:str=None):
     '''Retrieve the gene's stop codon.'''
+    # NOTE: As long as the batch size is less than 1000 (which I think is the default page size), should not need to paginate at all. 
     stop_codons_df = []
-    for batch in [gene_ids[i * batch_size:(i + 1) * batch_size] for i in range(len(gene_ids) // batch_size + 1)]:
+    for batch in tqdm([gene_ids[i * batch_size:(i + 1) * batch_size] for i in range(len(gene_ids) // batch_size + 1)], desc='get_stop_codons'):
         query = Query('proteins')
         query.equal_to('gene_id', batch)
-        stop_codons_df.append(query.get(print_url=True)[['gene_id', 'stop_codon']])
+        stop_codons_df.append(query.get()[['gene_id', 'genome_id', 'stop_codon']])
     
     stop_codons_df = pd.concat(stop_codons_df).set_index('gene_id')
     stop_codons_df.to_csv(output_path)
     print(f"get_stop_codons: Stop codon information written to {output_path}")
 
 
-def get_predictions(model:str, embeddings_dir:str=EMBEDDINGS_DIR, models_dir:str=MODELS_DIR, output_path:str=os.path.join(RESULTS_DIR, 'gtdb_predictions.csv')):
+def get_predictions(model:str, embeddings_dir:str=EMBEDDINGS_DIR, models_dir:str=MODELS_DIR, output_path:str=None):
     '''Run the trained model on all embedded genomes in the embeddings directory.'''
 
     model = Classifier.load(os.path.join(models_dir, model)) # Load the pre-trained model. 
@@ -131,33 +132,39 @@ def get_predictions(model:str, embeddings_dir:str=EMBEDDINGS_DIR, models_dir:str
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', default='model_epochs_100_lr_e8.pkl', type=str)
-    parser.add_argument('--output-path', default=os.path.join(RESULTS_DIR, 'gtdb_results.csv'), type=str)
+    # parser.add_argument('--output-path', default=os.path.join(args.results_dir, 'gtdb_results.csv'), type=str)
+    parser.add_argument('--results-dir', default='/home/prichter/Documents/selenobot/results')
 
     args = parser.parse_args()
 
-    # if not os.path.exists(os.path.join(RESULTS_DIR, 'gtdb_predictions.csv')):
-    get_predictions(args.model)
-    predictions_df = pd.read_csv(os.path.join(RESULTS_DIR, 'gtdb_predictions.csv'))
+    if not os.path.exists(os.path.join(args.results_dir, 'gtdb_predictions.csv')):
+        get_predictions(args.model, output_path=os.path.join(args.results_dir, 'gtdb_predictions.csv'))
+    predictions_df = pd.read_csv(os.path.join(args.results_dir, 'gtdb_predictions.csv'))
 
-    if not os.path.exists(os.path.join(RESULTS_DIR, 'gtdb_stop_codons.csv')):
-        get_stop_codons(predictions_df.gene_id.values)   
-    if not os.path.exists(os.path.join(RESULTS_DIR, 'gtdb_copy_nums.csv')):
-        get_copy_numbers()
-    if not os.path.exists(os.path.join(RESULTS_DIR, 'gtdb_sec_trna_counts.csv')):
-        get_sec_trna_counts(predictions.genome_id.unique())    
+    if not os.path.exists(os.path.join(args.results_dir, 'gtdb_stop_codons.csv')):
+        get_stop_codons(predictions_df.gene_id.values, output_path=os.path.join(args.results_dir, 'gtdb_stop_codons.csv'))   
+    stop_codons_df = pd.read_csv(os.path.join(args.results_dir, 'gtdb_stop_codons.csv'))
+
+    if not os.path.exists(os.path.join(args.results_dir, 'gtdb_copy_nums.csv')):
+        get_copy_numbers(output_path=os.path.join(args.results_dir, 'gtdb_copy_nums.csv'))
+    copy_nums_df = pd.read_csv(os.path.join(args.results_dir, 'gtdb_copy_nums.csv')) # , index_col=0)
+
+    if not os.path.exists(os.path.join(args.results_dir, 'gtdb_sec_trna_counts.csv')):
+        # Use genome IDs from the stop_codons_df, as genome IDs are not included in the predictions_df.   
+        get_sec_trna_counts(stop_codons_df.genome_id.unique(), output_path=os.path.join(args.results_dir, 'gtdb_sec_trna_counts.csv')) 
+    sec_trna_counts_df = pd.read_csv(os.path.join(args.results_dir, 'gtdb_sec_trna_counts.csv')) # , index_col=0)
 
 
-    copy_nums_df = pd.read_csv(os.path.join(RESULTS_DIR, 'gtdb_copy_nums.csv')) # , index_col=0)
-    stop_codons_df = pd.read_csv(os.path.join(RESULTS_DIR, 'gtdb_stop_codons.csv')) # , index_col=0)
-    sec_trna_counts_df = pd.read_csv(os.path.join(RESULTS_DIR, 'gtdb_sec_trna_counts.csv')) # , index_col=0)
+    stop_codons_df = pd.read_csv(os.path.join(args.results_dir, 'gtdb_stop_codons.csv')) # , index_col=0)
 
+    results_df = predictions_df.merge(stop_codons_df, how='left', left_on='gene_id', right_on='gene_id')
     results_df = predictions_df.merge(copy_nums_df, how='left', left_on='genome_id', right_on='genome_id')
-    results_df = results_df.merge(stop_codons_df, how='left', left_on='gene_id', right_on='gene_id')
     results_df = results_df.merge(sec_trna_counts_df, how='left', left_on='genome_id', right_on='genome_id')
 
+    output_path = os.path.join(args.results_dir, 'gtdb_results.csv')
     results_df = results_df.set_index('gene_id')
-    results_df.to_csv(args.output_path)
-    print(f'Results written to {args.output_path}')
+    results_df.to_csv(output_path)
+    print(f'Results written to {output_path}')
 
 
 
