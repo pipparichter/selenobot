@@ -75,12 +75,12 @@ def get_copy_numbers():
 def get_sec_trna_counts(genome_ids:List[str], batch_size=50, output_path:str=None):
     '''Retrieve the count of selenocysteine tRNAs in the genome.'''
     sec_trna_counts_df = []
-    for batch in [gene_ids[i * batch_size:(i + 1) * batch_size] for i in range(len(genome_ids) // batch_size + 1)]:
+    for batch in tqdm([genome_ids[i * batch_size:(i + 1) * batch_size] for i in range(len(genome_ids) // batch_size + 1)], desc='get_sec_trna_counts'):
         query = Query('metadata')
         query.equal_to('genome_id', batch)
         sec_trna_counts_df.append(query.get()[['genome_id', 'sec_trna_count']])
     
-    sec_trna_counts_df = pd.concat(sec_trna_counts_df).set_index('gene_id')
+    sec_trna_counts_df = pd.concat(sec_trna_counts_df).set_index('genome_id')
     sec_trna_counts_df.to_csv(output_path)
     print(f"get_sec_trna_counts: Sec tRNA count information written to {output_path}")
 
@@ -92,7 +92,7 @@ def get_stop_codons(gene_ids:List[str], batch_size=100, output_path:str=None):
     for batch in tqdm([gene_ids[i * batch_size:(i + 1) * batch_size] for i in range(len(gene_ids) // batch_size + 1)], desc='get_stop_codons'):
         query = Query('proteins')
         query.equal_to('gene_id', batch)
-        stop_codons_df.append(query.get()[['gene_id', 'genome_id', 'stop_codon']])
+        stop_codons_df.append(query.get()[['gene_id', 'genome_id', 'stop_codon', 'partial']])
     
     stop_codons_df = pd.concat(stop_codons_df).set_index('gene_id')
     stop_codons_df.to_csv(output_path)
@@ -136,13 +136,14 @@ if __name__ == '__main__':
     parser.add_argument('--results-dir', default='/home/prichter/Documents/selenobot/results')
 
     args = parser.parse_args()
-
+    
     if not os.path.exists(os.path.join(args.results_dir, 'gtdb_predictions.csv')):
         get_predictions(args.model, output_path=os.path.join(args.results_dir, 'gtdb_predictions.csv'))
     predictions_df = pd.read_csv(os.path.join(args.results_dir, 'gtdb_predictions.csv'))
-
+    
     if not os.path.exists(os.path.join(args.results_dir, 'gtdb_stop_codons.csv')):
         get_stop_codons(predictions_df.gene_id.values, output_path=os.path.join(args.results_dir, 'gtdb_stop_codons.csv'))   
+    get_stop_codons(predictions_df.gene_id.values, output_path=os.path.join(args.results_dir, 'gtdb_stop_codons.csv'))   
     stop_codons_df = pd.read_csv(os.path.join(args.results_dir, 'gtdb_stop_codons.csv'))
 
     if not os.path.exists(os.path.join(args.results_dir, 'gtdb_copy_nums.csv')):
@@ -155,10 +156,8 @@ if __name__ == '__main__':
     sec_trna_counts_df = pd.read_csv(os.path.join(args.results_dir, 'gtdb_sec_trna_counts.csv')) # , index_col=0)
 
 
-    stop_codons_df = pd.read_csv(os.path.join(args.results_dir, 'gtdb_stop_codons.csv')) # , index_col=0)
-
     results_df = predictions_df.merge(stop_codons_df, how='left', left_on='gene_id', right_on='gene_id')
-    results_df = predictions_df.merge(copy_nums_df, how='left', left_on='genome_id', right_on='genome_id')
+    results_df = results_df.merge(copy_nums_df, how='left', left_on='genome_id', right_on='genome_id')
     results_df = results_df.merge(sec_trna_counts_df, how='left', left_on='genome_id', right_on='genome_id')
 
     output_path = os.path.join(args.results_dir, 'gtdb_results.csv')
