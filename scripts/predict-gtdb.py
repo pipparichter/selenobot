@@ -37,39 +37,41 @@ SELA_KO = 'K01042'
 SELB_KO = 'K03833' 
 
 
-# Failed on http://microbes.gps.caltech.edu:8000/get/proteins?gene_id[eq]JAFRYQ010000101.1_3[page]0
-
-def get_copy_numbers():
+def get_copy_numbers(output_path:str=None):
     '''Take what is probably a faster approach to finding copy numbers, which is to grab every annotation which matches one of the 
     selenoprotein genes, and then group the result by genome.'''
     query = Query('annotations_kegg')
     query.equal_to('ko', [SELA_KO, SELB_KO, SELD_KO])
+    results_dir, _ = os.path.split(output_path)
 
     total = query.count() 
     print(f'get_copy_numbers: {total} genes annotated as selA, selB, or selD.')
 
     page_df = query.next()
-    df = []
+    selabd_annotations_df = []
     pbar = tqdm(total=total, desc='get_copy_numbers: Retrieving selenoprotein gene copy numbers... (page 0)')
     while page_df is not None:
-        df.append(page_df)
+        selabd_annotations_df.append(page_df)
         pbar.update(len(page_df))
         pbar.set_description(f'get_copy_numbers: Retrieving selenoprotein gene copy numbers... (page {len(df)})')
         page_df = query.next() 
-    df = pd.concat(df)
+    selabd_annotations_df = pd.concat(selabd_annotations_df)
+    # Save the annotation results as an intermediate. 
+    selabd_annotations_df.set_index('gene_id').to_csv(os.path.join(results_dir, 'gtdb_selabd_annotations.csv'))
 
     copy_nums_df = []
-    for genome_id, genome_id_df in df.groupby('genome_id'):
+    for genome_id, genome_id_df in selabd_annotations_df.groupby('genome_id'):
         row = dict()
-        row['seld_copy_num'] = len(genome_id_df.ko == SELD_KO)
-        row['sela_copy_num'] = len(genome_id_df.ko == SELA_KO)
-        row['selb_copy_num'] = len(genome_id_df == SELB_KO) 
+        row['seld_copy_num'] = np.sum(genome_id_df.ko == SELD_KO).item()
+        row['sela_copy_num'] = np.sum(genome_id_df.ko == SELA_KO).item()
+        row['selb_copy_num'] = np.sum(genome_id_df.ko == SELB_KO).item()
         row['genome_id'] = genome_id
         copy_nums_df.append(row)
+    copy_nums_df = pd.DataFrame(copy_nums_df)
 
     copy_nums_df = pd.DataFrame(copy_nums_df).set_index('genome_id')
     copy_nums_df.to_csv(os.path.join(args.results_dir, 'gtdb_copy_nums.csv'))
-    print(f"get_copy_numbers: Copy number information written to {os.path.join(args.results_dir, 'gtdb_copy_nums.csv')}")
+    print(f"get_copy_numbers: Copy number information written to {output_path}")
 
 
 def get_sec_trna_counts(genome_ids:List[str], batch_size=50, output_path:str=None):
@@ -78,7 +80,7 @@ def get_sec_trna_counts(genome_ids:List[str], batch_size=50, output_path:str=Non
     for batch in tqdm([genome_ids[i * batch_size:(i + 1) * batch_size] for i in range(len(genome_ids) // batch_size + 1)], desc='get_sec_trna_counts'):
         query = Query('metadata')
         query.equal_to('genome_id', batch)
-        sec_trna_counts_df.append(query.get()[['genome_id', 'sec_trna_count']])
+        sec_trna_counts_df.append(query.get()[['genome_id', 'sec_trna_count', 'protein_count']])
     
     sec_trna_counts_df = pd.concat(sec_trna_counts_df).set_index('genome_id')
     sec_trna_counts_df.to_csv(output_path)
@@ -143,8 +145,8 @@ if __name__ == '__main__':
     
     if not os.path.exists(os.path.join(args.results_dir, 'gtdb_stop_codons.csv')):
         get_stop_codons(predictions_df.gene_id.values, output_path=os.path.join(args.results_dir, 'gtdb_stop_codons.csv'))   
-    get_stop_codons(predictions_df.gene_id.values, output_path=os.path.join(args.results_dir, 'gtdb_stop_codons.csv'))   
-    stop_codons_df = pd.read_csv(os.path.join(args.results_dir, 'gtdb_stop_codons.csv'))
+    # get_stop_codons(predictions_df.gene_id.values, output_path=os.path.join(args.results_dir, 'gtdb_stop_codons.csv'))   
+    stop_codons_df = pd.read_csv(os.path.join(args.results_dir, 'gtdb_stop_codons.csv'), dtype={'partial':str})
 
     if not os.path.exists(os.path.join(args.results_dir, 'gtdb_copy_nums.csv')):
         get_copy_numbers(output_path=os.path.join(args.results_dir, 'gtdb_copy_nums.csv'))
