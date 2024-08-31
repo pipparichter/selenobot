@@ -164,7 +164,7 @@ if __name__ == '__main__':
     if not os.path.exists(os.path.join(args.results_dir, 'gtdb_copy_nums.csv')):
         # Use genome IDs from the stop_codons_df, as genome IDs are not included in the predictions_df.   
         get_copy_numbers(output_path=os.path.join(args.results_dir, 'gtdb_copy_nums.csv')) 
-    gtdb_copy_nums = pd.read_csv(os.path.join(args.results_dir, 'gtdb_copy_nums.csv')) # , index_col=0)
+    copy_nums_df = pd.read_csv(os.path.join(args.results_dir, 'gtdb_copy_nums.csv')) # , index_col=0)
 
 
     results_df = predictions_df.merge(gene_data_df, how='left', left_on='gene_id', right_on='gene_id')
