@@ -90,6 +90,7 @@ def get_annotation_data(gene_ids:List[str], batch_size=100, output_path:str=None
     annotation_data_df = []
     for batch in tqdm([gene_ids[i * batch_size:(i + 1) * batch_size] for i in range(len(gene_ids) // batch_size + 1)], desc='get_annotation_data: Fetching annotations...'):
         query = Query('annotations_kegg')
+        query.equal_to('gene_id', batch)
         annotation_data_df.append(query.get()[['ko', 'gene_id']])
     annotation_data_df = pd.concat(annotation_data_df)
     annotation_data_df.set_index('gene_id').to_csv(os.path.join(output_path))
@@ -101,6 +102,7 @@ def get_gene_data(gene_ids:List[str], batch_size=100, output_path:str=None):
     gene_data_df = []
     for batch in tqdm([gene_ids[i * batch_size:(i + 1) * batch_size] for i in range(len(gene_ids) // batch_size + 1)], desc='get_gene_data: Fetching gene data...'):
         query = Query('proteins')
+        query.equal_to('gene_id', batch)
         gene_data_df.append(query.get())
     gene_data_df = pd.concat(gene_data_df)
     gene_data_df.set_index('gene_id').to_csv(output_path)
@@ -168,15 +170,16 @@ if __name__ == '__main__':
 
 
     results_df = predictions_df.merge(gene_data_df, how='left', left_on='gene_id', right_on='gene_id')
+    print(results_df)
 
-    annotated_gene_ids = annotation_data_df.gene_id.unique()
-    annotations = []
-    for gene_id in tqdm(results_df.gene_id, 'Adding annotations to results...'):
-        if gene_id in annotated_gene_ids:
-            annotations.append(','.join(list(annotation_data_df[annotation_data_df.gene_id == gene_id].ko)))
-        else:
-            annotations.append('')
-    results_df['ko'] = annotations 
+    # annotated_gene_ids = annotation_data_df.gene_id.unique()
+    # annotations = []
+    # for gene_id in tqdm(results_df.gene_id, 'Adding annotations to results...'):
+    #     if gene_id in annotated_gene_ids:
+    #         annotations.append(','.join(list(annotation_data_df[annotation_data_df.gene_id == gene_id].ko)))
+    #     else:
+    #         annotations.append('')
+    # results_df['ko'] = annotations 
 
     # results_df = results_df.merge(annotation_data_df, how='left', left_on='gene_id', right_on='gene_id')
     results_df = results_df.merge(copy_nums_df, how='left', left_on='genome_id', right_on='genome_id')
