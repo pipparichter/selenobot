@@ -173,7 +173,6 @@ if __name__ == '__main__':
 
 
     results_df = predictions_df.merge(gene_data_df, how='left', left_on='gene_id', right_on='gene_id')
-    print(results_df)
 
     # annotated_gene_ids = annotation_data_df.gene_id.unique()
     # annotations = []
@@ -184,7 +183,7 @@ if __name__ == '__main__':
     #         annotations.append('')
     # results_df['ko'] = annotations 
 
-    # results_df = results_df.merge(annotation_data_df, how='left', left_on='gene_id', right_on='gene_id')
+    results_df = results_df.merge(annotation_data_df, how='left', left_on='gene_id', right_on='gene_id')
     results_df = results_df.merge(copy_nums_df, how='left', left_on='genome_id', right_on='genome_id')
     results_df = results_df.merge(genome_data_df, how='left', left_on='genome_id', right_on='genome_id')
 
