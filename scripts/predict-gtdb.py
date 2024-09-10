@@ -91,7 +91,10 @@ def get_annotation_data(gene_ids:List[str], batch_size=100, output_path:str=None
     for batch in tqdm([gene_ids[i * batch_size:(i + 1) * batch_size] for i in range(len(gene_ids) // batch_size + 1)], desc='get_annotation_data: Fetching annotations...'):
         query = Query('annotations_kegg')
         query.equal_to('gene_id', batch)
-        annotation_data_df.append(query.get()[['ko', 'gene_id']])
+        # Not every gene has an annotation, so need to catch that case.
+        batch_df = query.get()
+        if batch_df is not None:
+            annotation_data_df.append(query.get()[['ko', 'gene_id']])
     annotation_data_df = pd.concat(annotation_data_df)
     annotation_data_df.set_index('gene_id').to_csv(os.path.join(output_path))
     print(f"get_annotation_data: Annotation data written to {output_path}")
