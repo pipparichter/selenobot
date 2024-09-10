@@ -81,7 +81,12 @@ def get_genome_data(genome_ids:List[str], batch_size=50, output_path:str=None):
         query = Query('metadata')
         query.equal_to('genome_id', batch)
         genome_data_df.append(query.get())
+    # Don't want the GC content duplicated, as this is also a field in the proteins table. 
     genome_data_df = pd.concat(genome_data_df).set_index('genome_id')
+    if 'gc_content' in genome_data_df.columns:
+        genome_data_df = genome_data_df.drop(columns=['gc_content'])
+    if 'gtdb_version' in genome_data_df.columns:
+        genome_data_df = genome_data_df.drop(columns=['gtdb_version'])
     genome_data_df.to_csv(output_path)
     print(f"get_genome_data: Genome data written to {output_path}")
 
