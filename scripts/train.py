@@ -23,13 +23,14 @@ if __name__ == '__main__':
     parser.add_argument('--n-features', default=None, type=int)
     parser.add_argument('--hidden-dim', default=512, type=int, help='The number of nodes in the hidden layer of the model.')
     parser.add_argument('--half-precision', default=False, type=bool, help='Whether or not to use half-precision floats during model training.')
+    parser.add_argument('--scale', default=True, type=bool, help='Whether or not to include a StandardScaler in the model.')
     args = parser.parse_args()
 
     train_dataset = Dataset(pd.read_csv(TRAIN_PATH, index_col=0), n_features=args.n_features, half_precision=args.half_precision)
     val_dataset = Dataset(pd.read_csv(VAL_PATH, index_col=0), n_features=args.n_features, half_precision=args.half_precision)
     print('Loaded training, testing, and validation datasets.')
     
-    model = Classifier(input_dim=train_dataset.shape()[-1], hidden_dim=args.hidden_dim, half_precision=args.half_precision)
+    model = Classifier(input_dim=train_dataset.shape()[-1], hidden_dim=args.hidden_dim, half_precision=args.half_precision, scale=args.scale)
 
     model.fit(train_dataset, val_dataset, batch_size=args.batch_size, epochs=args.epochs, lr=args.lr)
     model.save(os.path.join(MODELS_DIR, args.file_name))

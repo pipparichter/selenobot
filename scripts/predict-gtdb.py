@@ -77,18 +77,31 @@ def get_copy_numbers(output_path:str=None):
 def get_genome_data(genome_ids:List[str], batch_size=50, output_path:str=None):
     '''Retrieve the count of selenocysteine tRNAs in the genome.'''
     genome_data_df = []
-    for batch in tqdm([genome_ids[i * batch_size:(i + 1) * batch_size] for i in range(len(genome_ids) // batch_size + 1)], desc='get_sec_trna_counts'):
+    for batch in tqdm([genome_ids[i * batch_size:(i + 1) * batch_size] for i in range(len(genome_ids) // batch_size + 1)], desc='get_genome_data'):
         query = Query('metadata')
         query.equal_to('genome_id', batch)
         genome_data_df.append(query.get())
-    # Don't want the GC content duplicated, as this is also a field in the proteins table. 
     genome_data_df = pd.concat(genome_data_df).set_index('genome_id')
-    if 'gc_content' in genome_data_df.columns:
-        genome_data_df = genome_data_df.drop(columns=['gc_content'])
-    if 'gtdb_version' in genome_data_df.columns:
-        genome_data_df = genome_data_df.drop(columns=['gtdb_version'])
+    # Don't want the GC content duplicated, as this is also a field in the proteins table. 
+    genome_data_df = genome_data_df.drop(columns=['gc_content', 'gtdb_version'])
     genome_data_df.to_csv(output_path)
     print(f"get_genome_data: Genome data written to {output_path}")
+
+# def get_genome_data_all(output_path:str=None):
+#     '''Retrieve metadata for all genomes.'''
+#     genome_data_df = []
+#     query = Query('metadata')
+#     page_df = query.next()
+#     count, total = 0, query.count()
+#     pbar = tqdm(total=total, desc='get_genome_data_all')
+#     while count < total:
+#         pbar.update(len(page_df))
+#         count += len(page_df)
+#         genome_data_df.append(page_df)
+#         page_df = query.next()
+#     genome_data_df = pd.concat(genome_data_df).set_index('genome_id')
+#     genome_data_df.to_csv(output_path)
+#     print(f"get_genome_data_all: Genome data for all genomes written to {output_path}") 
 
 
 def get_annotation_data(gene_ids:List[str], batch_size=100, output_path:str=None):
@@ -154,6 +167,8 @@ if __name__ == '__main__':
     parser.add_argument('--results-dir', default='/home/prichter/Documents/selenobot/results/epochs_2000_lr_e8')
 
     args = parser.parse_args()
+
+    # get_genome_data_all(os.path.join(args.results_dir, 'gtdb_genome_data_all.csv'))
     
     if not os.path.exists(os.path.join(args.results_dir, 'gtdb_predictions.csv')):
         get_predictions(args.model, output_path=os.path.join(args.results_dir, 'gtdb_predictions.csv'))

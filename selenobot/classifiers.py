@@ -77,7 +77,8 @@ class Classifier(torch.nn.Module):
         input_dim:int=1024,
         # bce_loss_weight:float=1,
         random_seed:int=42,
-        half_precision:bool=True):
+        half_precision:bool=True, 
+        scale:bool=True):
         '''
         Initializes a two-layer linear classification head. 
 
@@ -118,7 +119,7 @@ class Classifier(torch.nn.Module):
         self.batch_size = None
         self.train_losses, self.val_accs = None, None
         
-        self.scaler = StandardScaler()
+        self.scaler = StandardScaler() if scale else None
 
     # TODO: Do I still need the batch size parameter here?
     def forward(self, inputs:torch.FloatTensor, low_memory:bool=True):
@@ -134,7 +135,8 @@ class Classifier(torch.nn.Module):
     def predict(self, dataset, threshold:float=0.5) -> np.ndarray:
         '''Evaluate the Classifier on the data in the input Dataset.'''   
         self.eval() # Put the model in evaluation mode. This changes the forward behavior of the model (e.g. disables dropout).
-        dataset.apply_scaler(self.scaler, device=DEVICE)
+        if self.scaler is not None:
+            dataset.apply_scaler(self.scaler, device=DEVICE)
         with torch.no_grad(): # Turn off gradient computation, which reduces memory usage. 
             outputs = self(dataset.embeddings) # Run a forward pass of the model. Batch to limit memory usage.
             # Apply sigmoid activation, which is usually applied as a part of the loss function. 
@@ -165,9 +167,10 @@ class Classifier(torch.nn.Module):
         self.train() # Put the model in train mode.
         print(f'Classifier.fit: Training on device {DEVICE}.')
         
-        self.scaler.fit(train_dataset.embeddings) # Fit the scaler on the training dataset. 
+        if self.scaler is not None:
+            self.scaler.fit(train_dataset.embeddings) # Fit the scaler on the training dataset. 
+            train_dataset.apply_scaler(self.scaler, device=DEVICE)
         self.loss_func.fit(train_dataset) # Set the weights of the loss function. 
-        train_dataset.apply_scaler(self.scaler, device=DEVICE)
 
         train_dataset.to_device(DEVICE)
         val_dataset.to_device(DEVICE)
