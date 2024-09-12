@@ -29,7 +29,8 @@ if __name__ == '__main__':
     train_dataset = Dataset(pd.read_csv(TRAIN_PATH, index_col=0), n_features=args.n_features, half_precision=args.half_precision)
     val_dataset = Dataset(pd.read_csv(VAL_PATH, index_col=0), n_features=args.n_features, half_precision=args.half_precision)
     print('Loaded training, testing, and validation datasets.')
-    
+
+    print(f"Training model with scaling {'on' if args.scale else 'off'} for {args.epochs} with learning rate {args.lr}.") 
     model = Classifier(input_dim=train_dataset.shape()[-1], hidden_dim=args.hidden_dim, half_precision=args.half_precision, scale=args.scale)
 
     model.fit(train_dataset, val_dataset, batch_size=args.batch_size, epochs=args.epochs, lr=args.lr)
