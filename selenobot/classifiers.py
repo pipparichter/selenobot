@@ -59,7 +59,8 @@ class WeightedBCELoss(torch.nn.Module):
         # reduction specifies the reduction to apply to the output. If 'none', no reduction will be applied, if 'mean,' the weighted mean of the output is taken.
         # ce = torch.nn.functional.binary_cross_entropy(outputs, targets, reduction='none')
         # NOTE: Switch to with_logits for numerical stability, see https://pytorch.org/docs/stable/generated/torch.nn.BCEWithLogitsLoss.html 
-        ce = torch.nn.functional.binary_cross_entropy_with_logits(outputs, targets, reduction='none')
+        # ce = torch.nn.functional.binary_cross_entropy_with_logits(outputs, targets, reduction='none')
+        ce = torch.nn.functional.binary_cross_entropy(outputs, targets, reduction='none')
         # Generate a weight vector using self.w1 and self.w0. 
         w = torch.where(targets == 1, self.w1, self.w0) # .to(DEVICE)
 
@@ -77,7 +78,7 @@ class Classifier(torch.nn.Module):
         input_dim:int=1024,
         # bce_loss_weight:float=1,
         random_seed:int=42,
-        half_precision:bool=True, 
+        half_precision:bool=False, 
         scale:bool=True):
         '''
         Initializes a two-layer linear classification head. 
@@ -101,8 +102,8 @@ class Classifier(torch.nn.Module):
             torch.nn.Linear(input_dim, hidden_dim, dtype=self.dtype),
             torch.nn.ReLU(),
             # torch.nn.Dropout(p=0.5),
-            torch.nn.Linear(hidden_dim, 1, dtype=self.dtype))
-            # torch.nn.Sigmoid())
+            torch.nn.Linear(hidden_dim, 1, dtype=self.dtype),
+            torch.nn.Sigmoid())
 
         # Initialize model weights according to which activation is used.'''
         torch.nn.init.kaiming_normal_(self.classifier[0].weight)
@@ -140,7 +141,7 @@ class Classifier(torch.nn.Module):
         with torch.no_grad(): # Turn off gradient computation, which reduces memory usage. 
             outputs = self(dataset.embeddings) # Run a forward pass of the model. Batch to limit memory usage.
             # Apply sigmoid activation, which is usually applied as a part of the loss function. 
-            outputs = torch.nn.functional.sigmoid(outputs).ravel()
+            # outputs = torch.nn.functional.sigmoid(outputs).ravel()
             outputs = outputs.cpu().numpy()
 
             if threshold is not None: # Apply the threshold to the output values. 
@@ -155,7 +156,7 @@ class Classifier(torch.nn.Module):
     #     outputs, targets = self(dataset.get_embeddings()), dataset.labels 
     #     return self.loss_func(outputs, targets)
 
-    def fit(self, train_dataset, val_dataset, epochs:int=10, lr:float=0.01, batch_size:int=16):
+    def fit(self, train_dataset, val_dataset, epochs:int=10, lr:float=0.01, batch_size:int=16, early_stopping:bool=True, balance_batches:bool=True, weighted_loss:bool=False):
         '''Train Classifier model on the data in the DataLoader.
 
         :param train_dataset: The Dataset object containing the training data. 
@@ -170,7 +171,8 @@ class Classifier(torch.nn.Module):
         if self.scaler is not None:
             self.scaler.fit(train_dataset.embeddings) # Fit the scaler on the training dataset. 
             train_dataset.apply_scaler(self.scaler, device=DEVICE)
-        self.loss_func.fit(train_dataset) # Set the weights of the loss function. 
+        if weighted_loss:
+            self.loss_func.fit(train_dataset) # Set the weights of the loss function. 
 
         train_dataset.to_device(DEVICE)
         val_dataset.to_device(DEVICE)
@@ -184,7 +186,7 @@ class Classifier(torch.nn.Module):
         val_accs = [balanced_accuracy_score(val_dataset.labels.cpu().numpy(), self.predict(val_dataset))]
         train_losses = [self.loss_func(self(train_dataset.embeddings).ravel(), train_dataset.labels).item()]
 
-        dataloader = get_dataloader(train_dataset, batch_size=batch_size)
+        dataloader = get_dataloader(train_dataset, batch_size=batch_size, balance_batches=balance_batches)
         pbar = tqdm(total=epochs * len(dataloader), desc=f'Classifier.fit: Training classifier, epoch 0/{epochs}.') # Make sure the progress bar updates for each batch. 
 
         for epoch in range(epochs):
@@ -209,8 +211,9 @@ class Classifier(torch.nn.Module):
                 best_epoch = epoch
                 best_model_weights = copy.deepcopy(self.state_dict())
 
-        print(f'Classifier.fit: Best model weights encountered at epoch {best_epoch}.')
-        self.load_state_dict(best_model_weights) # Load the best model weights. 
+        if early_stopping:
+            print(f'Classifier.fit: Loading best model weights, encountered at epoch {best_epoch}.')
+            self.load_state_dict(best_model_weights) # Load the best model weights. 
 
         # Save training values in the model. 
         self.best_epoch = best_epoch

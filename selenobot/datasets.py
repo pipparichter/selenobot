@@ -3,9 +3,9 @@ import random
 import pandas as pd
 import numpy as np
 import torch
-import torch.utils.data
+from torch.utils.data import WeightedRandomSampler
 from typing import List, Dict, NoReturn, Iterator
-from sklearn.feature_selection import SelectKBest, f_classif
+# from sklearn.feature_selection import SelectKBest, f_classif
 import re
 import subprocess
 import time
@@ -13,15 +13,6 @@ import time
 # TODO: Probably want to split into an EmbeddingDataset and SequenceDataset.
 
 # device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-class BaseDataset(torch.utils.data.Dataset):
-    pass
-
-class SequenceDataset(BaseDataset):
-    pass
-
-class EmbeddingDataset(BaseDataset):
-    pass
 
 
 class Dataset(torch.utils.data.Dataset):
@@ -93,84 +84,62 @@ class Dataset(torch.utils.data.Dataset):
             item['label'] = self.labels[idx]
         return item
 
-    # def get_selenoprotein_indices(self) -> List[int]:
-    #     '''Obtains the indices of selenoproteins in the Dataset.'''
-    #     return list(np.where(['[1]' in i for i in self.gene_ids])[0])
 
 
-def get_dataloader(
-        dataset:Dataset, 
-        batch_size:int=1024,
-        num_workers:int=0) -> torch.utils.data.DataLoader:
 
-    # if balance_batches:
-    #     batch_sampler = BalancedBatchSampler(dataset, batch_size=batch_size)
-    #     return torch.utils.data.DataLoader(dataset, batch_sampler=batch_sampler, num_workers=num_workers)
-    # else:
-    return torch.utils.data.DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, shuffle=True)
+def get_dataloader(dataset:Dataset, batch_size:int=16, balance_batches:bool=False) -> torch.utils.data.DataLoader:
 
-
-    # def _select_features(self, embeddings:torch.Tensor) -> torch.Tensor:
-    #     if self.n_features is None:
-    #         return embeddings
-    #     else:
-    #         # NOTE: Should I be using t-test, as there are technically only two categories?
-    #         kbest = SelectKBest(f_classif, k='all') # Use ANOVA to select the best features. 
-    #         kbest.fit(embeddings, self.labels)
-    #         # Scores are the ANOVA F-statistic, which is the ratio of the between-group variability to the within-group variability.
-    #         # The larger this value, the "better" the groups, in a sense. 
-    #         feature_scores = kbest.scores_
-    #         idxs = np.argsort(feature_scores)[:, -self.n_features:] # argsort sorts in ascending order.
-    #         return embeddings[idxs] # Grab the n_features features with the highest F-scores. 
+    if balance_batches:
+        labels = dataset.labels.numpy()
+        p = 0.01 # Probability that any given member of a class is not sampled in any batch. 
+        n = len(labels)
+        n0, n1 = n - np.sum(labels), np.sum(labels)
+        s = 2 * int(max(np.log(p) / np.log(1 - 1 / n1), np.log(p) / np.log(1 - 1 / n0))) # Compute the minimum number of samples such that each training instance will probably be included at least once.
+        # s = int(np.log(p) / np.log(1 - 1 / n)) # Compute the minimum number of samples such that each training instance will probably be included at least once.
+        print(f'get_dataloader: {s} samples required for dataset coverage.')
+        w0, w1 = n / (2 * n0), n / (2 * n1) # Compute the probabilities for each class. 
+        sampler = torch.utils.data.WeightedRandomSampler([w1 if l == 1 else w0 for l in labels], s, replacement=True)
+        return torch.utils.data.DataLoader(dataset, sampler=sampler, batch_size=batch_size)
+        # return torch.utils.data.DataLoader(dataset, batch_sampler= BalancedBatchSampler(dataset, batch_size=batch_size))
+    else:
+        return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
 
-# # A BatchSampler should have an __iter__ method which returns the indices of the next batch once called.
+
+
 # class BalancedBatchSampler(torch.utils.data.BatchSampler):
-#     '''A Sampler object which ensures that each batch has a similar proportion of selenoproteins to non-selenoproteins.
-#     This class is used in conjunction with PyTorch DataLoaders.'''
 
 #     # TODO: Probably add some checks here, unexpected bahavior might occur if things are evenly divisible by batch size, for example.
 #     def __init__(self, data_source:Dataset, batch_size:int=None, random_seed:int=42): 
-#         '''Initialize a custom BatchSampler object.
+#         '''Initialize a custom BatchSampler object.'''
+#         labels = data_source.labels.to_numpy() # Labels are stored as a Tensor in the Dataset. 
+#         classes = np.unique(labels)
+#         n_classes = len(classes)
+#         max_class = np.argmax([np.sum(labels == c) for c in classes]) # Get the largest class. 
+#         max_class_size = np.sum(labels == max_class) # Get the size of the largest class. 
         
-#         :param data_source: A Dataset object containing the data to sample into batches. 
-#         :param batch_size: The size of the batches. 
-#         :param random_seed: The value to seed the random number generator. 
-#         '''
-#         r = 0.5 # The fraction of truncated selenoproteins to include in each batch. 
+#         n_class_per_batch = batch_size // n_classes
+#         n_batches = max_class_size // n_class_per_batch
+
+#         batches, n_resampled, n_removed = [], 0, 0
 #         random.seed(random_seed) # Seed the random number generator for consistent shuffling.
-
-#         sel_idxs = data_source.get_selenoprotein_indices() # Get the indices of all tagged selenoproteins in the Dataset. 
-#         non_sel_idxs = np.array(list(set(range(len(data_source))) - set(sel_idxs))) # Get the indices of all non-selenoproteins in the dataset. 
-#         # This is the assumption made while selecting num_batches.
-#         assert len(sel_idxs) < len(non_sel_idxs), f'dataset.BalancedBatchSampler.__init__: Expecting fewer selenoproteins in the dataset than non-selenoproteins.'
-
-#         num_sel, num_non_sel = len(sel_idxs), len(non_sel_idxs) # Grab initial numbers of these for printing info at the end.
-
-#         # Shuffle the indices. 
-#         random.shuffle(sel_idxs)
-#         random.shuffle(non_sel_idxs)
-        
-#         num_sel_per_batch = int(batch_size * r) # Number of selenoproteins in each batch. 
-#         num_non_sel_per_batch = batch_size - num_sel_per_batch # Number of full-length proteins in each batch. 
-#         num_batches = len(non_sel_idxs) // (batch_size - num_sel_per_batch) # Number of batches needed to cover the non-selenoproteins.
-        
-#         non_sel_idxs = non_sel_idxs[:num_batches * num_non_sel_per_batch] # Random shuffled first, so removing from the end should not be an issue. 
-#         sel_idxs = np.resize(sel_idxs, num_batches * num_sel_per_batch) # Resize the array to the number of selenoproteins required for balanced batches.
-#         # Possibly want to shuffle these again? So later batches don't have the same selenoproteins as earlier ones.
-#         np.random.shuffle(sel_idxs)
-
-#         # Numpy split expects num_batches to be evenly divisible, and will throw an error otherwise. 
-#         sel_batches = np.split(sel_idxs, num_batches)
-#         non_sel_batches = np.split(non_sel_idxs, num_batches)
-#         self.batches = np.concatenate([sel_batches, non_sel_batches], axis=1)
+#         for c in classes:
+#             class_idxs = np.where(labels == c).ravel()
+#             if c != max_class:
+#                 n_resampled += (n_class_per_batch * n_batches) - len(class_idxs)
+#                 class_idxs = np.concatenate([np.random.choice(class_idxs, size=(n_class_per_batch * n_batches) - len(class_idxs), replace=True), class_idxs])
+#             else:
+#                 n_removed = len(class_idxs) - (n_class_per_batch * n_batches)
+#                 class_idxs = np.random.choice(class_idxs, size=n_class_per_batch * n_batches, replace=False)
+#             np.random.shuffle(class_idxs)
+#             batches.append(np.split(class_idxs), n_batches) # Numpy split expects num_batches to be evenly divisible, and will throw an error otherwise. 
+    
+#         self.batches = np.concatenate(batches, axis=1)
 
 #         # Final check to make sure the number of batches and batch sizes are correct. 
-#         assert self.batches.shape == (num_batches, batch_size), f'dataset.BalancedBatchSampler.__init__: Incorrect batch dimensions. Expected {(num_batches, batch_size)}, but dimensions are {self.batches.shape}.'
+#         assert self.batches.shape == (n_batches, batch_size), f'dataset.BalancedBatchSampler.__init__: Incorrect batch dimensions. Expected {(num_batches, batch_size)}, but dimensions are {self.batches.shape}.'
         
-#         data_source.num_resampled = len(sel_idxs) - num_sel  
-#         data_source.num_removed = num_non_sel - len(non_sel_idxs)
-#         print(f'dataset.BalancedBatchSampler.__init__: Resampled {data_source.num_resampled} selenoproteins and removed {data_source.num_removed} non-selenoproteins to generate {num_batches} batches of size {batch_size}.')
+#         print(f'dataset.BalancedBatchSampler.__init__: Resampled {n_resampled} entries and removed {n_removed} entries to generate {n_batches} batches of size {batch_size}.')
 
 #     def __iter__(self) -> Iterator:
 #         return iter(self.batches)
