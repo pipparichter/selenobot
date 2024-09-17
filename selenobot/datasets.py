@@ -90,7 +90,7 @@ class Dataset(torch.utils.data.Dataset):
 def get_dataloader(dataset:Dataset, batch_size:int=16, balance_batches:bool=False) -> torch.utils.data.DataLoader:
 
     if balance_batches:
-        labels = dataset.labels.numpy()
+        labels = dataset.labels.cpu().numpy()
         p = 0.01 # Probability that any given member of a class is not sampled in any batch. 
         n = len(labels)
         n0, n1 = n - np.sum(labels), np.sum(labels)
