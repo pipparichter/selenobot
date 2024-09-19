@@ -11,5 +11,4 @@ setuptools.setup(
     url='https://github.com/pipparichter/selenobot',
     author='Philippa Richter',
     author_email='prichter@caltech.edu',
-    packages=['selenobot'],
-    install_requires=setuptools.find_packages(exclude=['selenobot'] + modules + scripts))
+    packages=['selenobot'])

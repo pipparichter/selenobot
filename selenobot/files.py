@@ -4,6 +4,8 @@ from typing import Dict, List, NoReturn
 import pandas as pd 
 import numpy as np
 import h5py 
+from bs4 import BeautifulSoup, SoupStrainer
+from tqdm import tqdm
 
 def get_converter(dtype):
     '''Function for getting type converters to make things easier when reading in the metadata files.'''
@@ -65,7 +67,7 @@ class ClstrFile(File):
         return df
 
 
-
+# TODO: Should probably use BioPython for this. Was there a reason I didn't?
 class FastaFile(File):
 
     def __init__(self, path:str, content:str=None, genome_id:str=None):
@@ -188,41 +190,76 @@ class EmbeddingsFile(File):
         df['gene_id'] = self.gene_ids
         return df
 
-                
 
+class NcbiXmlFile(File):
+    '''These files are obtained from the NCBI FTP site, and contain metadata information for sequences in SwissProt (files are also available
+    for TREMBL entries, but I did not download these).
+    
+    There is currently no way to get nucleotide sequences or genomes.'''
+    # tags = ['taxon', 'accession', 'entry', 'organism', 'sequence']
+    # tags = ['accession', 'organism', 'sequence']
 
-class NcbiProteinsFile(FastaFile):
+    @staticmethod
+    def get_taxonomy(organism) -> Dict[str, str]:
+        '''Extract the taxonomy information from the organism tag group.'''
+        levels = ['domain', 'kingdom', 'phylum', 'class', 'order', 'family', 'genus']
+        taxonomy = {level:tag.text for tag, level in zip(organism.find_all('taxon'), levels)}
+        taxonomy['species'] = organism.find('name').text
+        taxonomy['ncbi_taxonomy_id'] = organism.find(name='dbReference', attrs={'type':'NCBI Taxonomy'})['id'] # , attrs={'type':'NCBI Taxonomy'})[0].id
+        return taxonomy
 
-    fields = ['start', 'stop', 'gene_id', 'strand']
-
-    def __init__(self, path:str):
-
-        super().__init__(path)
-                
-    def parse_header(self, header:str) -> dict:
-        # Headers in the downloaded file are of the following form... 
-        # lcl|NC_000913.3_prot_NP_414542.1_1 [gene=thrL] [locus_tag=b0001] [db_xref=UniProtKB/Swiss-Prot:P0AD86] [protein=thr operon leader peptide] [protein_id=NP_414542.1] [location=190..255] [gbkey=CDS]
-        header_df = []
-        for header in headers:
-            gene_id = re.search(r'gene=([a-zA-Z\d]+)', header) # .group(1)
-            gene_id = None if gene_id is None else gene_id.group(1) # Sometimes there are "Untitled" genes. Also skipping these. 
+    @staticmethod
+    def get_refseq(entry) -> Dict[str, str]:
+        '''Get references to RefSeq database in case I want to access the nucleotide sequence later on.'''
+        refseq = dict()
+        refseq_entry = entry.find('dbReference', attrs={'type':'RefSeq'}) # Can we assume there is always a RefSeq entry? No. 
+        if refseq_entry:
+            refseq['refseq_protein_id'] = refseq_entry['id']
+            refseq['refseq_nucleotide_id'] = refseq_entry.find('property', attrs={'type':'nucleotide sequence ID'})['value']
+        else:
+            refseq['refseq_protein_id'] = None
+            refseq['refseq_nucleotide_id'] = None
+        return refseq
             
-            if re.search(r'location=complement\((\d+)\.\.(\d+)\)', header) is not None:
-                location = re.search(r'location=complement\((\d+)\.\.(\d+)\)', header)
-                start, stop = int(location.group(1)), int(location.group(2))
-                strand = '-'
-            elif re.search(r'location=(\d+)\.\.(\d+)', header) is not None:
-                location = re.search(r'location=(\d+)\.\.(\d+)', header)
-                start, stop = int(location.group(1)), int(location.group(2))
-                strand = '+' 
-            else:
-                # This happens with Joins... Don't really know how to handle them, so just passing over them. 
-                start, stop, strand = None, None, None
-            header_df.append({'start':start, 'stop':stop, 'gene_id':gene_id, 'strand':strand})
-        return pd.DataFrame(header_df)
+    def __init__(self, path:str, load_seqs:bool=True):
+        super().__init__(path)
+
+        with open(path, 'r') as f:
+            content = f.read()
+
+        print(f'NcbiXmlFile.__init__: Read in NCBI XML file at path {path}.')
+        # strainer = SoupStrainer([tag for tag in NcbiXmlFile.tags if tag != 'sequence']) if (not load_seqs) else SoupStrainer(NcbiXmlFile.tags) 
+        soup = BeautifulSoup(content, features='xml') # , parse_only=strainer)
+
+        rows = []
+        for entry in tqdm(soup.find_all('entry'), desc='NcbiXmlFile.__init__: Parsing NCBI XML file...'):
+            accessions = [tag.text for tag in entry.find_all('accession')] # There may be multiple accessions for the same protein. 
+            protein_name = entry.find('name').text # ... But there should only be one name. The protein name is the first "name" tag. 
+            
+            taxonomy = NcbiXmlFile.get_taxonomy(entry.find('organism'))
+            refseq = NcbiXmlFile.get_refseq(entry)
+
+            if load_seqs:
+                # Grab the last sequence encountered, which is the latest version, and will actually have the amino acids. 
+                seq = entry.find_all('sequence')[-1].text
+
+            # assert len(taxonomy) == len(levels), f'NcbiXmlFile.__init__: There doesn\'t seem to be enough taxonomy data for organism {species}.'
+            for accession in accessions:
+                row = taxonomy.copy()
+                row.update(refseq)
+                row['seq'] = seq
+                row['name'] = protein_name
+                row['gene_id'] = accession
+                # row['gene_name'] = gene_name
+                rows.append(row)
+
+        self.df = pd.DataFrame(rows).set_index('gene_id')
+
+    def dataframe(self):
+        return self.df
 
 
-class MyProteinsFile(FastaFile):
+class ProteinsFile(FastaFile):
 
     def __init__(self, path:str, content:str=None, genome_id:str=None):
 
@@ -264,6 +301,40 @@ class MyProteinsFile(FastaFile):
 
         content = MyProteinsFile.dataframe_to_fasta(df)
         return cls(None, content=content, genome_id=genome_id)
+
+
+# class NcbiTsvFile(File):
+#     '''These files are obtained through the UniProt web interface, either via the API link or directly downloading from the browser.'''
+#     fields = {'Entry':'gene_id', 'Reviewed':'reviewed', 'Entry Name':'name', 'Organism':'organism', 'Date of creation':'date', 'Entry version':'version', 'Taxonomic lineage':'taxonomy', 'RefSeq':'refseq_id', 'KEGG':'kegg_id'}
+    
+#     @staticmethod
+#     def parse_taxonomy(df:pd.Series) -> pd.DataFrame:
+#         levels = ['superkingdom', 'kingdom', 'phylum', 'class', 'order', 'family', 'genus', 'species']
+#         taxonomy_df = []
+#         for entry in df.itertuples():
+#             row, taxonomy = {'gene_id':entry.gene_id}, entry.taxonomy
+#             for level in range(levels):
+#                 if f'({level})' in taxonomy:
+#                     row[level] = re.match(f', ([A-Za-z0-9\\w]+) \\({level}\\),', entry).group(1)
+#                 else:
+#                     row[level] = None
+#             taxonomy_df.append(row)
+#         taxonomy_df = pd.DataFrame(taxonomy_df).rename(columns={'superkingdom':'domain'})
+#         df = df.drop(columns=['taxonomy']).merge(taxonomy_df, how='left', left_on='gene_id', right_on='gene_id')
+#         return df
+
+#     def __init__(self, path:str):
+#         super().__init__(path)
+#         df = pd.read_csv(path, delimiter='\t')
+#         df = df.rename(columns=UniProtTsvFile.fields)
+
+#         if 'taxonomy' in df.columns:
+#             df = NcbiTsvFile.parse_taxonomy(df)
+#         self.df = df.set_index('gene_id')
+
+#     def dataframe(self):
+#         return self.df
+
 
 
 

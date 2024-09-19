@@ -11,15 +11,18 @@ import pandas as pd
 from selenobot.datasets import Dataset 
 from typing import List 
 
+# Define some important directories...
+ROOT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
+RESULTS_DIR = os.path.join(ROOT_DIR, 'results') # Get the path where results are stored.
+MODELS_DIR = os.path.join(ROOT_DIR, 'models')
+DATA_DIR = os.path.join(ROOT_DIR, 'data') # Get the path where results are stored. 
+SCRIPTS_DIR = os.path.join(ROOT_DIR, 'scripts') # Get the path where results are stored.
+
 EMBEDDINGS_DIR = '/central/groups/fischergroup/prichter/gtdb/embeddings'
 
 # Count queries are kind of slow, so just storing the table sizes as variables. 
 PROTEINS_TABLE_SIZE = 200505361
 ANNOTATIONS_KEGG_TABLE_SIZE = 98265928
-
-# Fields to include along with the predictions:
-#   sec_trna_count (metadata table)
-#   stop_codon (proteins table)
 
 # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8315937/
 #   seld_copy_num (annotations_kegg table) K01008

@@ -2,8 +2,15 @@ from selenobot.classifiers import *
 from selenobot.datasets import * 
 import subprocess
 import argparse
-from selenobot.utils import DATA_DIR, MODELS_DIR, ROOT_DIR
 import os
+
+# Define some important directories...
+ROOT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
+RESULTS_DIR = os.path.join(ROOT_DIR, 'results') # Get the path where results are stored.
+MODELS_DIR = os.path.join(ROOT_DIR, 'models')
+DATA_DIR = os.path.join(ROOT_DIR, 'data') # Get the path where results are stored. 
+SCRIPTS_DIR = os.path.join(ROOT_DIR, 'scripts') # Get the path where results are stored.
+
 
 # sbatch --time 10:00:00 --mem 100GB --gres gpu:1 --partition gpu --wrap "python train.py"
 # srun --time 10:00:00 --mem 100GB --gres gpu:1 --partition gpu python train.py

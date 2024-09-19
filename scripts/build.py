@@ -11,28 +11,7 @@ import logging
 
 CDHIT = '/home/prichter/cd-hit-v4.8.1-2019-0228/cd-hit' # Path to the CD-HIT command.import logging
 
-# Set up a log file for the set-up process. Also write stuff to terminal. 
-logging.basicConfig(filename='/home/prichter/Documents/selenobot/build.log', level=logging.INFO, force=True, format='%(message)s')
 
-
-def download_swissprot(filename:str='sprot.fasta.tar.gz') -> NoReturn:
-    '''Downloads SwissProt release 2023_03 from UniProt.'''
-    # Only proceed with download if none of these files are present. 
-    check_files = [filename, filename.replace('.tar.gz', ''), ]
-    if np.all([f not in os.listdir(DATA_DIR) for f in check_files]):
-        logging.info(f'Downloading SwissProt sequences to {filename}.')
-        path = os.path.join(DATA_DIR, filename)
-        url = 'https://ftp.uniprot.org/pub/databases/uniprot/previous_releases/release-2023_03/knowledgebase/uniprot_sprot-only2023_03.tar.gz'
-        wget.download(url, path)
-
-
-def download_selenoproteins(filename:str='sec.fasta') -> NoReturn:
-    '''Downloads all known selenoproteins from UniProt, as of August 2023.'''
-    if not (filename in os.listdir(DATA_DIR)):
-        logging.info(f'Downloading selenoprotein sequences to {filename}.')
-        path = os.path.join(DATA_DIR, filename)
-        url = 'https://rest.uniprot.org/uniprotkb/stream?format=fasta&query=%28%28ft_non_std%3Aselenocysteine%29+AND+%28date_created%3A%5B*+TO+2023-08-11%5D%29%29'
-        wget.download(url, path)
 
 
 def download_embeddings(filename:str='embeddings.csv'):
@@ -54,27 +33,27 @@ def download_data() -> NoReturn:
     subprocess.run(f"mv {os.path.join(DATA_DIR, 'uniprot_sprot.fasta')} {os.path.join(DATA_DIR, 'sprot.fasta')}", shell=True, check=True)
 
 
-    # Modify the format of the FASTA file to standardize reading and writing from FASTA files.
-    for filename in ['sprot.fasta', 'sec.fasta']:
-        path = os.path.join(DATA_DIR, filename)
-        fasta = ''
-        with open(path, 'r') as f:
-            lines = f.readlines()
-        for line in lines:
-            if '>' in line: # This symbol marks the beginning of a header file.
-                id_ = re.search('\|([\w\d_]+)\|', line).group(1)
-                fasta += f'>id={id_}\n'
-            else:
-                fasta += line
-        with open(path, 'w') as f:
-            f.write(fasta) # This will overwrite the original file. 
+    # # Modify the format of the FASTA file to standardize reading and writing from FASTA files.
+    # for filename in ['sprot.fasta', 'sec.fasta']:
+    #     path = os.path.join(DATA_DIR, filename)
+    #     fasta = ''
+    #     with open(path, 'r') as f:
+    #         lines = f.readlines()
+    #     for line in lines:
+    #         if '>' in line: # This symbol marks the beginning of a header file.
+    #             id_ = re.search('\|([\w\d_]+)\|', line).group(1)
+    #             fasta += f'>id={id_}\n'
+    #         else:
+    #             fasta += line
+    #     with open(path, 'w') as f:
+    #         f.write(fasta) # This will overwrite the original file. 
     
-    # Remove known selenoproteins from the SwissProt file, so there is no data leakage. 
-    sprot_df = dataframe_from_fasta(os.path.join(DATA_DIR, 'sprot.fasta'))
-    sec_idxs = sprot_df.seq.str.contains('U')
-    logging.info(f'\tNumber of selenoproteins in downloaded SwissProt data: {np.sum(sec_idxs.values)}')
-    logging.info(f'\t{len(sprot_df) - len(sprot_df[~sec_idxs])} selenoproteins removed from sprot.fasta.')
-    dataframe_to_fasta(sprot_df[~sec_idxs], os.path.join(DATA_DIR, 'sprot.fasta')) # Overwrite the original FASTA file. 
+    # # Remove known selenoproteins from the SwissProt file, so there is no data leakage. 
+    # sprot_df = dataframe_from_fasta(os.path.join(DATA_DIR, 'sprot.fasta'))
+    # sec_idxs = sprot_df.seq.str.contains('U')
+    # logging.info(f'\tNumber of selenoproteins in downloaded SwissProt data: {np.sum(sec_idxs.values)}')
+    # logging.info(f'\t{len(sprot_df) - len(sprot_df[~sec_idxs])} selenoproteins removed from sprot.fasta.')
+    # dataframe_to_fasta(sprot_df[~sec_idxs], os.path.join(DATA_DIR, 'sprot.fasta')) # Overwrite the original FASTA file. 
 
 
 def truncate_selenoproteins(filename:str='sec.fasta') -> NoReturn:
