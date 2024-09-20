@@ -34,7 +34,7 @@ def cluster(path:str, n:int=5, c:float=0.8, l:int=5) -> NoReturn:
     name, ext = os.path.splitext(filename)
 
     # Run the CD-HIT command with the specified cluster parameters. 
-    # CD-HIT can be installed using conda. 
+    # CD-HIT can be installed using conda. conda install bioconda::cd-hit
     subprocess.run(f'cd-hit -i {path} -o {os.path.join(directory, name)} -n {n} -c {c} -l {l}', shell=True, check=True, stdout=subprocess.DEVNULL)
 
     return os.path.join(directory, name + '.clstr')
@@ -72,9 +72,9 @@ if __name__ == '__main__':
 
     if (not os.path.exists(os.path.join(args.data_dir, 'uniprot.fa'))) or args.overwrite:
         # There are duplicates here, as there were multiple accessions for the same protein. 
-        sec_df = pd.read_csv(os.path.join(args.data_dir, 'uniprot_sec.csv'), nrows=1000).drop_duplicates('name', keep='first')
+        sec_df = pd.read_csv(os.path.join(args.data_dir, 'uniprot_sec.csv')).drop_duplicates('name', keep='first')
         print(f'Loaded data from {os.path.join(args.data_dir, 'uniprot_sec.csv')}')
-        sprot_df = pd.read_csv(os.path.join(args.data_dir, 'uniprot_sprot.csv'), nrows=1000).drop_duplicates('name', keep='first')
+        sprot_df = pd.read_csv(os.path.join(args.data_dir, 'uniprot_sprot.csv')).drop_duplicates('name', keep='first')
         print(f'Loaded data from {os.path.join(args.data_dir, 'uniprot_sprot.csv')}')
 
         if args.bacteria_only:
