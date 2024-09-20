@@ -85,8 +85,6 @@ class Dataset(torch.utils.data.Dataset):
         return item
 
 
-
-
 def get_dataloader(dataset:Dataset, batch_size:int=16, balance_batches:bool=False) -> torch.utils.data.DataLoader:
 
     if balance_batches:

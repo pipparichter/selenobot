@@ -156,7 +156,7 @@ class PlmEmbedder():
                 outputs = self.model(**inputs)
                 return outputs
         except RuntimeError:
-            print('embedders.PlmEmbedder.embed_batch: RuntimeError during embedding. Try lowering batch size.')
+            print('PlmEmbedder.embed_batch: RuntimeError during embedding. Try lowering batch size.')
             return None
 
 

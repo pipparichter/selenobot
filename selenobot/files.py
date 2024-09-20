@@ -148,16 +148,16 @@ class EmbeddingsFile(File):
         '''Josh replaced all the periods in the gene IDs with underscores, for some reason, so need to get them back into 
         the normal form...'''
         # The keys in the data are the entire Prodigal header string, so need to first get the gene ID out. 
-        id = id.split('#')[0].strip()
-        if id.count('_') > 2:
+        id_ = id_.split('#')[0].strip()
+        if id_.count('_') > 2:
             # If there are more than two underscores, then there is an underscore in the main part of the gene ID. 
             # In this case, we want to replace the second underscore. 
-            idx = id.find('_') # Get the first occurrence of the underscore. 
-            first_part = id[:idx + 1]
-            second_part = id[idx + 1:].replace('_', '.', 1) # Replace the underscore in the second part of the ID. 
+            idx = id_.find('_') # Get the first occurrence of the underscore. 
+            first_part = id_[:idx + 1]
+            second_part = id_[idx + 1:].replace('_', '.', 1) # Replace the underscore in the second part of the ID. 
             return first_part + second_part
         else:
-            return id.replace('_', '.', 1)
+            return id_.replace('_', '.', 1)
 
 
     def __init__(self, path:str):
@@ -188,7 +188,6 @@ class EmbeddingsFile(File):
         else:
             raise Exception(f'EmbeddingsFile.__init__: Invalid file type {self.file_type}.')
         
-
     def keys(self):
         return self.ids
     
