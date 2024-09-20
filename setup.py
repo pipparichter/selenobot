@@ -1,8 +1,10 @@
 import setuptools
 import os
 
-modules = ['selenobot.' + f.replace('.py', '') for f in os.listdir('./selenobot')]
-scripts = ['selenobot.' + f.replace('.py', '') for f in os.listdir('./scripts')]
+def get_requirements(path:str=os.path.join(os.path.dirname(os.path.realpath(__file__)), 'requirements.txt')):
+    with open(path) as f:
+        requirements = f.read().splitlines()
+    return requirements
 
 setuptools.setup(
     name='selenobot',
@@ -11,4 +13,5 @@ setuptools.setup(
     url='https://github.com/pipparichter/selenobot',
     author='Philippa Richter',
     author_email='prichter@caltech.edu',
-    packages=['selenobot'])
+    packages=['selenobot'], 
+    install_requires=get_requirements())
