@@ -1,3 +1,6 @@
+import wget 
+import gunzip
+
 def download_swissprot(path:str) -> NoReturn:
     '''Downloads the current release of SwissProt from the UniProt FTP site.'''
     url = 'https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz'

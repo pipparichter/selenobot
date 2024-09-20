@@ -4,8 +4,13 @@ from typing import Dict, List, NoReturn
 import pandas as pd 
 import numpy as np
 import h5py 
-from bs4 import BeautifulSoup, SoupStrainer
+# from bs4 import BeautifulSoup, SoupStrainer
+from lxml import etree
 from tqdm import tqdm
+from Bio import SeqIO
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+
 
 def get_converter(dtype):
     '''Function for getting type converters to make things easier when reading in the metadata files.'''
@@ -37,110 +42,123 @@ class File():
         # self.data = None # This will be populated with a DataFrame in child classes. 
         self.genome_id = None # This will be populated with the genome ID extracted from the filename for everything but the MetadataFile class.
 
-    def dataframe(self):
-        return self.data
 
 
-class ClstrFile(File):
+class CdhitClstrFile(File):
 
     def __init__(self, path:str):
+        '''
+        An example cluster entry is given below:
+        >Cluster 4
+        0	6aa, >A0A2E7JSV1[1]... at 83.33%
+        1	6aa, >A0A6B1IEQ5[1]... at 83.33%
+        2	6aa, >A0A6L7QK86[1]... at 83.33%
+        3	6aa, >A0A6L7QK86[1]... *
+        '''
 
-        with open(path, 'r') as f:
-            self.content = f.read()
+        with open(path, 'r') as f:        
+            content = f.read()
 
-    def clusters(self):
         # The start of each new cluster is marked with a line like ">Cluster [num]"
-        return re.split(r'^>.*', self.content, flags=re.MULTILINE)
+        content = re.split(r'^>.*', content, flags=re.MULTILINE)
+        self.ids, self.clusters, self.similarities = [], [], []
+        for i, cluster in enumerate(content):
+            entries = [entry for entry in cluster.split('\n') if (entry != '')] # Get all entries in the cluster. 
+            ids = [re.search(r'>([\w\d_\[\]]+)', entry).group(1).strip() for entry in entries]
+            # similarities = [None if ('*' in entry) else re.search(r"\.\.\. at (\d+\.\d+)\%", entry).group(1).strip() for entry in entries]
+            self.ids += ids
+            # self.similarities += similarities
+            self.clusters += [i] * len(ids) 
 
-    def dataframe(self) -> pd.DataFrame:
+    def to_df(self) -> pd.DataFrame:
         '''Convert a ClstrFile to a pandas DataFrame.'''
-        df = {'gene_id':[], 'cluster':[]}
-        # Split on the newline. 
-        for i, cluster in enumerate(self.clusters()):
-            pattern = r'>gene_id=([\w\d_\[\]]+)' # Pattern to extract gene ID from line. 
-            gene_ids = [re.search(pattern, x).group(1).strip() for x in cluster.split('\n') if x != '']
-            df['gene_id'] += gene_ids
-            df['cluster'] += [i] * len(gene_ids)
-
-        df = pd.DataFrame(df) # .set_index('id')
+        df = pd.DataFrame({'id':self.ids, 'cluster':self.clusters}) # , 'similarity':self.similarities}) # .set_index('id')
         df.cluster = df.cluster.astype(int) # This will speed up grouping clusters later on. 
-        return df
+        df.similarity = df.cluster.astype(float) # This will speed up grouping clusters later on. 
+        return df.set_index('id')
 
 
 # TODO: Should probably use BioPython for this. Was there a reason I didn't?
 class FastaFile(File):
 
-    def __init__(self, path:str, content:str=None, genome_id:str=None):
-        '''Initialize a FastaFile object.
-
-        :param path: The path to the FASTA file. 
-        :param content: Provides the option of initializing a FastaFile directly from file contents. 
-        :param genome_id: Provides the option of specifying the genome ID if a file is initialized from contents.'''
-          
+    def __init__(self, path:str=None, seqs:List[str]=None, ids:List[str]=None, descriptions:List[str]=None):
+        '''Initialize a FastaFile object.'''
         super().__init__(path) 
 
-        self.n_entries = None
-        if path is not None:
-            with open(path, 'r') as f:
-                self.content = f.read()
-            # self.genome_id = re.search(r'GC[AF]_\d{9}\.\d{1}', self.file_name).group(0)
+        if (path is not None):
+            f = open(path, 'r')
+            self.seqs, self.ids, self.descriptions = [], [], []
+            for record in SeqIO.parse(path, 'fasta'):
+                self.ids.append(record.id)
+                self.descriptions.append(record.description.replace(record.id, '').strip())
+                self.seqs.append(str(record.seq))
+            f.close()
         else:
-            self.content = content
-        self.genome_id = genome_id
-
-
-    def parse_header(self, header:str) -> dict:
-        return {'id':[h.replace('>', '') for h in headers]}
-
-    def headers(self):
-        '''Extract all sequence headers stored in a FASTA file.'''
-        return list(re.findall(r'^>.*', self.content, re.MULTILINE))
-
-    def sequences(self):
-        '''Extract all  sequences stored in a FASTA file.'''
-        seqs = re.split(r'^>.*', self.content, flags=re.MULTILINE)[1:]
-        # Strip all of the newline characters from the amino acid sequences. 
-        seqs = [s.replace('\n', '') for s in seqs]
-
-        return seqs
+            self.seqs, self.ids, self.descriptions = seqs, ids, descriptions
 
     def __len__(self):
-        # Avoid re-computing the number of entries each time. 
-        if self.n_entries is None:
-            self.n_entries = len(self.headers())
-        return self.n_entries
+        return len(self.seqs)
 
-    def dataframe(self) -> pd.DataFrame:
+    @classmethod
+    def from_df(cls, df:pd.DataFrame, include_cols:List[str]=None):
+        ids = df.index.values.tolist()
+        seqs = df.seq.values.tolist()
+
+        include_cols = df.columns if (include_cols is None) else include_cols
+        cols = [col for col in df.columns if (col != 'seq') and (col in include_cols)]
+        descriptions = []
+        for row in df[include_cols].itertuples():
+            print(row)
+            description = ';'.join([f'{col}={getattr(row, col, None)}' for col in include_cols if (getattr(row, col, None) is not None)])
+            descriptions.append(description)
+        return cls(ids=ids, seqs=seqs, descriptions=descriptions)
+            
+    def to_df(self, parse_description:bool=True) -> pd.DataFrame:
         '''Load a FASTA file in as a pandas DataFrame. If the FASTA file is for a particular genome, then 
         add the genome ID as an additional column.'''
-        df = [self.parse_header(header) for header in self.headers()]
-        for row, seq in zip(df, self.sequences()):
-            row['seq'] = seq
-        return pd.DataFrame(df)
 
-    def write(self, path:str):
+        def parse(description:str) -> dict:
+            '''Descriptions should be of the form >col=val;col=val. '''
+            # Headers are of the form >col=value;...;col=value
+            return dict([entry.split('=') for entry in description.split(';')])
+        
+        df = []
+        for id_, seq, description in zip(self.ids, self.seqs, self.descriptions):
+            row = {'description':description} if (not parse_description) else parse(description)
+            row['id'] = id_
+            row['seq'] = seq 
+            df.append(row)
 
-        with open(path, 'w') as f:
-            f.write(self.content)
+        return pd.DataFrame(df).set_index('id')
+
+    def write(self, path:str) -> NoReturn:
+        f = open(path, 'w')
+        records = []
+        for id_, seq, description in zip(self.ids, self.seqs, self.descriptions):
+            record = SeqRecord(Seq(seq), id=id_, description=description)
+            records.append(record)
+        SeqIO.write(records, f, 'fasta')
+        f.close()
+
 
 
 class EmbeddingsFile(File):
     '''Handles reading files containing Prot-T5 embeddings, which are stored on HPC as HDF files'''
     @staticmethod
-    def fix_gene_id(gene_id:str) -> str:
+    def fix_id(id:str) -> str:
         '''Josh replaced all the periods in the gene IDs with underscores, for some reason, so need to get them back into 
         the normal form...'''
         # The keys in the data are the entire Prodigal header string, so need to first get the gene ID out. 
-        gene_id = gene_id.split('#')[0].strip()
-        if gene_id.count('_') > 2:
+        id = id.split('#')[0].strip()
+        if id.count('_') > 2:
             # If there are more than two underscores, then there is an underscore in the main part of the gene ID. 
             # In this case, we want to replace the second underscore. 
-            idx = gene_id.find('_') # Get the first occurrence of the underscore. 
-            first_part = gene_id[:idx + 1]
-            second_part = gene_id[idx + 1:].replace('_', '.', 1) # Replace the underscore in the second part of the ID. 
+            idx = id.find('_') # Get the first occurrence of the underscore. 
+            first_part = id[:idx + 1]
+            second_part = id[idx + 1:].replace('_', '.', 1) # Replace the underscore in the second part of the ID. 
             return first_part + second_part
         else:
-            return gene_id.replace('_', '.', 1)
+            return id.replace('_', '.', 1)
 
 
     def __init__(self, path:str):
@@ -155,8 +173,8 @@ class EmbeddingsFile(File):
         if self.file_type == '.h5':
             data = h5py.File(path, 'r')
             # NOTE: Gene IDs have trailing whitespace, so make sure to remove. 
-            # self.gene_ids = [key.split('#')[0].replace('_', '.', 1).strip() for key in data.keys()]
-            self.gene_ids = [EmbeddingsFile.fix_gene_id(key) for key in data.keys()]
+            # self.ids = [key.split('#')[0].replace('_', '.', 1).strip() for key in data.keys()]
+            self.ids = [EmbeddingsFile.fix_id(key) for key in data.keys()]
             # Read in the embeddings from the H5 file, one at a time. Each embedding is stored under a separate key. 
             embeddings = []
             for key in data.keys():
@@ -173,7 +191,7 @@ class EmbeddingsFile(File):
         
 
     def keys(self):
-        return self.gene_ids
+        return self.ids
     
     def values(self):
         return list(self.embeddings)
@@ -182,137 +200,111 @@ class EmbeddingsFile(File):
         return zip(self.keys(), self.values())
 
     def __len__(self):
-        return len(self.gene_ids)
+        return len(self.ids)
 
-    def dataframe(self):
-
+    def to_df(self):
         df = pd.DataFrame(self.embeddings)
-        df['gene_id'] = self.gene_ids
+        df['id'] = self.ids
         return df
 
 
 class NcbiXmlFile(File):
     '''These files are obtained from the NCBI FTP site, and contain metadata information for sequences in SwissProt (files are also available
-    for TREMBL entries, but I did not download these).
-    
-    There is currently no way to get nucleotide sequences or genomes.'''
+    for TREMBL entries, but I did not download these).'''
     # tags = ['taxon', 'accession', 'entry', 'organism', 'sequence']
     # tags = ['accession', 'organism', 'sequence']
 
     @staticmethod
-    def get_taxonomy(organism) -> Dict[str, str]:
+    def find(namespace:str, elem, name:str, attrs:Dict[str, str]=None):
+        xpath = f'.//{namespace}{name}'
+        if attrs is not None:
+            for attr, value in attrs.items():
+                xpath += f'[@{attr}=\'{value}\']'
+        return elem.find(xpath)
+
+    @staticmethod
+    def findall(namespace:str, elem, name:str, attrs:Dict[str, str]=None):
+        xpath = f'.//{namespace}{name}'
+        if attrs is not None:
+            for attr, value in attrs.items():
+                xpath += f'[@{attr}=\'{value}\']'
+        return elem.findall(xpath)
+
+    @staticmethod
+    def get_tag(elem) -> str:
+        namespace, tag = elem.tag.split('}') # Remove the namespace from the tag. 
+        namespace = namespace + '}'
+        return namespace, tag 
+
+    @staticmethod
+    def get_taxonomy(namespace:str, entry) -> Dict[str, str]:
         '''Extract the taxonomy information from the organism tag group.'''
         levels = ['domain', 'kingdom', 'phylum', 'class', 'order', 'family', 'genus']
-        taxonomy = {level:tag.text for tag, level in zip(organism.find_all('taxon'), levels)}
-        taxonomy['species'] = organism.find('name').text
-        taxonomy['ncbi_taxonomy_id'] = organism.find(name='dbReference', attrs={'type':'NCBI Taxonomy'})['id'] # , attrs={'type':'NCBI Taxonomy'})[0].id
+        taxonomy = {level:taxon.text for taxon, level in zip(NcbiXmlFile.findall(namespace, entry, 'taxon'), levels)}
+        taxonomy['species'] = NcbiXmlFile.find(namespace, entry, 'name').text
+        taxonomy['ncbi_taxonomy_id'] = NcbiXmlFile.find(namespace, entry, 'dbReference', attrs={'type':'NCBI Taxonomy'}).attrib['id'] # , attrs={'type':'NCBI Taxonomy'})[0].id
         return taxonomy
 
     @staticmethod
-    def get_refseq(entry) -> Dict[str, str]:
+    def get_refseq(namespace:str, entry) -> Dict[str, str]:
         '''Get references to RefSeq database in case I want to access the nucleotide sequence later on.'''
         refseq = dict()
-        refseq_entry = entry.find('dbReference', attrs={'type':'RefSeq'}) # Can we assume there is always a RefSeq entry? No. 
-        if refseq_entry:
-            refseq['refseq_protein_id'] = refseq_entry['id']
-            refseq['refseq_nucleotide_id'] = refseq_entry.find('property', attrs={'type':'nucleotide sequence ID'})['value']
+        refseq_entry = NcbiXmlFile.find(namespace, entry, 'dbReference', attrs={'type':'RefSeq'}) # Can we assume there is always a RefSeq entry? No. 
+        if (refseq_entry is not None):
+            refseq['refseq_protein_id'] = refseq_entry.attrib['id']
+            refseq['refseq_nucleotide_id'] = NcbiXmlFile.find(namespace, refseq_entry, 'property', attrs={'type':'nucleotide sequence ID'}).attrib['value']
         else:
             refseq['refseq_protein_id'] = None
             refseq['refseq_nucleotide_id'] = None
         return refseq
             
-    def __init__(self, path:str, load_seqs:bool=True):
+    def __init__(self, path:str, load_seqs:bool=True, chunk_size:int=100):
         super().__init__(path)
 
-        with open(path, 'r') as f:
-            content = f.read()
+        pbar = tqdm(etree.iterparse(path, events=('start', 'end')), desc='NcbiXmlFile.__init__: Parsing NCBI XML file...')
+        entry, df = None, []
+        for event, elem in pbar:
+            namespace, tag = NcbiXmlFile.get_tag(elem)
+            if (tag == 'entry') and (event == 'start'):
+                entry = elem
+            if (tag == 'entry') and (event == 'end'):
+                accessions = [accession.text for accession in entry.findall(namespace + 'accession')]
+                row = NcbiXmlFile.get_taxonomy(namespace, entry) 
+                row.update(NcbiXmlFile.get_refseq(namespace, entry))
 
-        print(f'NcbiXmlFile.__init__: Read in NCBI XML file at path {path}.')
-        # strainer = SoupStrainer([tag for tag in NcbiXmlFile.tags if tag != 'sequence']) if (not load_seqs) else SoupStrainer(NcbiXmlFile.tags) 
-        soup = BeautifulSoup(content, features='xml') # , parse_only=strainer)
+                if load_seqs:
+                    row['seq'] = NcbiXmlFile.findall(namespace, entry, 'sequence')[-1].text
+                row['name'] = NcbiXmlFile.find(namespace, entry, 'name').text 
+                
+                for accession in accessions:
+                    row['id'] = accession 
+                    df.append(row.copy())
+                elem.clear()
+                pbar.update(len(accessions))
+                pbar.set_description(f'NcbiXmlFile.__init__: Parsing NCBI XML file, row {len(df)}...')
 
-        rows = []
-        for entry in tqdm(soup.find_all('entry'), desc='NcbiXmlFile.__init__: Parsing NCBI XML file...'):
-            accessions = [tag.text for tag in entry.find_all('accession')] # There may be multiple accessions for the same protein. 
-            protein_name = entry.find('name').text # ... But there should only be one name. The protein name is the first "name" tag. 
-            
-            taxonomy = NcbiXmlFile.get_taxonomy(entry.find('organism'))
-            refseq = NcbiXmlFile.get_refseq(entry)
+        self.df = pd.DataFrame(df).set_index('id')
 
-            if load_seqs:
-                # Grab the last sequence encountered, which is the latest version, and will actually have the amino acids. 
-                seq = entry.find_all('sequence')[-1].text
 
-            # assert len(taxonomy) == len(levels), f'NcbiXmlFile.__init__: There doesn\'t seem to be enough taxonomy data for organism {species}.'
-            for accession in accessions:
-                row = taxonomy.copy()
-                row.update(refseq)
-                row['seq'] = seq
-                row['name'] = protein_name
-                row['gene_id'] = accession
-                # row['gene_name'] = gene_name
-                rows.append(row)
-
-        self.df = pd.DataFrame(rows).set_index('gene_id')
-
-    def dataframe(self):
+    def to_df(self):
         return self.df
 
-
-class ProteinsFile(FastaFile):
-
-    def __init__(self, path:str, content:str=None, genome_id:str=None):
-
-        super().__init__(path, content=content, genome_id=genome_id)
-            
-    def parse_header(self, header:str) -> dict:
-        '''header strings are of the form >col=val;col=val..., which is the format produced by the 
-        dataframe_to_fasta function.
-        '''
-        # Headers are of the form >col=value;...;col=value
-        header = header.replace('>', '') # Remove the header marker. 
-        return dict([entry.split('=') for entry in header.split(';')])
+    def fasta(self, path:str) -> NoReturn:
+        pass
 
 
-    @staticmethod
-    def dataframe_to_fasta(df:pd.DataFrame, textwidth:int=80) -> str:
-        '''Convert a pandas DataFrame containing FASTA data to a FASTA file format.'''
-        if df.index.name in ['gene_id', 'id']:
-            df[df.index.name] = df.index
-
-        # Include all non-sequence fields in the FASTA header. 
-        header_fields = [col for col in df.columns if col != 'seq']
-
-        fasta = ''
-        for row in df.itertuples():
-            header = [f'{field}={getattr(row, field)}' for field in header_fields]
-            fasta += '>' + ';'.join(header) + '\n' # Add the header to the FASTA file. 
-
-            # Split the sequence up into substrings of length textwidth.
-            n = len(row.seq)
-            seq = [row.seq[i:min(n, i + textwidth)] for i in range(0, n, textwidth)]
-            assert len(''.join(seq)) == n, 'MyProteinsFile.dataframe_to_fasta: Part of the sequence was lost when splitting into lines.'
-            fasta += '\n'.join(seq) + '\n'
-
-        return fasta
-
-    @classmethod
-    def from_dataframe(cls, df:pd.DataFrame, genome_id:str=None):
-
-        content = MyProteinsFile.dataframe_to_fasta(df)
-        return cls(None, content=content, genome_id=genome_id)
 
 
 # class NcbiTsvFile(File):
 #     '''These files are obtained through the UniProt web interface, either via the API link or directly downloading from the browser.'''
-#     fields = {'Entry':'gene_id', 'Reviewed':'reviewed', 'Entry Name':'name', 'Organism':'organism', 'Date of creation':'date', 'Entry version':'version', 'Taxonomic lineage':'taxonomy', 'RefSeq':'refseq_id', 'KEGG':'kegg_id'}
+#     fields = {'Entry':'id', 'Reviewed':'reviewed', 'Entry Name':'name', 'Organism':'organism', 'Date of creation':'date', 'Entry version':'version', 'Taxonomic lineage':'taxonomy', 'RefSeq':'refseq_id', 'KEGG':'kegg_id'}
     
 #     @staticmethod
 #     def parse_taxonomy(df:pd.Series) -> pd.DataFrame:
 #         levels = ['superkingdom', 'kingdom', 'phylum', 'class', 'order', 'family', 'genus', 'species']
 #         taxonomy_df = []
 #         for entry in df.itertuples():
-#             row, taxonomy = {'gene_id':entry.gene_id}, entry.taxonomy
+#             row, taxonomy = {'id':entry.id}, entry.taxonomy
 #             for level in range(levels):
 #                 if f'({level})' in taxonomy:
 #                     row[level] = re.match(f', ([A-Za-z0-9\\w]+) \\({level}\\),', entry).group(1)
@@ -320,7 +312,7 @@ class ProteinsFile(FastaFile):
 #                     row[level] = None
 #             taxonomy_df.append(row)
 #         taxonomy_df = pd.DataFrame(taxonomy_df).rename(columns={'superkingdom':'domain'})
-#         df = df.drop(columns=['taxonomy']).merge(taxonomy_df, how='left', left_on='gene_id', right_on='gene_id')
+#         df = df.drop(columns=['taxonomy']).merge(taxonomy_df, how='left', left_on='id', right_on='id')
 #         return df
 
 #     def __init__(self, path:str):
@@ -330,9 +322,9 @@ class ProteinsFile(FastaFile):
 
 #         if 'taxonomy' in df.columns:
 #             df = NcbiTsvFile.parse_taxonomy(df)
-#         self.df = df.set_index('gene_id')
+#         self.df = df.set_index('id')
 
-#     def dataframe(self):
+#     def to_df()(self):
 #         return self.df
 
 
