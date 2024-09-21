@@ -136,7 +136,7 @@ class PlmEmbedder():
 
         # Separate the IDs and embeddings in the list of tuples. 
         ids = [i for i, _ in embs]
-        embs = [torch.unsqueeze(e, 0) for _, e in embeddings]
+        embs = [torch.unsqueeze(e, 0) for _, e in embs]
         embs = torch.cat(embs).float()
         return embs.cpu().numpy(), np.array(ids)
 

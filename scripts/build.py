@@ -104,6 +104,8 @@ if __name__ == '__main__':
     print(f'Added cluster labels to the DataFrame, {len(df)} total sequences.')
 
     train_df, test_df, val_df = split(df)
+    print(train_df.columns)
+    print(train_df)
 
     for filename, df in zip(['train.h5', 'test.h5', 'val.h5'], [train_df, test_df, val_df]):
         embed(df, path=os.path.join(args.data_dir, filename))
