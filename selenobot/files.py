@@ -108,7 +108,9 @@ class FastaFile(File):
         cols = [col for col in df.columns if (col != 'seq') and (col in include_cols)]
         descriptions = []
         for row in df[include_cols].itertuples():
-            description = ';'.join([f'{col}={getattr(row, col, None)}' for col in include_cols if (getattr(row, col, None) is not None)])
+            # Sometimes there are equal signs in the descriptions, which mess everything up... 
+            description = {col:getattr(row, col).replace('=', '').strip() for col in include_cols if (getattr(row, col, None) is not None)}
+            description = ';'.join([f'{col}={value}' for col, value in description.items()])
             descriptions.append(description)
         return cls(ids=ids, seqs=seqs, descriptions=descriptions)
             
