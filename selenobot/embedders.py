@@ -19,7 +19,7 @@ class LengthEmbedder():
         super(LengthEmbedder, self).__init__()
         self.type = 'len'
 
-    def __call__(self, seq:List[str], ids:List[str]):
+    def __call__(self, seqs:List[str], ids:List[str]):
         '''Takes a list of amino acid sequences, and produces a PyTorch tensor containing the lengths
         of each sequence.'''
         lengths = [[len(seq)] for seq in seqs]
