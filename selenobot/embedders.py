@@ -180,11 +180,3 @@ def embed(df:pd.DataFrame, path:str=None):
     # df.to_csv(path)
 
 
-
-
-
-
-
-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
-
-
