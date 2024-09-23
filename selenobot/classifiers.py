@@ -21,7 +21,6 @@ import pickle
 from sklearn.preprocessing import StandardScaler
 
 # warnings.simplefilter('ignore')
-DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 class Unpickler(pickle.Unpickler):
     '''https://github.com/pytorch/pytorch/issues/16797'''
@@ -109,7 +108,6 @@ class Classifier(torch.nn.Module):
         torch.nn.init.kaiming_normal_(self.classifier[0].weight)
         torch.nn.init.xavier_normal_(self.classifier[2].weight)
 
-        self.to(DEVICE)
         # self.loss_func = torch.nn.functional.binary_cross_entropy_with_logits
         self.loss_func = WeightedBCELoss()
 
@@ -137,7 +135,7 @@ class Classifier(torch.nn.Module):
         '''Evaluate the Classifier on the data in the input Dataset.'''   
         self.eval() # Put the model in evaluation mode. This changes the forward behavior of the model (e.g. disables dropout).
         if self.scaler is not None:
-            dataset.apply_scaler(self.scaler, device=DEVICE)
+            dataset.scale(self.scaler)
         with torch.no_grad(): # Turn off gradient computation, which reduces memory usage. 
             outputs = self(dataset.embeddings) # Run a forward pass of the model. Batch to limit memory usage.
             # Apply sigmoid activation, which is usually applied as a part of the loss function. 
@@ -166,16 +164,18 @@ class Classifier(torch.nn.Module):
         :param batch_size: The size of the batches to use for model training.
         '''
         self.train() # Put the model in train mode.
-        print(f'Classifier.fit: Training on device {DEVICE}.')
-        
-        if self.scaler is not None:
-            self.scaler.fit(train_dataset.embeddings) # Fit the scaler on the training dataset. 
-            train_dataset.apply_scaler(self.scaler, device=DEVICE)
-        if weighted_loss:
-            self.loss_func.fit(train_dataset) # Set the weights of the loss function. 
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        print(f'Classifier.fit: Training on device {device}.')
+        self.to(device)
+        assert val_dataset.device == device, f'Classifier.fit: Dataset is on device {val_dataset.device}, but expected {device}.'
+        assert train_dataset.device == device, f'Classifier.fit: Dataset is on device {train_dataset.device}, but expected {device}.'
 
-        train_dataset.to_device(DEVICE)
-        val_dataset.to_device(DEVICE)
+        if self.scaler is not None:
+            self.scaler.fit(train_dataset.embeddings.cpu().numpy()) # Fit the scaler on the training dataset. 
+            train_dataset.scale(self.scaler)
+            # val_dataset.scale(self.scaler)
+        if weighted_loss:
+            self.loss_func.fit(train_dataset) # Set the weights of the loss function.
 
         # NOTE: What does the epsilon parameter do?
         optimizer = torch.optim.Adam(self.parameters(), lr=lr, eps=1e-4 if self.half_precision else 1e-8)

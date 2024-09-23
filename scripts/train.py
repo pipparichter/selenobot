@@ -16,9 +16,9 @@ SCRIPTS_DIR = os.path.join(ROOT_DIR, 'scripts') # Get the path where results are
 # srun --time 10:00:00 --mem 100GB --gres gpu:1 --partition gpu python train.py
 
 # Set up a log file for the training process. Also write stuff to terminal. 
-TRAIN_PATH = os.path.join(DATA_DIR, 'train.csv')
-VAL_PATH = os.path.join(DATA_DIR, 'val.csv')
-TEST_PATH = os.path.join(DATA_DIR, 'test.csv')
+TRAIN_PATH = os.path.join(DATA_DIR, 'train.h5')
+VAL_PATH = os.path.join(DATA_DIR, 'val.h5')
+TEST_PATH = os.path.join(DATA_DIR, 'test.h5')
 
 if __name__ == '__main__':
 
@@ -26,30 +26,32 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', default=100, type=int, help='The number of epochs for which to train the model.')
     parser.add_argument('--lr', default=1e-8, type=float, help='The learning rate for training the model.')
     parser.add_argument('--batch-size', default=16, type=int, help='The size of batches used to train the model.')
-    parser.add_argument('--file-name', default='model.pkl', help='The path where the model training info will be saved.')
+    parser.add_argument('--feature-type', default='plm', type=str, help='The type of sequence representation to use when training the model.')
+    parser.add_argument('--model-name', default='model.pkl', help='The path where the model training info will be saved.')
     parser.add_argument('--hidden-dim', default=512, type=int, help='The number of nodes in the hidden layer of the model.')
-    parser.add_argument('--scale', default=True, type=bool, help='Whether or not to include a StandardScaler in the model.', action=argparse.BooleanOptionalAction)
-    parser.add_argument('--early-stopping', help='Whether or not to use the model weights which performed best on the validation set.', action=argparse.BooleanOptionalAction)
     parser.add_argument('--balance-batches', action='store_true')
-    parser.add_argument('--weighted-loss', action=argparse.BooleanOptionalAction)
+    # parser.add_argument('--early-stopping', help='Whether or not to use the model weights which performed best on the validation set.', action=argparse.BooleanOptionalAction)
     # parser.add_argument('--n-features', default=None, type=int)
+    # parser.add_argument('--scale', default=True, type=bool, help='Whether or not to include a StandardScaler in the model.', action=argparse.BooleanOptionalAction)
     # parser.add_argument('--half-precision', default=True, type=bool, help='Whether or not to use half-precision floats during model training.')
     args = parser.parse_args()
 
-    assert args.balance_batches ^ args.weighted_loss, 'Can\'t have both balanced batches and weighted loss.'
+    # assert args.balance_batches ^ args.weighted_loss, 'Can\'t have both balanced batches and weighted loss.'
+    weighted_loss = False if args.balance_batches else True
 
-    train_dataset = Dataset(pd.read_csv(TRAIN_PATH, index_col=0))
-    val_dataset = Dataset(pd.read_csv(VAL_PATH, index_col=0))
+
+    train_dataset = Dataset.from_hdf(TRAIN_PATH)
+    val_dataset = Dataset.from_hdf(VAL_PATH)
     print('Loaded training and validation datasets.')
 
     # print(f"Training model with scaling {'on' if args.scale else 'off'} for {args.epochs} with learning rate {args.lr}.") 
-    print(f"Training model with early stopping {'on' if args.early_stopping else 'off'} for {args.epochs} with learning rate {args.lr}.") 
-    model = Classifier(input_dim=train_dataset.shape()[-1], hidden_dim=args.hidden_dim, scale=args.scale)
+    print(f"Training model for {args.epochs} epochs with learning rate {args.lr}.") 
+    model = Classifier(input_dim=train_dataset.n_features, hidden_dim=args.hidden_dim, scale=True)
 
-    model.fit(train_dataset, val_dataset, batch_size=args.batch_size, epochs=args.epochs, lr=args.lr, early_stopping=args.early_stopping, weighted_loss=args.weighted_loss, balance_batches=args.balance_batches)
-    model.save(os.path.join(MODELS_DIR, args.file_name))
+    model.fit(train_dataset, val_dataset, batch_size=args.batch_size, epochs=args.epochs, lr=args.lr, weighted_loss=weighted_loss, balance_batches=args.balance_batches)
+    model.save(os.path.join(MODELS_DIR, args.model_name))
 
-    print(f'Model training complete. Model data saved to {os.path.join(MODELS_DIR, args.file_name)}')
+    print(f'Model training complete. Model data saved to {os.path.join(MODELS_DIR, args.model_name)}')
     print('Final training loss:', model.train_losses[-1])
     print('Best validation accuracy:', max(model.val_accs))
 
