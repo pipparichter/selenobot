@@ -75,8 +75,6 @@ class Classifier(torch.nn.Module):
     def __init__(self, 
         hidden_dim:int=512,
         input_dim:int=1024,
-        # bce_loss_weight:float=1,
-        random_seed:int=42,
         half_precision:bool=False, 
         scale:bool=True):
         '''
@@ -88,7 +86,6 @@ class Classifier(torch.nn.Module):
         '''
         # Initialize the torch Module
         super().__init__()
-        torch.manual_seed(random_seed)
 
         self.dtype = torch.float16 if half_precision else torch.float32
 
@@ -117,6 +114,8 @@ class Classifier(torch.nn.Module):
         self.lr = None 
         self.batch_size = None
         self.train_losses, self.val_accs = None, None
+
+        self.instances_seen_during_training = 0
         
         self.scaler = StandardScaler() if scale else None
 
@@ -201,6 +200,9 @@ class Classifier(torch.nn.Module):
                 optimizer.step()
                 optimizer.zero_grad()
                 pbar.update(1) # Update progress bar after each batch. 
+
+                # Keep track of the number of data points the model "sees" during training. 
+                self.instances_seen_during_training += batch_size
             
             train_losses.append(np.mean(train_loss))
             val_accs.append(balanced_accuracy_score(val_dataset.labels.cpu().numpy(), self.predict(val_dataset)))

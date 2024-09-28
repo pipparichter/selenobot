@@ -1,8 +1,13 @@
+
+from selenobot.utils import seed
+seed(42)
+
 from selenobot.classifiers import * 
 from selenobot.datasets import * 
 import subprocess
 import argparse
 import os
+
 
 # Define some important directories...
 ROOT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
@@ -10,7 +15,6 @@ RESULTS_DIR = os.path.join(ROOT_DIR, 'results') # Get the path where results are
 MODELS_DIR = os.path.join(ROOT_DIR, 'models')
 DATA_DIR = os.path.join(ROOT_DIR, 'data') # Get the path where results are stored. 
 SCRIPTS_DIR = os.path.join(ROOT_DIR, 'scripts') # Get the path where results are stored.
-
 
 # sbatch --time 10:00:00 --mem 100GB --gres gpu:1 --partition gpu --wrap "python train.py"
 # srun --time 10:00:00 --mem 100GB --gres gpu:1 --partition gpu python train.py
@@ -23,7 +27,7 @@ TEST_PATH = os.path.join(DATA_DIR, 'test.h5')
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--epochs', default=100, type=int, help='The number of epochs for which to train the model.')
+    parser.add_argument('--epochs', default=1000, type=int, help='The number of epochs for which to train the model.')
     parser.add_argument('--lr', default=1e-8, type=float, help='The learning rate for training the model.')
     parser.add_argument('--batch-size', default=16, type=int, help='The size of batches used to train the model.')
     parser.add_argument('--feature-type', default='plm', type=str, help='The type of sequence representation to use when training the model.')
@@ -38,7 +42,6 @@ if __name__ == '__main__':
 
     # assert args.balance_batches ^ args.weighted_loss, 'Can\'t have both balanced batches and weighted loss.'
     balance_batches = False if args.weighted_loss else True
-
 
     train_dataset = Dataset.from_hdf(TRAIN_PATH)
     val_dataset = Dataset.from_hdf(VAL_PATH)

@@ -12,6 +12,18 @@ import json
 from collections import OrderedDict
 import torch
 
+def seed(seed:int=42) -> None:
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    # When running on the CuDNN backend, two further options must be set
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    # # Set a fixed value for the hash seed (not sure what this does, so got rid of it)
+    # os.environ["PYTHONHASHSEED"] = str(seed)
+
+
 def to_numeric(n:str):
     '''Try to convert a string to a numerical data type. Used when 
     reading in header strings from files.'''
