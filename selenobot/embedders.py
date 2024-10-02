@@ -76,7 +76,7 @@ class PlmEmbedder():
         self.model.to(self.device) # Move model to GPU.
         self.model.eval() # Set model to evaluation model.
         # Should be a T5Tokenizer object. 
-        self.tokenizer = T5Tokenizer.from_pretrained(model_name, do_lower_case=False, legacy=True, cleanup_tokenization_spaces=False)
+        self.tokenizer = T5Tokenizer.from_pretrained(model_name, do_lower_case=False, legacy=True) #, cleanup_tokenization_spaces=False)
 
 
     def __call__(self, seqs:List[str], ids:List[str], max_aa_per_batch:int=10000, max_seq_per_batch:int=100, max_seq_length:int=1000):
