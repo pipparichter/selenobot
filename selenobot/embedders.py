@@ -150,7 +150,7 @@ class PlmEmbedder():
         batch = [' '.join(list(s)) for s in batch]
         # Should contain input_ids and attention_mask. Make sure everything's on the GPU. 
         # The tokenizer defaults mean that add_special_tokens=True and padding=True is equivalent to padding='longest'
-        inputs = {k:torch.tensor(v).to(self.device) for k, v in self.tokenizer(batch, padding=True, cleanup_tokenization_spaces=True).items()}
+        inputs = {k:torch.tensor(v).to(self.device) for k, v in self.tokenizer(batch, padding=True).items()} # , cleanup_tokenization_spaces=True).items()}
         try:
             with torch.no_grad():
                 outputs = self.model(**inputs)
