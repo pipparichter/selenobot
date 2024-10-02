@@ -258,7 +258,25 @@ class NcbiXmlFile(File):
             refseq['refseq_protein_id'] = None
             refseq['refseq_nucleotide_id'] = None
         return refseq
-            
+
+    @staticmethod
+    def get_non_terminal_residue(namespace:str, entry) -> Dict[str, str]:
+        '''If the entry passed into the function has a non-terminal residue(s), find the position(s) where it occurs; 
+        there can be two non-terminal residues, one at the start of the sequence, and one at the end.'''
+        # Figure out of the sequence is a fragment, i.e. if it has a non-terminal residue. 
+        non_terminal_residue_entries = NcbiXmlFile.findall(namespace, entry, 'feature', attrs={'type':'non-terminal residue'})
+        # assert len(non_terminal_residues) < 2, f'NcbiXmlFile.__init__: Found more than one ({len(non_terminal_residue)}) non-terminal residue, which is unexpected.'
+        if len(non_terminal_residue_entries) > 0:
+            positions = []
+            for non_terminal_residue_entry in non_terminal_residue_entries:
+                # Get the location of the non-terminal residue. 
+                position = NcbiXmlFile.find(namespace, non_terminal_residue_entry, 'position').attrib['position']
+                positions.append(position)
+            positions = ','.join(positions)
+        else:
+            positions = None
+        return {'non_terminal_residue':positions}
+                    
     def __init__(self, path:str, load_seqs:bool=True, chunk_size:int=100):
         super().__init__(path)
 
@@ -272,11 +290,13 @@ class NcbiXmlFile(File):
                 accessions = [accession.text for accession in entry.findall(namespace + 'accession')]
                 row = NcbiXmlFile.get_taxonomy(namespace, entry) 
                 row.update(NcbiXmlFile.get_refseq(namespace, entry))
+                row.update(NcbiXmlFile.get_non_terminal_residue(namespace, entry))
 
                 if load_seqs:
                     row['seq'] = NcbiXmlFile.findall(namespace, entry, 'sequence')[-1].text
                 row['name'] = NcbiXmlFile.find(namespace, entry, 'name').text 
-                
+
+
                 for accession in accessions:
                     row['id'] = accession 
                     df.append(row.copy())

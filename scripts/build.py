@@ -13,17 +13,38 @@ import warnings
 
 warnings.simplefilter('ignore')
 
+def clean(sprot_df:pd.DataFrame) -> pd.DataFrame:
+    '''Even amongst SwissProt-reviewed proteins, many sequences are incomplete (i.e. have a non-terminal residue feature). 
+    These should be removed from the dataset, so that only full-length proteins are considered positive cases.''' 
+    n = (~sprot_df.non_terminal_residue.isnull()).sum()
+    print(f'clean: Removing {n} fragment proteins from SwissProt. {len(sprot_df) - n} sequences remaining.') 
+    sprot_df = sprot_df[sprot_df.non_terminal_residue.isnull()]
+    return sprot_df
+
+
 def truncate(sec_df:pd.DataFrame) -> pd.DataFrame:
     '''Truncate the selenoproteins stored in the input file. This function assumes that all 
     sequences contained in the file contain selenocysteine, labeled as U.'''
+    # Want to remove all selenoproteins which are incomplete at the C-terminus; those 
+    # which are incomplete at the N-terminus are admissable because we are truncating anyway. 
+    n = 0 
+
     sec_df_truncated = []
     for row in tqdm(sec_df.to_dict(orient='records'), 'truncate: Truncating selenoproteins...'):
+
+        non_terminal_residue_positions = row['non_terminal_residue'].split(',') if (type(row['non_terminal_residue']) == str) else []
+        if '1' in non_terminal_residue_positions:
+            n += 1
+            continue
+
         row['id'] = row['id'] + '[1]' # Modify the row ID to contain a [1] label, indicating truncation at the first selenocysteine. 
         row['sec_index'] = row['seq'].index('U') # This will raise an exception if no U residue is found.
         row['sec_count'] = row['seq'].count('U') # Store the number of selenoproteins in the original sequence.
         row['trunc'] = len(row['seq']) - row['sec_index'] # Store the number of amino acid residues discarded.
         row['seq'] = row['seq'][:row['sec_index']] # Get the portion of the sequence prior to the U residue.
         sec_df_truncated.append(row)
+    
+    print(f'clean: Removing {n} fragment proteins from the selenoprotein dataset. {len(sec_df_truncated) - n} sequences remaining.')    
     return pd.DataFrame(sec_df_truncated)
 
 
