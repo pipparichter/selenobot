@@ -87,9 +87,10 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--data-dir', default='../data', type=str)
-    parser.add_argument('--bacteria-only', action='store_true')
+    # parser.add_argument('--bacteria-only', action='store_true')
     parser.add_argument('--overwrite', action='store_true')
     args = parser.parse_args()
+    bacteria_only = True
 
     if (not os.path.exists(os.path.join(args.data_dir, 'uniprot.fa'))) or args.overwrite:
         # There are duplicates here, as there were multiple accessions for the same protein. 
@@ -97,8 +98,9 @@ if __name__ == '__main__':
         print(f'Loaded data from {os.path.join(args.data_dir, 'uniprot_sec.csv')}')
         sprot_df = pd.read_csv(os.path.join(args.data_dir, 'uniprot_sprot.csv')).drop_duplicates('name', keep='first')
         print(f'Loaded data from {os.path.join(args.data_dir, 'uniprot_sprot.csv')}')
+        sprot_df = clean(sprot_df) # Make sure all SwissProt proteins are complete (i.e. not fragments).
 
-        if args.bacteria_only:
+        if bacteria_only:
             print('Filtering out all sequences which do not belong to bacteria.')
             sec_df = sec_df[sec_df.domain == 'Bacteria']
             sprot_df = sprot_df[sprot_df.domain == 'Bacteria']
