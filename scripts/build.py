@@ -78,7 +78,7 @@ def split(df:pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     train_idxs, val_idxs = list(gss.split(df.values, groups=groups))[0]
 
     train_df = df.iloc[train_idxs].copy()
-    val_df = df.iloc[train_idxs].copy() 
+    val_df = df.iloc[~train_idxs].copy() 
     
     return train_df, test_df, val_df
 
