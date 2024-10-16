@@ -165,9 +165,9 @@ def get_predictions(model:str, embeddings_dir:str=EMBEDDINGS_DIR, models_dir:str
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', default='model_epochs_2000_lr_e8.pkl', type=str)
+    parser.add_argument('--model', default='model_epochs_1000_lr_e8.pkl', type=str)
     # parser.add_argument('--output-path', default=os.path.join(args.results_dir, 'gtdb_results.csv'), type=str)
-    parser.add_argument('--results-dir', default='/home/prichter/Documents/selenobot/results/epochs_2000_lr_e8')
+    parser.add_argument('--results-dir', default='/home/prichter/Documents/selenobot/results/')
 
     args = parser.parse_args()
 
