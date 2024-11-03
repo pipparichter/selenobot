@@ -19,7 +19,7 @@ class Dataset(torch.utils.data.Dataset):
     '''A map-style dataset which  Dataset objects which provide extra functionality for producing sequence embeddings
     and accessing information about selenoprotein content.'''
 
-    def __init__(self, df:pd.DataFrame, n_features:int=None, half_precision:bool=False):
+    def __init__(self, df:pd.DataFrame, n_features:int=1024, half_precision:bool=False):
         '''Initializes a Dataset from a pandas DataFrame containing embeddings and labels.
         
         :param df: A pandas DataFrame containing the data to store in the Dataset. 
