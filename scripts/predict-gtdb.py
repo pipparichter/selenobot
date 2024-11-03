@@ -60,7 +60,7 @@ def get_copy_numbers(output_path:str=None):
         page_df = query.next() 
     selabd_annotations_df = pd.concat(selabd_annotations_df)
     # Save the annotation results as an intermediate. 
-    selabd_annotations_df.set_index('gene_id').to_csv(os.path.join(results_dir, 'gtdb_selabd_annotations.csv'))
+    selabd_annotations_df.set_index('id').to_csv(os.path.join(results_dir, 'gtdb_selabd_annotations.csv'))
 
     copy_nums_df = []
     for genome_id, genome_id_df in selabd_annotations_df.groupby('genome_id'):
@@ -107,29 +107,29 @@ def get_genome_data(genome_ids:List[str], batch_size=50, output_path:str=None):
 #     print(f"get_genome_data_all: Genome data for all genomes written to {output_path}") 
 
 
-def get_annotation_data(gene_ids:List[str], batch_size=100, output_path:str=None):
+def get_annotation_data(ids:List[str], batch_size=100, output_path:str=None):
     annotation_data_df = []
-    for batch in tqdm([gene_ids[i * batch_size:(i + 1) * batch_size] for i in range(len(gene_ids) // batch_size + 1)], desc='get_annotation_data: Fetching annotations...'):
+    for batch in tqdm([ids[i * batch_size:(i + 1) * batch_size] for i in range(len(ids) // batch_size + 1)], desc='get_annotation_data: Fetching annotations...'):
         query = Query('annotations_kegg')
-        query.equal_to('gene_id', batch)
+        query.equal_to('id', batch)
         # Not every gene has an annotation, so need to catch that case.
         batch_df = query.get()
         if batch_df is not None:
-            annotation_data_df.append(query.get()[['ko', 'gene_id']])
+            annotation_data_df.append(query.get()[['ko', 'id']])
     annotation_data_df = pd.concat(annotation_data_df)
-    annotation_data_df.set_index('gene_id').to_csv(os.path.join(output_path))
+    annotation_data_df.set_index('id').to_csv(os.path.join(output_path))
     print(f"get_annotation_data: Annotation data written to {output_path}")
 
 
-def get_gene_data(gene_ids:List[str], batch_size=100, output_path:str=None):
+def get_gene_data(ids:List[str], batch_size=100, output_path:str=None):
     # NOTE: As long as the batch size is less than 1000 (which I think is the default page size), should not need to paginate at all. 
     gene_data_df = []
-    for batch in tqdm([gene_ids[i * batch_size:(i + 1) * batch_size] for i in range(len(gene_ids) // batch_size + 1)], desc='get_gene_data: Fetching gene data...'):
+    for batch in tqdm([ids[i * batch_size:(i + 1) * batch_size] for i in range(len(ids) // batch_size + 1)], desc='get_gene_data: Fetching gene data...'):
         query = Query('proteins')
-        query.equal_to('gene_id', batch)
+        query.equal_to('id', batch)
         gene_data_df.append(query.get())
     gene_data_df = pd.concat(gene_data_df)
-    gene_data_df.set_index('gene_id').to_csv(output_path)
+    gene_data_df.set_index('id').to_csv(output_path)
     print(f"get_gene_data: Gene and annotations data written to {output_path}")
 
 
@@ -148,17 +148,17 @@ def get_predictions(model:str, embeddings_dir:str=EMBEDDINGS_DIR, models_dir:str
         
         embeddings_file = EmbeddingsFile(os.path.join(embeddings_dir, embeddings_file_name))
             
-        dataset = Dataset(embeddings_file.to_df().set_index('gene_id')) # Instantiate a Dataset object with the embeddings. 
+        dataset = Dataset(embeddings_file.to_df().set_index('id')) # Instantiate a Dataset object with the embeddings. 
         predictions_raw = model.predict(dataset, threshold=None)
         predictions_threshold = np.array([1 if p > 0.5 else 0 for p in predictions_raw])
 
-        df = pd.DataFrame({'gene_id':dataset.gene_ids, 'model_output':predictions_raw, 'prediction':predictions_threshold})
+        df = pd.DataFrame({'id':dataset.ids, 'model_output':predictions_raw, 'prediction':predictions_threshold})
         df = df[df.prediction == 1] # Filter for the predicted selenoproteins. 
         # print(f'get_predictions: {len(df)} predicted selenoproteins in genome {genome_id}.')
 
         predictions_df.append(df)
 
-    predictions_df = pd.concat(predictions_df).set_index('gene_id')
+    predictions_df = pd.concat(predictions_df).set_index('id')
     predictions_df.to_csv(output_path)
     print(f"get_predictions: Predicted selenoproteins written to {output_path}")
 
@@ -178,11 +178,11 @@ if __name__ == '__main__':
     predictions_df = pd.read_csv(os.path.join(args.results_dir, 'gtdb_predictions.csv'))
     
     if not os.path.exists(os.path.join(args.results_dir, 'gtdb_gene_data.csv')):
-        get_gene_data(predictions_df.gene_id.values, output_path=os.path.join(args.results_dir, 'gtdb_gene_data.csv'))   
+        get_gene_data(predictions_df['id'].values, output_path=os.path.join(args.results_dir, 'gtdb_gene_data.csv'))   
     gene_data_df = pd.read_csv(os.path.join(args.results_dir, 'gtdb_gene_data.csv'), dtype={'partial':str})
     
     if not os.path.exists(os.path.join(args.results_dir, 'gtdb_annotation_data.csv')):
-        get_annotation_data(predictions_df.gene_id.values, output_path=os.path.join(args.results_dir, 'gtdb_annotation_data.csv'))   
+        get_annotation_data(predictions_df['id'].values, output_path=os.path.join(args.results_dir, 'gtdb_annotation_data.csv'))   
     annotation_data_df = pd.read_csv(os.path.join(args.results_dir, 'gtdb_annotation_data.csv'), dtype={'partial':str})
 
     if not os.path.exists(os.path.join(args.results_dir, 'gtdb_genome_data.csv')):
@@ -195,23 +195,23 @@ if __name__ == '__main__':
     copy_nums_df = pd.read_csv(os.path.join(args.results_dir, 'gtdb_copy_nums.csv')) # , index_col=0)
 
 
-    results_df = predictions_df.merge(gene_data_df, how='left', left_on='gene_id', right_on='gene_id')
+    results_df = predictions_df.merge(gene_data_df, how='left', left_on='id', right_on='id')
 
-    # annotated_gene_ids = annotation_data_df.gene_id.unique()
+    # annotated_ids = annotation_data_df.id.unique()
     # annotations = []
-    # for gene_id in tqdm(results_df.gene_id, 'Adding annotations to results...'):
-    #     if gene_id in annotated_gene_ids:
-    #         annotations.append(','.join(list(annotation_data_df[annotation_data_df.gene_id == gene_id].ko)))
+    # for id in tqdm(results_df.id, 'Adding annotations to results...'):
+    #     if id in annotated_ids:
+    #         annotations.append(','.join(list(annotation_data_df[annotation_data_df.id == id].ko)))
     #     else:
     #         annotations.append('')
     # results_df['ko'] = annotations 
 
-    results_df = results_df.merge(annotation_data_df, how='left', left_on='gene_id', right_on='gene_id')
+    results_df = results_df.merge(annotation_data_df, how='left', left_on='id', right_on='id')
     results_df = results_df.merge(copy_nums_df, how='left', left_on='genome_id', right_on='genome_id')
     results_df = results_df.merge(genome_data_df, how='left', left_on='genome_id', right_on='genome_id')
 
     output_path = os.path.join(args.results_dir, 'gtdb_results.csv')
-    results_df = results_df.set_index('gene_id')
+    results_df = results_df.set_index('id')
     results_df.to_csv(output_path)
     print(f'Results written to {output_path}')
 
