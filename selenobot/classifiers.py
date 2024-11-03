@@ -118,6 +118,9 @@ class Classifier(torch.nn.Module):
         self.instances_seen_during_training = 0
         
         self.scaler = StandardScaler() if scale else None
+        
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.to(device)
 
     # TODO: Do I still need the batch size parameter here?
     def forward(self, inputs:torch.FloatTensor, low_memory:bool=True):
@@ -163,11 +166,7 @@ class Classifier(torch.nn.Module):
         :param batch_size: The size of the batches to use for model training.
         '''
         self.train() # Put the model in train mode.
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        print(f'Classifier.fit: Training on device {device}.')
-        self.to(device)
-        assert val_dataset.device == device, f'Classifier.fit: Dataset is on device {val_dataset.device}, but expected {device}.'
-        assert train_dataset.device == device, f'Classifier.fit: Dataset is on device {train_dataset.device}, but expected {device}.'
+        print(f'Classifier.fit: Training on device {self.device}.')
 
         if self.scaler is not None:
             self.scaler.fit(train_dataset.embeddings.cpu().numpy()) # Fit the scaler on the training dataset. 
