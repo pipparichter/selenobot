@@ -148,7 +148,7 @@ def get_predictions(model:str, embeddings_dir:str=EMBEDDINGS_DIR, models_dir:str
         
         embeddings_file = EmbeddingsFile(os.path.join(embeddings_dir, embeddings_file_name))
             
-        dataset = Dataset(embeddings_file.dataframe().set_index('gene_id')) # Instantiate a Dataset object with the embeddings. 
+        dataset = Dataset(embeddings_file.to_df().set_index('gene_id')) # Instantiate a Dataset object with the embeddings. 
         predictions_raw = model.predict(dataset, threshold=None)
         predictions_threshold = np.array([1 if p > 0.5 else 0 for p in predictions_raw])
 
