@@ -151,7 +151,7 @@ def get_predictions(model:str, embeddings_dir:str=EMBEDDINGS_DIR, models_dir:str
         dataset = Dataset(embeddings_file.to_df().set_index('id')) # Instantiate a Dataset object with the embeddings. 
         predictions_raw = model.predict(dataset, threshold=None)
         predictions_threshold = np.array([1 if p > 0.5 else 0 for p in predictions_raw])
-
+        print(predictions_raw, predictions_threshold)
         df = pd.DataFrame({'id':dataset.ids, 'model_output':predictions_raw, 'prediction':predictions_threshold})
         df = df[df.prediction == 1] # Filter for the predicted selenoproteins. 
         # print(f'get_predictions: {len(df)} predicted selenoproteins in genome {genome_id}.')
