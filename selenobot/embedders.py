@@ -67,11 +67,11 @@ class PlmEmbedder():
     '''Adapted from Josh's code, which he adapted from https://github.com/agemagician/ProtTrans/blob/master/Embedding/prott5_embedder.py'''
     name = 'plm'
 
-    def __init__(self, model_name:str='Rostlab/prot_t5_xl_half_uniref50-enc'):
+    def __init__(self, model_name:str='Rostlab/prot_t5_xl_half_uniref50-enc', mean_pool:bool=True):
         '''Initializes a PLM embedder object.'''
 
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
+        self.mean_pool = mean_pool
         self.model = T5EncoderModel.from_pretrained(model_name)
         self.model.to(self.device) # Move model to GPU.
         self.model.eval() # Set model to evaluation model.
@@ -105,7 +105,9 @@ class PlmEmbedder():
             of the sequence. Add the embeddings to the embeddings list.'''
             if outputs is not None:
                 for (i, s), e in zip(batch, outputs.last_hidden_state): # Should iterate over each batch output, or the first dimension. 
-                    e = e[:len(s)].mean(dim=0) # Remove the padding and average over sequence length. 
+                    e = e[:len(s)] # Remove the padding. 
+                    if self.mean_pool:
+                        emb = emb.mean(dim=0) # If mean pooling is specified, average over sequence length. 
                     embs.append((i, e)) # Append the ID and embedding to the list. 
 
         for i, s in tqdm(seqs, desc='PlmEmbedder.__call__'):
