@@ -147,7 +147,7 @@ class FastaFile(File):
 class EmbeddingsFile(File):
     '''Handles reading files containing Prot-T5 embeddings, which are stored on HPC as HDF files'''
     @staticmethod
-    def fix_id(id:str) -> str:
+    def fix_id(id_:str) -> str:
         '''Josh replaced all the periods in the gene IDs with underscores, for some reason, so need to get them back into 
         the normal form...'''
         # The keys in the data are the entire Prodigal header string, so need to first get the gene ID out. 
