@@ -126,6 +126,9 @@ class Classifier(torch.nn.Module):
     # TODO: Do I still need the batch size parameter here?
     def forward(self, inputs:torch.FloatTensor, low_memory:bool=True):
         '''A forward pass of the Classifier.'''
+        print('input device:', inputs.get_device())
+        for layer in self.classifier.layers:
+            print('layer weights device:', layer.weight.get_device())
         if low_memory:
             batch_size = 32
             outputs = [self.classifier(batch) for batch in torch.split(inputs, batch_size)]
