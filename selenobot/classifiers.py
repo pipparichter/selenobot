@@ -21,6 +21,7 @@ import pickle
 from sklearn.preprocessing import StandardScaler
 
 # warnings.simplefilter('ignore')
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 class Unpickler(pickle.Unpickler):
     '''https://github.com/pytorch/pytorch/issues/16797'''
@@ -126,8 +127,7 @@ class Classifier(torch.nn.Module):
     # TODO: Do I still need the batch size parameter here?
     def forward(self, inputs:torch.FloatTensor, low_memory:bool=True):
         '''A forward pass of the Classifier.'''
-        print('input device:', inputs.get_device())
-        print(self.device)
+        self.to(device)
         for name, t in self.state_dict().items():
             print('model device:', t.get_device())
         if low_memory:
