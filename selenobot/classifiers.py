@@ -127,8 +127,8 @@ class Classifier(torch.nn.Module):
     def forward(self, inputs:torch.FloatTensor, low_memory:bool=True):
         '''A forward pass of the Classifier.'''
         print('input device:', inputs.get_device())
-        for layer in self.classifier.layer:
-            print('layer weights device:', layer.weight.get_device())
+        for name, t in self.state_dict():
+            print('model device:', t.get_device())
         if low_memory:
             batch_size = 32
             outputs = [self.classifier(batch) for batch in torch.split(inputs, batch_size)]
