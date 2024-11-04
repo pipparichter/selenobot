@@ -134,6 +134,7 @@ class Classifier(torch.nn.Module):
             return self.classifier(inputs) 
 
     def predict(self, dataset, threshold:float=0.5) -> np.ndarray:
+        print('datasaet device', dataset.device)
         '''Evaluate the Classifier on the data in the input Dataset.'''   
         self.eval() # Put the model in evaluation mode. This changes the forward behavior of the model (e.g. disables dropout).
         if self.scaler is not None:
