@@ -125,7 +125,8 @@ class Classifier(torch.nn.Module):
     # TODO: Do I still need the batch size parameter here?
     def forward(self, inputs:torch.FloatTensor, low_memory:bool=True):
         '''A forward pass of the Classifier.'''
-
+        print('input device', inputs.get_device())
+        print('model device', self.get_device())
         if low_memory:
             batch_size = 32
             outputs = [self.classifier(batch) for batch in torch.split(inputs, batch_size)]
@@ -134,7 +135,6 @@ class Classifier(torch.nn.Module):
             return self.classifier(inputs) 
 
     def predict(self, dataset, threshold:float=0.5) -> np.ndarray:
-        print('datasaet device', dataset.device)
         '''Evaluate the Classifier on the data in the input Dataset.'''   
         self.eval() # Put the model in evaluation mode. This changes the forward behavior of the model (e.g. disables dropout).
         if self.scaler is not None:
