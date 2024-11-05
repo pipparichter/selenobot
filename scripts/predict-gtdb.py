@@ -73,7 +73,7 @@ def get_copy_numbers(output_path:str=None):
     copy_nums_df = pd.DataFrame(copy_nums_df)
 
     copy_nums_df = pd.DataFrame(copy_nums_df).set_index('genome_id')
-    copy_nums_df.to_csv(os.path.join(args.results_dir, 'gtdb_copy_nums.csv'))
+    copy_nums_df.to_csv(os.path.join(RESULTS_DIR, 'gtdb_copy_nums.csv'))
     print(f"get_copy_numbers: Copy number information written to {output_path}")
 
 
@@ -165,32 +165,32 @@ def get_predictions(model:str, embeddings_dir:str=EMBEDDINGS_DIR, models_dir:str
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', default='model_epochs_1000_lr_e8.pkl', type=str)
-    # parser.add_argument('--output-path', default=os.path.join(args.results_dir, 'gtdb_results.csv'), type=str)
+    # parser.add_argument('--output-path', default=os.path.join(RESULTS_DIR, 'gtdb_results.csv'), type=str)
 
     args = parser.parse_args()
     print('Using results directory', RESULTS_DIR)
 
-    # get_genome_data_all(os.path.join(args.results_dir, 'gtdb_genome_data_all.csv'))
+    # get_genome_data_all(os.path.join(RESULTS_DIR, 'gtdb_genome_data_all.csv'))
     
     if not os.path.exists(os.path.join(RESULTS_DIR, 'gtdb_predictions.csv')):
-        get_predictions(args.model, output_path=os.path.join(args.results_dir, 'gtdb_predictions.csv'))
+        get_predictions(args.model, output_path=os.path.join(RESULTS_DIR, 'gtdb_predictions.csv'))
     predictions_df = pd.read_csv(os.path.join(RESULTS_DIR, 'gtdb_predictions.csv'))
     
     if not os.path.exists(os.path.join(RESULTS_DIR, 'gtdb_gene_data.csv')):
-        get_gene_data(predictions_df['id'].values, output_path=os.path.join(args.results_dir, 'gtdb_gene_data.csv'))   
+        get_gene_data(predictions_df['id'].values, output_path=os.path.join(RESULTS_DIR, 'gtdb_gene_data.csv'))   
     gene_data_df = pd.read_csv(os.path.join(RESULTS_DIR, 'gtdb_gene_data.csv'), dtype={'partial':str})
     
     if not os.path.exists(os.path.join(RESULTS_DIR, 'gtdb_annotation_data.csv')):
-        get_annotation_data(predictions_df['id'].values, output_path=os.path.join(args.results_dir, 'gtdb_annotation_data.csv'))   
+        get_annotation_data(predictions_df['id'].values, output_path=os.path.join(RESULTS_DIR, 'gtdb_annotation_data.csv'))   
     annotation_data_df = pd.read_csv(os.path.join(RESULTS_DIR, 'gtdb_annotation_data.csv'), dtype={'partial':str})
 
     if not os.path.exists(os.path.join(RESULTS_DIR, 'gtdb_genome_data.csv')):
-        get_genome_data(gene_data_df.genome_id.unique(), output_path=os.path.join(args.results_dir, 'gtdb_genome_data.csv'))
+        get_genome_data(gene_data_df.genome_id.unique(), output_path=os.path.join(RESULTS_DIR, 'gtdb_genome_data.csv'))
     genome_data_df = pd.read_csv(os.path.join(RESULTS_DIR, 'gtdb_genome_data.csv')) # , index_col=0)
 
     if not os.path.exists(os.path.join(RESULTS_DIR, 'gtdb_copy_nums.csv')):
         # Use genome IDs from the stop_codons_df, as genome IDs are not included in the predictions_df.   
-        get_copy_numbers(output_path=os.path.join(args.results_dir, 'gtdb_copy_nums.csv')) 
+        get_copy_numbers(output_path=os.path.join(RESULTS_DIR, 'gtdb_copy_nums.csv')) 
     copy_nums_df = pd.read_csv(os.path.join(RESULTS_DIR, 'gtdb_copy_nums.csv')) # , index_col=0)
 
 
@@ -209,7 +209,7 @@ if __name__ == '__main__':
     results_df = results_df.merge(copy_nums_df, how='left', left_on='genome_id', right_on='genome_id')
     results_df = results_df.merge(genome_data_df, how='left', left_on='genome_id', right_on='genome_id')
 
-    output_path = os.path.join(args.results_dir, 'gtdb_results.csv')
+    output_path = os.path.join(RESULTS_DIR, 'gtdb_results.csv')
     results_df = results_df.set_index('id')
     results_df.to_csv(output_path)
     print(f'Results written to {output_path}')
