@@ -166,7 +166,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', default='model_epochs_1000_lr_e8.pkl', type=str)
     # parser.add_argument('--output-path', default=os.path.join(args.results_dir, 'gtdb_results.csv'), type=str)
-    parser.add_argument('--results-dir', default='/home/prichter/Documents/selenobot/results/')
 
     args = parser.parse_args()
 
@@ -174,24 +173,24 @@ if __name__ == '__main__':
     
     if not os.path.exists(os.path.join(args.results_dir, 'gtdb_predictions.csv')):
         get_predictions(args.model, output_path=os.path.join(args.results_dir, 'gtdb_predictions.csv'))
-    predictions_df = pd.read_csv(os.path.join(args.results_dir, 'gtdb_predictions.csv'))
+    predictions_df = pd.read_csv(os.path.join(RESULTS_DIR, 'gtdb_predictions.csv'))
     
     if not os.path.exists(os.path.join(args.results_dir, 'gtdb_gene_data.csv')):
         get_gene_data(predictions_df['id'].values, output_path=os.path.join(args.results_dir, 'gtdb_gene_data.csv'))   
-    gene_data_df = pd.read_csv(os.path.join(args.results_dir, 'gtdb_gene_data.csv'), dtype={'partial':str})
+    gene_data_df = pd.read_csv(os.path.join(RESULTS_DIR, 'gtdb_gene_data.csv'), dtype={'partial':str})
     
     if not os.path.exists(os.path.join(args.results_dir, 'gtdb_annotation_data.csv')):
         get_annotation_data(predictions_df['id'].values, output_path=os.path.join(args.results_dir, 'gtdb_annotation_data.csv'))   
-    annotation_data_df = pd.read_csv(os.path.join(args.results_dir, 'gtdb_annotation_data.csv'), dtype={'partial':str})
+    annotation_data_df = pd.read_csv(os.path.join(RESULTS_DIR, 'gtdb_annotation_data.csv'), dtype={'partial':str})
 
     if not os.path.exists(os.path.join(args.results_dir, 'gtdb_genome_data.csv')):
         get_genome_data(gene_data_df.genome_id.unique(), output_path=os.path.join(args.results_dir, 'gtdb_genome_data.csv'))
-    genome_data_df = pd.read_csv(os.path.join(args.results_dir, 'gtdb_genome_data.csv')) # , index_col=0)
+    genome_data_df = pd.read_csv(os.path.join(RESULTS_DIR, 'gtdb_genome_data.csv')) # , index_col=0)
 
     if not os.path.exists(os.path.join(args.results_dir, 'gtdb_copy_nums.csv')):
         # Use genome IDs from the stop_codons_df, as genome IDs are not included in the predictions_df.   
         get_copy_numbers(output_path=os.path.join(args.results_dir, 'gtdb_copy_nums.csv')) 
-    copy_nums_df = pd.read_csv(os.path.join(args.results_dir, 'gtdb_copy_nums.csv')) # , index_col=0)
+    copy_nums_df = pd.read_csv(os.path.join(RESULTS_DIR, 'gtdb_copy_nums.csv')) # , index_col=0)
 
 
     results_df = predictions_df.merge(gene_data_df, how='left', left_on='id', right_on='id')
