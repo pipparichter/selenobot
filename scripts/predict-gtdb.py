@@ -168,6 +168,7 @@ if __name__ == '__main__':
     # parser.add_argument('--output-path', default=os.path.join(args.results_dir, 'gtdb_results.csv'), type=str)
 
     args = parser.parse_args()
+    print('Using results directory', RESULTS_DIR)
 
     # get_genome_data_all(os.path.join(args.results_dir, 'gtdb_genome_data_all.csv'))
     
