@@ -163,7 +163,8 @@ class PlmEmbedder():
 
 
 def embed(df:pd.DataFrame, path:str=None):
-
+    '''Embed the sequences in the input DataFrame (using all three embedding methods), and store the embeddings and metadata in an HDF5
+    file at the specified path.'''
     df = df.sort_index() # Sort the index of the DataFrame to ensure consistent ordering. 
     store = pd.HDFStore(path, mode='w')
     store.put('metadata', df)
