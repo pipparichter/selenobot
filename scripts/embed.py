@@ -8,7 +8,7 @@ import os
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--ouput-path', type=str, default=None, help='The path where the embeddings will be written.')
+    parser.add_argument('--output-path', type=str, default=None, help='The path where the embeddings will be written.')
     parser.add_argument('--input-path', type=str, default=None, help='The path to the CSV file with the sequences and metadata.')
     args = parser.parse_args()
 
