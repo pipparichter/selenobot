@@ -107,7 +107,7 @@ class PlmEmbedder():
                 for (i, s), e in zip(batch, outputs.last_hidden_state): # Should iterate over each batch output, or the first dimension. 
                     e = e[:len(s)] # Remove the padding. 
                     if self.mean_pool:
-                        emb = emb.mean(dim=0) # If mean pooling is specified, average over sequence length. 
+                        e = e.mean(dim=0) # If mean pooling is specified, average over sequence length. 
                     embs.append((i, e)) # Append the ID and embedding to the list. 
 
         for i, s in tqdm(seqs, desc='PlmEmbedder.__call__'):
