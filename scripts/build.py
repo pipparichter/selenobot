@@ -91,6 +91,7 @@ if __name__ == '__main__':
     # parser.add_argument('--bacteria-only', action='store_true')
     parser.add_argument('--overwrite', action='store_true')
     args = parser.parse_args()
+    
     bacteria_only = True
 
     if (not os.path.exists(os.path.join(args.data_dir, 'uniprot.fa'))) or args.overwrite:
