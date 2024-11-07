@@ -116,7 +116,7 @@ def get_annotation_data(ids:List[str], batch_size=100, output_path:str=None):
         batch_df = query.get()
         if batch_df is not None:
             annotation_data_df.append(query.get()[['ko', 'gene_id']])
-    gene_data_df = gene_data_df.rename(columns={'gene_id':'id'})
+    annotation_data_df = annotation_data_df.rename(columns={'gene_id':'id'})
     annotation_data_df = pd.concat(annotation_data_df)
     annotation_data_df.set_index('id').to_csv(os.path.join(output_path))
     print(f"get_annotation_data: Annotation data written to {output_path}")

@@ -2,6 +2,7 @@ from selenobot.embedders import embed
 import argparse 
 # from files import FastaFile
 import os
+import pandas as pd 
 
 
 
