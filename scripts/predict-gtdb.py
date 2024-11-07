@@ -126,9 +126,10 @@ def get_gene_data(ids:List[str], batch_size=100, output_path:str=None):
     gene_data_df = []
     for batch in tqdm([ids[i * batch_size:(i + 1) * batch_size] for i in range(len(ids) // batch_size + 1)], desc='get_gene_data: Fetching gene data...'):
         query = Query('proteins')
-        query.equal_to('id', batch)
+        query.equal_to('gene_id', batch)
         gene_data_df.append(query.get())
     gene_data_df = pd.concat(gene_data_df)
+    gene_data_df = gene_data_df.rename(columns={'gene_id':'id'})
     gene_data_df.set_index('id').to_csv(output_path)
     print(f"get_gene_data: Gene and annotations data written to {output_path}")
 
