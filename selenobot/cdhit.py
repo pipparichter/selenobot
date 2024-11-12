@@ -98,7 +98,7 @@ class CdHit():
         if (not os.path.exists(output_path)) or overwrite:
             # Run the CD-HIT command with the specified cluster parameters. 
             # CD-HIT can be installed using conda. conda install bioconda::cd-hit
-            subprocess._run(f'cd-hit -i {self.input_path} -o {output_path} -n {n} -c {c} -l {l}', shell=True, check=True, stdout=subprocess.DEVNULL)
+            subprocess.run(f'cd-hit -i {self.input_path} -o {output_path} -n {n} -c {c} -l {l}', shell=True, check=True, stdout=subprocess.DEVNULL)
         else:
             print(f'CdHit._run: Using pre-saved clustering results at {output_path}')
         
