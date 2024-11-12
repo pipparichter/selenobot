@@ -29,8 +29,13 @@ class CdHit():
         self.c_dereplicate = 0.9 # Sequence similarity value for dereplication. 
         self.c_cluster = 0.8 # Sequence similarity value for clustering. 
 
-    def result(self) -> pd.DataFrame:
-        return self.df
+    # def result(self) -> pd.DataFrame:
+    #     return self.df
+
+    def run(self, overwrite:bool=False):
+        self.dereplicate(overwrite=overwrite)
+        self.cluster(overwrite=overwrite)
+        return self.df # Return the dereplicated and clustered DataFrame. 
 
     def dereplicate(self, overwrite:bool=False) -> pd.DataFrame:
         '''Use a high sequence similarity threshold (specified by the c_dereplicate attribute) to dereplicate the proteins
@@ -43,7 +48,7 @@ class CdHit():
         # Don't include the descriptions with the FASTA file, because CD-HIT output files remove them anyway. 
         FastaFile.from_df(self.df, add_description=False).write(self.input_path)
 
-        clstr_path = self.run(self.dereplicate_output_path, c=self.c_dereplicate, overwrite=overwrite) # Run CD-HIT and get the path of the output file. 
+        clstr_path = self._run(self.dereplicate_output_path, c=self.c_dereplicate, overwrite=overwrite) # Run CD-HIT and get the path of the output file. 
         clstr_df = ClstrFile(clstr_path).to_df(reps_only=True) # Load in the cluster file and convert to a DataFrame. 
 
         # Because CD-HIT filters out short sequences, the clstr_df might be smaller than the fasta_df. 
@@ -66,7 +71,7 @@ class CdHit():
         # Don't include the descriptions with the FASTA file, because CD-HIT output files remove them anyway. 
         FastaFile.from_df(self.df, add_description=False).write(self.input_path)
 
-        clstr_path = self.run(self.cluster_output_path, c=self.c_cluster, overwrite=overwrite) # Run CD-HIT and get the path of the output file. 
+        clstr_path = self._run(self.cluster_output_path, c=self.c_cluster, overwrite=overwrite) # Run CD-HIT and get the path of the output file. 
         clstr_df = ClstrFile(clstr_path).to_df(reps_only=False) # Load in the cluster file and convert to a DataFrame. 
         df = self.df.copy().merge(clstr_df, left_index=True, right_index=True, how='right')
         # The DataFrame should now contain the clustering information. 
@@ -85,7 +90,7 @@ class CdHit():
         #     os.remove(self.dereplicate_output_path) 
         #     os.remove(self.dereplicate_output_path + '.clstr')  
 
-    def run(self, output_path:str, c:float=0.8, n:int=5, l:int=5, overwrite:bool=False) -> str:
+    def _run(self, output_path:str, c:float=0.8, n:int=5, l:int=5, overwrite:bool=False) -> str:
         '''Run the CD-HIT clustering tool on the data stored in the path attribute. CD-HIT prints out two files: output and output.clstr. 
         output contains the final clustered non-redundant sequences in FASTA format, while output.clstr has an information about the clusters 
         with its associated sequences.'''
@@ -93,7 +98,9 @@ class CdHit():
         if (not os.path.exists(output_path)) or overwrite:
             # Run the CD-HIT command with the specified cluster parameters. 
             # CD-HIT can be installed using conda. conda install bioconda::cd-hit
-            subprocess.run(f'cd-hit -i {self.input_path} -o {output_path} -n {n} -c {c} -l {l}', shell=True, check=True, stdout=subprocess.DEVNULL)
+            subprocess._run(f'cd-hit -i {self.input_path} -o {output_path} -n {n} -c {c} -l {l}', shell=True, check=True, stdout=subprocess.DEVNULL)
+        else:
+            print(f'CdHit._run: Using pre-saved clustering results at {output_path}')
         
         return output_path + '.clstr'
 
