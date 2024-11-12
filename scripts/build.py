@@ -10,55 +10,55 @@ import subprocess
 import argparse
 import logging
 import warnings
+from selenobot.cdhit import CdHit
+
 
 warnings.simplefilter('ignore')
 
-def clean(sprot_df:pd.DataFrame) -> pd.DataFrame:
-    '''Even amongst SwissProt-reviewed proteins, many sequences are incomplete (i.e. have a non-terminal residue feature). 
-    These should be removed from the dataset, so that only full-length proteins are considered positive cases.''' 
-    n = (~sprot_df.non_terminal_residue.isnull()).sum()
-    print(f'clean: Removing {n} fragment proteins from SwissProt. {len(sprot_df) - n} sequences remaining.') 
-    sprot_df = sprot_df[sprot_df.non_terminal_residue.isnull()]
-    return sprot_df
+truncation_label = '[t]'
 
 
-def truncate(sec_df:pd.DataFrame) -> pd.DataFrame:
+# NOTE: C terminus is the end terminus. N terminus is where the methionine is. 
+def clean(df:pd.DataFrame, bacteria_only:bool=True, allow_c_terminal_fragments:bool=False, remove_selenoproteins:bool=True) -> str:
+    '''''' 
+    # There are duplicates here, as there were multiple accessions for the same protein. 
+    df = df.drop_duplicates('name', keep='first')
+
+    if bacteria_only:
+        non_bacterial = ~(df.domain == 'Bacteria')
+        df = df[~non_bacterial]
+        print(f'clean: Removed {non_bacterial.sum()} non-bacterial proteins from the DataFrame. {len(df)} sequences remaining.') 
+
+    if remove_selenoproteins: # TODO: Add a check to make sure this catches everything... 
+        selenoprotein = df.seq.str.contains('U')
+        df = df[~selenoprotein]
+        print(f'clean: Removed {selenoprotein.sum()} selenoproteins from the DataFrame. {len(df)} sequences remaining.') 
+
+    # Remove fragmented proteins from the DataFrame.
+    is_c_terminal_fragment = lambda pos : ('1' not in pos.split(',')) if (type(pos) == str) else False
+    fragmented = ~df.non_terminal_residue.isnull() 
+    if allow_c_terminal_fragments:
+        fragmented = np.logical_and(fragmented, ~df.non_terminal_residue.apply(is_c_terminal_fragment) )
+    df = df[~fragmented]
+    print(f'clean: Removed {fragmented.sum()} fragment proteins from the DataFrame. {len(df)} sequences remaining.') 
+
+    return df
+
+
+def truncate(df:pd.DataFrame) -> str:
     '''Truncate the selenoproteins stored in the input file. This function assumes that all 
     sequences contained in the file contain selenocysteine, labeled as U.'''
-    # Want to remove all selenoproteins which are incomplete at the C-terminus; those 
-    # which are incomplete at the N-terminus are admissable because we are truncating anyway. 
-    n = 0 
-
-    sec_df_truncated = []
-    for row in tqdm(sec_df.to_dict(orient='records'), 'truncate: Truncating selenoproteins...'):
-
-        non_terminal_residue_positions = row['non_terminal_residue'].split(',') if (type(row['non_terminal_residue']) == str) else []
-        if '1' in non_terminal_residue_positions:
-            n += 1
-            continue
-
-        row['id'] = row['id'] + '[1]' # Modify the row ID to contain a [1] label, indicating truncation at the first selenocysteine. 
+    df_truncated = []
+    for row in tqdm(df.to_dict(orient='records'), 'truncate: Truncating selenoproteins...'):
+        # row['id'] = row['id'] + truncation_label # Modify the row ID to contain a label indicating truncation.
         row['sec_index'] = row['seq'].index('U') # This will raise an exception if no U residue is found.
         row['sec_count'] = row['seq'].count('U') # Store the number of selenoproteins in the original sequence.
         row['trunc'] = len(row['seq']) - row['sec_index'] # Store the number of amino acid residues discarded.
         row['seq'] = row['seq'][:row['sec_index']] # Get the portion of the sequence prior to the U residue.
-        sec_df_truncated.append(row)
-    
-    print(f'clean: Removing {n} fragment proteins from the selenoprotein dataset. {len(sec_df_truncated) - n} sequences remaining.')    
-    return pd.DataFrame(sec_df_truncated)
-
-
-
-def cluster(path:str, n:int=5, c:float=0.8, l:int=5) -> NoReturn:
-    '''Run the CD-HIT clustering tool on the data stored in the uniprot.fasta file.'''
-    directory, filename = os.path.split(path)
-    name, ext = os.path.splitext(filename)
-
-    # Run the CD-HIT command with the specified cluster parameters. 
-    # CD-HIT can be installed using conda. conda install bioconda::cd-hit
-    subprocess.run(f'cd-hit -i {path} -o {os.path.join(directory, name)} -n {n} -c {c} -l {l}', shell=True, check=True, stdout=subprocess.DEVNULL)
-
-    return os.path.join(directory, name + '.clstr')
+        df_truncated.append(row)
+    df_truncated = pd.DataFrame(df_truncated, index=df.index)
+    df_truncated.index.name = 'id'
+    return df_truncated
 
 
 def split(df:pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -91,45 +91,40 @@ if __name__ == '__main__':
     # parser.add_argument('--bacteria-only', action='store_true')
     parser.add_argument('--overwrite', action='store_true')
     args = parser.parse_args()
-    
-    bacteria_only = True
 
-    if (not os.path.exists(os.path.join(args.data_dir, 'uniprot.fa'))) or args.overwrite:
-        # There are duplicates here, as there were multiple accessions for the same protein. 
-        sec_df = pd.read_csv(os.path.join(args.data_dir, 'uniprot_sec.csv')).drop_duplicates('name', keep='first')
-        print(f'Loaded data from {os.path.join(args.data_dir, 'uniprot_sec.csv')}')
-        sprot_df = pd.read_csv(os.path.join(args.data_dir, 'uniprot_sprot.csv')).drop_duplicates('name', keep='first')
-        print(f'Loaded data from {os.path.join(args.data_dir, 'uniprot_sprot.csv')}')
-        sprot_df = clean(sprot_df) # Make sure all SwissProt proteins are complete (i.e. not fragments).
+    # NOTE: Should I dereplicate the selenoproteins before or after truncation? Seems like after would be a good idea. 
 
-        if bacteria_only:
-            print('Filtering out all sequences which do not belong to bacteria.')
-            sec_df = sec_df[sec_df.domain == 'Bacteria']
-            sprot_df = sprot_df[sprot_df.domain == 'Bacteria']
+    # Define all the relevant file paths.
+    uniprot_sprot_path = os.path.join(args.data_dir, 'uniprot_sprot.csv')
+    uniprot_sec_path = os.path.join(args.data_dir, 'uniprot_sec.csv')
 
-        selenoproteins_in_sprot = np.isin(sprot_df['id'].values, sec_df['id'].values)
-        print('Removing', np.sum(selenoproteins_in_sprot), 'selenoproteins from the SwissProt data.')
-        sprot_df = sprot_df[~selenoproteins_in_sprot]
+    uniprot_sprot_df = clean(pd.read_csv(uniprot_sprot_path, index_col=0), bacteria_only=True, remove_selenoproteins=True, allow_c_terminal_fragments=False)
+    uniprot_sec_df = clean(pd.read_csv(uniprot_sec_path, index_col=0), bacteria_only=True, allow_c_terminal_fragments=True, remove_selenoproteins=False)
 
-        sec_df = truncate(sec_df) # Truncate the selenoproteins at the first selenocysteine residue. 
-        df = pd.concat([sec_df, sprot_df], axis=0).set_index('id') # Combine all the data into a single DataFrame. 
-        print(f'Merged selenoprotein and SwissProt DataFrames, {len(df)} total sequences.')
+    uniprot_sec_df = truncate(uniprot_sec_df)
 
-        fasta_file = FastaFile.from_df(df)
-        fasta_file.write(os.path.join(args.data_dir, 'uniprot.fa'))
-    else:
-        df = FastaFile(os.path.join(args.data_dir, 'uniprot.fa')).to_df()
+    cdhit = CdHit(uniprot_sprot_df, name='uniprot_sprot', cwd=args.data_dir)
+    cdhit.dereplicate()
+    cdhit.cluster()
+    uniprot_sprot_df = cdhit.result()
 
-    if (not os.path.exists(os.path.join(args.data_dir, 'uniprot.clstr'))) or args.overwrite:
-        cluster(os.path.join(args.data_dir, 'uniprot.fa'))
-    clstr_df = CdhitClstrFile(os.path.join(args.data_dir, 'uniprot.clstr')).to_df()
+    cdhit = CdHit(uniprot_sec_df, name='uniprot_sec', cwd=args.data_dir)
+    cdhit.dereplicate()
+    cdhit.cluster()
+    uniprot_sec_df = cdhit.result()
 
-    df = df.merge(clstr_df, left_index=True, right_index=True, how='inner')
-    df['label'] = np.array(['[1]' in id_ for id_ in df.index]).astype(int) # Add a label column, indicating truncated or not. 
-    print(f'Added cluster labels to the DataFrame, {len(df)} total sequences.')
+    # Add labels to the data, indicating whether or not each sequence is a truncated selenoprotein. 
+    uniprot_sprot_df['label'] = 0
+    uniprot_sec_df['label'] = 1
 
-    train_df, test_df, val_df = split(df)
+    # Decided to split each data group independently to avoid the mixed clusters. 
+    uniprot_sprot_train_df, uniprot_sprot_test_df, uniprot_sprot_val_df = split(uniprot_sprot_df)
+    uniprot_sec_train_df, uniprot_sec_test_df, uniprot_sec_val_df = split(uniprot_sec_df)
 
-    for filename, df in zip(['train.h5', 'test.h5', 'val.h5'], [train_df, test_df, val_df]):
-        embed(df, path=os.path.join(args.data_dir, filename))
-        print(f'Dataset saved to {os.path.join(args.data_dir, filename)}')
+    train_df = pd.concat([uniprot_sprot_train_df, uniprot_sec_train_df])
+    test_df = pd.concat([uniprot_sprot_test_df, uniprot_sec_test_df])
+    val_df = pd.concat([uniprot_sprot_val_df, uniprot_sec_val_df])
+
+    # for file_name, df in zip(['train.h5', 'test.h5', 'val.h5'], [train_df, test_df, val_df]):
+    #     embed(df, path=os.path.join(args.data_dir, file_name))
+    #     print(f'Dataset saved to {os.path.join(args.data_dir, filename)}')

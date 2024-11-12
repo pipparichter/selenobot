@@ -173,6 +173,7 @@ def embed(df:pd.DataFrame, path:str=None):
         embs, ids = embedder()(df.seq.values.tolist(), df.index.values.tolist())
         sort_idxs = np.argsort(ids)
         embs, ids = embs[sort_idxs, :], ids[sort_idxs]
+        # I don't think failing to detach the tensors here is a problem, because it is being converted to a pandas DataFrame. 
         emb_df = pd.DataFrame(embs, index=ids)
         store.put(embedder.name, emb_df)
         print(f'embed: Embeddings of type {embedder.name} added to HDF file.')

@@ -43,40 +43,8 @@ class File():
         self.genome_id = None # This will be populated with the genome ID extracted from the filename for everything but the MetadataFile class.
 
 
-
-class CdhitClstrFile(File):
-
-    def __init__(self, path:str):
-        '''
-        An example cluster entry is given below:
-        >Cluster 4
-        0	6aa, >A0A2E7JSV1[1]... at 83.33%
-        1	6aa, >A0A6B1IEQ5[1]... at 83.33%
-        2	6aa, >A0A6L7QK86[1]... at 83.33%
-        3	6aa, >A0A6L7QK86[1]... *
-        '''
-
-        with open(path, 'r') as f:        
-            content = f.read()
-
-        # The start of each new cluster is marked with a line like ">Cluster [num]"
-        content = re.split(r'^>.*', content, flags=re.MULTILINE)
-        self.ids, self.clusters, self.similarities = [], [], []
-        for i, cluster in enumerate(content):
-            entries = [entry for entry in cluster.split('\n') if (entry != '')] # Get all entries in the cluster. 
-            ids = [re.search(r'>([\w\d_\[\]]+)', entry).group(1).strip() for entry in entries]
-            # similarities = [None if ('*' in entry) else re.search(r"\.\.\. at (\d+\.\d+)\%", entry).group(1).strip() for entry in entries]
-            self.ids += ids
-            # self.similarities += similarities
-            self.clusters += [i] * len(ids) 
-
-    def to_df(self) -> pd.DataFrame:
-        '''Convert a ClstrFile to a pandas DataFrame.'''
-        df = pd.DataFrame({'id':self.ids, 'cluster':self.clusters}) # , 'similarity':self.similarities}) # .set_index('id')
-        df.cluster = df.cluster.astype(int) # This will speed up grouping clusters later on. 
-        df.similarity = df.cluster.astype(float) # This will speed up grouping clusters later on. 
-        return df.set_index('id')
-
+# TODO: Do I need to be able to write things back to FASTA files? I think yes. For CD-HIT clustering, will need to 
+# dereplicate first and then group to separate for the train, test, validation split. 
 
 # TODO: Should probably use BioPython for this. Was there a reason I didn't?
 class FastaFile(File):
@@ -100,19 +68,21 @@ class FastaFile(File):
         return len(self.seqs)
 
     @classmethod
-    def from_df(cls, df:pd.DataFrame, include_cols:List[str]=None):
-        ids = df.index.values.tolist()
+    def from_df(cls, df:pd.DataFrame, add_description:bool=True):
+        ids = df.index.values.tolist() # Expects the index to contain the IDs. 
         seqs = df.seq.values.tolist()
+        descriptions = [''] * len(seqs)
 
-        include_cols = df.columns if (include_cols is None) else include_cols
-        cols = [col for col in df.columns if (col != 'seq') and (col in include_cols)]
-        descriptions = []
-        for row in df[include_cols].itertuples():
-            # Sometimes there are equal signs in the descriptions, which mess everything up... 
-            description = {col:getattr(row, col) for col in include_cols if (getattr(row, col, None) is not None)}
-            description = {col:value.replace('=', '').strip() for col, value in description.items() if (type(value) == str)}
-            description = ';'.join([f'{col}={value}' for col, value in description.items()])
-            descriptions.append(description)
+        if add_description:
+            cols = [col for col in df.columns if (col != 'seq')]
+            descriptions = []
+            for row in df.drop(columns=['seq']).itertuples():
+                # Sometimes there are equal signs in the descriptions, which mess everything up... 
+                description = {col:getattr(row, col) for col in cols if (getattr(row, col, None) is not None)}
+                description = {col:value.replace('=', '').strip() for col, value in description.items() if (type(value) == str)}
+                description = ';'.join([f'{col}={value}' for col, value in description.items()])
+                descriptions.append(description)
+
         return cls(ids=ids, seqs=seqs, descriptions=descriptions)
             
     def to_df(self, parse_description:bool=True) -> pd.DataFrame:
@@ -143,6 +113,53 @@ class FastaFile(File):
         f.close()
 
 
+
+# TODO: Are the amino acids sequences listed in each cluster in any particular order?
+
+class ClstrFile(File):
+
+    def __init__(self, path:str):
+        '''
+        An example cluster entry is given below:
+
+        >Cluster 4
+        0	6aa, >A0A2E7JSV1[1]... at 83.33%
+        1	6aa, >A0A6B1IEQ5[1]... at 83.33%
+        2	6aa, >A0A6L7QK86[1]... at 83.33%
+        3	6aa, >A0A6L7QK86[1]... *
+
+        The asterisk marks the representative sequence of the cluster. As described in the user guide, this is
+        simply the longest sequence in the cluster. 
+        '''
+
+        with open(path, 'r') as f:        
+            content = f.read()
+
+        # The start of each new cluster is marked with a line like ">Cluster [num]"
+        content = re.split(r'^>.*', content, flags=re.MULTILINE)
+
+        self.n_clusters = len(content)
+        self.cluster_sizes = []
+
+        self.ids, self.clusters, self.representative = [], [], []
+
+        for i, cluster in enumerate(content):
+            entries = [entry.strip() for entry in cluster.split('\n') if (entry != '')] # Get all entries in the cluster. 
+            ids = [re.search(r'>([\w\d_\[\]]+)', entry).group(1).strip() for entry in entries]
+            self.ids += ids 
+            self.representative += [True if (entry[-1] == '*') else False for entry in entries] # TODO: Make sure there is one per cluster. 
+            self.clusters += [i] * len(ids) 
+            self.cluster_sizes.append(len(entries))
+
+    def to_df(self, reps_only:bool=False) -> pd.DataFrame:
+        '''Convert a ClstrFile to a pandas DataFrame.'''
+        df = pd.DataFrame({'id':self.ids, 'cluster':self.clusters, 'representative':self.representative}) 
+        df.cluster = df.cluster.astype(int) # This will speed up grouping clusters later on. 
+        if reps_only: # If specified, only get the representatives from each cluster. 
+            df = df[df.representative]
+        return df.set_index('id')
+
+    
 
 class EmbeddingsFile(File):
     '''Handles reading files containing Prot-T5 embeddings, which are stored on HPC as HDF files'''
