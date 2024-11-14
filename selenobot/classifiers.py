@@ -98,35 +98,6 @@ class Classifier(torch.nn.Module):
         self.to(self.device)
 
 
-
-class TernaryClassifier(Classifier):
-    '''Class defining a ternary classification head. This classifier sorts sequences into one of three categories:
-    full-length, truncated selenoprotein, and truncated non-selenoprotein.'''
-
-    categories = {0:'full_length', 1:'truncated_selenoprotein', 2:'truncated_non_selenoprotein'}
-
-    def __init__(self, half_precision:bool=False):
-
-        super(TernaryClassifier, self).__init__(output_dim=3) # Make sure to call this AFTER defining the classifier. 
-
-
-class BinaryClassifier(Classifier):
-    '''Class defining the binary classification head.'''
-
-    categories = {0:'full_length', 1:'truncated_selenoprotein'}
-
-    def __init__(self, half_precision:bool=False):
-        '''
-        Initializes a two-layer linear classification head. 
-
-        :param bce_loss_weight: The weight applied to false negatives in the BCE loss function. 
-        :param hidden_dim: The number of nodes in the second linear layer of the two-layer classifier.
-        :param input_dim: The dimensionality of the input embedding. 
-        '''
-        # Initialize the torch Module
-        super(BinaryClassifier, self).__init__(output_dim=2)
-
-
     # TODO: Do I still need the batch size parameter here?
     def forward(self, inputs:torch.FloatTensor, low_memory:bool=True):
         '''A forward pass of the Classifier.
@@ -237,4 +208,33 @@ class BinaryClassifier(Classifier):
             # obj = pickle.load(f)
             obj = Unpickler(f).load()
         return obj    
+
+
+
+class TernaryClassifier(Classifier):
+    '''Class defining a ternary classification head. This classifier sorts sequences into one of three categories:
+    full-length, truncated selenoprotein, and truncated non-selenoprotein.'''
+
+    categories = {0:'full_length', 1:'truncated_selenoprotein', 2:'truncated_non_selenoprotein'}
+
+    def __init__(self, half_precision:bool=False):
+
+        super(TernaryClassifier, self).__init__(output_dim=3) # Make sure to call this AFTER defining the classifier. 
+
+
+class BinaryClassifier(Classifier):
+    '''Class defining the binary classification head.'''
+
+    categories = {0:'full_length', 1:'truncated_selenoprotein'}
+
+    def __init__(self, half_precision:bool=False):
+        '''
+        Initializes a two-layer linear classification head. 
+
+        :param bce_loss_weight: The weight applied to false negatives in the BCE loss function. 
+        :param hidden_dim: The number of nodes in the second linear layer of the two-layer classifier.
+        :param input_dim: The dimensionality of the input embedding. 
+        '''
+        # Initialize the torch Module
+        super(BinaryClassifier, self).__init__(output_dim=2)
 

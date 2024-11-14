@@ -50,7 +50,7 @@ class Dataset(torch.utils.data.Dataset):
         self.embeddings = torch.Tensor(embeddings).to(self.dtype).to(self.device)
 
     @classmethod
-    def from_hdf(cls, path:str, feature_type:str='plm', half_precision:bool=False):
+    def from_hdf(cls, path:str, feature_type:str='plm', n_classes:int=2, half_precision:bool=False):
         df = pd.read_hdf(path, key=feature_type)
         n_features = len(df.columns) # Get the number of features. 
         if df.index.name is None:
