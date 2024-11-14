@@ -154,7 +154,7 @@ if __name__ == '__main__':
 
     for category in args.categories:
         path = os.path.join(args.data_dir, source_files[category])
-        process(path, datasets, label=category, data_dir=args.data_dir **kwargs[category])
+        process(path, datasets, label=category, data_dir=args.data_dir, **kwargs[category])
 
     # Concatenate the accumulated datasets. 
     datasets = {name:pd.concat(dfs) for name, dfs in datasets.items()}
