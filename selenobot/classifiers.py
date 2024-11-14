@@ -93,8 +93,7 @@ class Classifier(torch.nn.Module):
         self.train_losses, self.val_accs = None, None
 
         self.instances_seen_during_training = 0
-        
-        self.scaler = StandardScaler() if scale else None
+        self.scaler = StandardScaler()
         
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.to(self.device)
