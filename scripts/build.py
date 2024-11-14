@@ -112,7 +112,7 @@ def stats(df:pd.DataFrame, name:str=None):
 # NOTE: Should I dereplicate the selenoproteins before or after truncation? Seems like after would be a good idea.
 def process(file_name:str, datasets:Dict[str, List[pd.DataFrame]], label:int=0, **kwargs):
 
-    print(f'process: Processing dataset at {path}...')
+    print(f'process: Processing dataset {file_name}...')
 
     df = clean(pd.read_csv(path, index_col=0) **kwargs)
 
