@@ -78,7 +78,7 @@ class Classifier(torch.nn.Module):
             torch.nn.Linear(input_dim, hidden_dim, dtype=self.dtype),
             torch.nn.ReLU(),
             torch.nn.Linear(hidden_dim, output_dim, dtype=self.dtype),
-            torch.nn.Sigmoid())
+            torch.nn.Softmax())
         # Initialize model weights according to which activation is used. See https://www.pinecone.io/learn/weight-initialization/#Summing-Up 
         torch.nn.init.kaiming_normal_(self.classifier[0].weight)
         torch.nn.init.xavier_normal_(self.classifier[2].weight)
@@ -108,7 +108,7 @@ class Classifier(torch.nn.Module):
             return self.classifier(inputs) 
 
 
-    def predict(self, dataset, threshold:float=0.5) -> np.ndarray:
+    def predict(self, dataset) -> np.ndarray:
         '''Evaluate the Classifier on the data in the input Dataset.'''   
         self.eval() # Put the model in evaluation mode. This changes the forward behavior of the model (e.g. disables dropout).
         dataset.scale(self.scaler)
@@ -117,16 +117,11 @@ class Classifier(torch.nn.Module):
             # Apply sigmoid activation, which is usually applied as a part of the loss function. 
             # outputs = torch.nn.functional.sigmoid(outputs).ravel()
             outputs = outputs.cpu().numpy()
-
-            if threshold is not None: # Apply the threshold to the output values. 
-                outputs_with_threshold = np.ones(outputs.shape) # Initialize an array of ones. 
-                outputs_with_threshold[np.where(outputs < threshold)] = 0
-                return outputs_with_threshold
-            else:
-                return outputs
+            outputs = np.argmax(outputs, axis=1) # Convert out of one-hot encodings. 
+            return outputs.ravel()
 
 
-    def fit(self, train_dataset, val_dataset, epochs:int=10, lr:float=0.01, batch_size:int=16, early_stopping:bool=True, balance_batches:bool=True, weighted_loss:bool=False):
+    def fit(self, train_dataset, val_dataset, epochs:int=10, lr:float=1e-8, batch_size:int=16, balance_batches:bool=True, weighted_loss:bool=False):
         '''Train Classifier model on the data in the DataLoader.
 
         :param train_dataset: The Dataset object containing the training data. 
@@ -180,9 +175,8 @@ class Classifier(torch.nn.Module):
                 best_epoch = epoch
                 best_model_weights = copy.deepcopy(self.state_dict())
 
-        if early_stopping:
-            print(f'Classifier.fit: Loading best model weights, encountered at epoch {best_epoch}.')
-            self.load_state_dict(best_model_weights) # Load the best model weights. 
+        print(f'Classifier.fit: Loading best model weights, encountered at epoch {best_epoch}.')
+        self.load_state_dict(best_model_weights) # Load the best model weights. 
 
         # Save training values in the model. 
         self.best_epoch = best_epoch
