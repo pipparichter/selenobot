@@ -62,7 +62,10 @@ class WeightedCrossEntropyLoss(torch.nn.Module):
         outputs = outputs.view(targets.shape) # Make sure the outputs and targets have the same shape. Use view to avoid copying. 
         # Reduction specifies the reduction to apply to the output. If 'none', no reduction will be applied, if 'mean,' the weighted mean of the output is taken.
         ce = torch.nn.functional.cross_entropy(outputs, targets, reduction='none')
-        w = torch.unsqueeze(self.weights, 0).repeat(len(outputs), 1) # Generate a weight vector using self.w1 and self.w0. 
+
+        w = torch.unsqueeze(self.weights, 0).repeat(len(outputs), 1)
+        w = (targets * w).sum(axis=1)
+
         return (ce * w).mean()
 
 
