@@ -178,7 +178,7 @@ class Classifier(torch.nn.Module):
             
             pbar.set_description(f'Classifier.fit: Training classifier, epoch {epoch}/{epochs}. Validation accuracy {np.round(val_accs[-1], 2)}')
 
-            if val_accs[-1] > max(val_accs[:-1]):
+            if self.val_accs[-1] > max(self.val_accs[:-1]):
                 best_epoch = epoch
                 best_model_weights = copy.deepcopy(self.state_dict())
 
