@@ -22,7 +22,7 @@ warnings.simplefilter('ignore')
 
 
 # NOTE: C terminus is the end terminus. N terminus is where the methionine is. 
-def clean(df:pd.DataFrame, bacteria_only:bool=True, allow_c_terminal_fragments:bool=False, remove_selenoproteins:bool=True) -> pd.DataFrame:
+def clean(df:pd.DataFrame, bacteria_only:bool=True, allow_c_terminal_fragments:bool=False, remove_selenoproteins:bool=False) -> pd.DataFrame:
     '''''' 
     # There are duplicates here, as there were multiple accessions for the same protein. 
     df = df.drop_duplicates('name', keep='first')
