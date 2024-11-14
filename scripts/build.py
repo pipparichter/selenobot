@@ -2,7 +2,7 @@ import sys, re, os, time
 from selenobot.embedders import embed
 from selenobot.files import *
 import pandas as pd
-from typing import NoReturn, Tuple
+from typing import NoReturn, Tuple, Dict
 import numpy as np
 from tqdm import tqdm
 from sklearn.model_selection import GroupShuffleSplit
@@ -12,12 +12,17 @@ import logging
 import warnings
 from selenobot.cdhit import CdHit
 
-
 warnings.simplefilter('ignore')
+
+# NOTE: Need to think about how to grab sequences for the new class (truncated non-selenoproteins). 
+# I could potentially use the sequences which are fragmented at the C-terminus (i.e. the end), and just truncate them further. 
+# I could also just subset the negative cases. How many should I grab? Would it be reasonable to make the number of 
+# truncated non-selenoproteins equal to the number of truncated selenoproteins? Seems like this might be a good idea?
+# Also need to think about how to pick truncation lengths. 
 
 
 # NOTE: C terminus is the end terminus. N terminus is where the methionine is. 
-def clean(df:pd.DataFrame, bacteria_only:bool=True, allow_c_terminal_fragments:bool=False, remove_selenoproteins:bool=True) -> str:
+def clean(df:pd.DataFrame, bacteria_only:bool=True, allow_c_terminal_fragments:bool=False, remove_selenoproteins:bool=True) -> pd.DataFrame:
     '''''' 
     # There are duplicates here, as there were multiple accessions for the same protein. 
     df = df.drop_duplicates('name', keep='first')
@@ -46,7 +51,7 @@ def clean(df:pd.DataFrame, bacteria_only:bool=True, allow_c_terminal_fragments:b
     return df
 
 
-def truncate(df:pd.DataFrame) -> str:
+def truncate(df:pd.DataFrame, mode:int=1) -> str:
     '''Truncate the selenoproteins stored in the input file. This function assumes that all 
     sequences contained in the file contain selenocysteine, labeled as U.'''
     df_truncated = []
@@ -60,6 +65,7 @@ def truncate(df:pd.DataFrame) -> str:
     df_truncated = pd.DataFrame(df_truncated, index=df.index)
     df_truncated.index.name = 'id'
     return df_truncated
+
 
 # TODO: I think I want to make sure that the cluster size in each split dataset are roughly equivalent, as 
 # more clusters relative to the total size of the cluster would mean more statistical "power" within the dataset. 
@@ -103,51 +109,60 @@ def stats(df:pd.DataFrame, name:str=None):
 
 
 
+# NOTE: Should I dereplicate the selenoproteins before or after truncation? Seems like after would be a good idea.
+def process(file_name:str, datasets:Dict[str, List[pd.DataFrame]], label:int=0, **kwargs):
+
+    print(f'process: Processing dataset at {path}...')
+
+    df = clean(pd.read_csv(path, index_col=0) **kwargs)
+
+    if label > 0: # Truncate if the dataset is for category 1 or 2. 
+        df = truncate(df, mode=label)
+
+    df = CdHit(df, name=file_name.replace('csv', ''), cwd=os.getcwd()).run(overwrite=False)
+
+    df['label'] = label # Add labels to the data marking the category. 
+    # Decided to split each data group independently to avoid the mixed clusters. 
+    train_df, test_df, val_df = split(df) 
+
+    # Append the split DataFrames to the lists for concatenation later on. 
+    datasets['train.h5'].append(train_df)
+    datasets['test.h5'].append(test_df)
+    datasets['val.h5'].append(val_df)
+
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--data-dir', default='../data', type=str)
-    # parser.add_argument('--bacteria-only', action='store_true')
-    parser.add_argument('--overwrite', action='store_true')
+    parser.add_argument('--append', action='store_true')
+    parser.add_argument('--categories', default=[0, 1, 2], action='store', nargs='*')
     parser.add_argument('--print-stats', action='store_true')
     args = parser.parse_args()
-
-    # NOTE: Should I dereplicate the selenoproteins before or after truncation? Seems like after would be a good idea. 
-
-    # Define all the relevant file paths.
-    uniprot_sprot_path = os.path.join(args.data_dir, 'uniprot_sprot.csv')
-    print(f'Processing {uniprot_sprot_path}...')
     
-    uniprot_sprot_df = clean(pd.read_csv(uniprot_sprot_path, index_col=0), bacteria_only=True, remove_selenoproteins=True, allow_c_terminal_fragments=False)
-    uniprot_sprot_df = CdHit(uniprot_sprot_df, name='uniprot_sprot', cwd=args.data_dir).run()
+    datasets = {'train.h5':[], 'test.h5':[], 'val.h5':[]}
+    source_files = {0:'uniprot_sprot.csv', 1:'uniprot_sec.csv', 2:'uniprot_trembl.csv'}
 
+    # Define the keyword arguments for the clean function for each category. 
+    kwargs = dict()
+    kwargs[0] = {}
+    kwargs[1] = {'allow_c_terminal_fragments':True}
+    kwargs[2] = {'allow_c_terminal_fragments':True, 'remove_selenoproteins':True}
     
-    uniprot_sec_path = os.path.join(args.data_dir, 'uniprot_sec.csv')
-    print(f'\nProcessing {uniprot_sec_path}...')
-    uniprot_sec_df = clean(pd.read_csv(uniprot_sec_path, index_col=0), bacteria_only=True, allow_c_terminal_fragments=True, remove_selenoproteins=False)
-    uniprot_sec_df = truncate(uniprot_sec_df) # Truncate the selenoproteins. 
-    uniprot_sec_df = CdHit(uniprot_sec_df, name='uniprot_sec', cwd=args.data_dir).run()
+    os.chdir(args.data_dir) # Set the current working directory to avoid having to use full paths. 
 
-    
-    uniprot_sec_df['label'] = 1 # Add labels marking the truncated selenoproteins. 
+    for category in args.categories:
+        process(source_files[category], datasets, label=category, **kwargs[category])
 
-    # Add labels to the data, indicating whether or not each sequence is a truncated selenoprotein. 
-    uniprot_sprot_df['label'] = 0
-
-    # Decided to split each data group independently to avoid the mixed clusters. 
-    uniprot_sprot_train_df, uniprot_sprot_test_df, uniprot_sprot_val_df = split(uniprot_sprot_df)
-    uniprot_sec_train_df, uniprot_sec_test_df, uniprot_sec_val_df = split(uniprot_sec_df)
-
-    train_df = pd.concat([uniprot_sprot_train_df, uniprot_sec_train_df])
-    test_df = pd.concat([uniprot_sprot_test_df, uniprot_sec_test_df])
-    val_df = pd.concat([uniprot_sprot_val_df, uniprot_sec_val_df])
+    # Concatenate the accumulated datasets. 
+    datasets = {name:pd.concat(dfs) for name, dfs in datasets.items()}
 
     if args.print_stats:
-        stats(train_df, name='train_df')
-        stats(test_df, name='train_df')
-        stats(val_df, name='val_df')
+        for file_name, df in datasets:
+            stats(df, name=file_name)
         print()
 
-    # for file_name, df in zip(['train.h5', 'test.h5', 'val.h5'], [train_df, test_df, val_df]):
-    #     embed(df, path=os.path.join(args.data_dir, file_name))
-    #     print(f'Dataset saved to {os.path.join(args.data_dir, filename)}')
+    # NOTE: I want to be able to add to exsting HDF files. 
+    for file_name, df in datasets.items():
+        embed(df, path=file_name)
+        print(f'Dataset saved to {file_name}')

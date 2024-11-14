@@ -31,84 +31,58 @@ class Unpickler(pickle.Unpickler):
         else: return super().find_class(module, name)
 
 
-class WeightedBCELoss(torch.nn.Module):
-    '''Defining a class for easily working with weighted Binary Cross Entropy loss.'''
-    def __init__(self):
+# TODO: Confirm equivalence beween using pytorch binary cross-entropy and what I am doing here. 
+class WeightedCrossEntropyLoss(torch.nn.Module):
+    '''Defining a class for easily working with weighted Cross Entropy loss.'''
+    def __init__(self, n_classes:int=2, half_precision:bool=False):
 
         super(WeightedBCELoss, self).__init__()
-        self.w1 = 1
-        self.w0 = 1
+
+        self.dtype = torch.bfloat16 if half_precision else torch.float32
+        self.weights = torch.Tensor([1] * output_dim).to(self.dtype)
+        self.n_classes = n_classes
 
     def fit(self, dataset):
-        '''Compute the weights to use based on the frequencies of each class in the input Dataset. 
-        Formula used to compute weights is from this: 
-        https://medium.com/@zergtant/use-weighted-loss-function-to-solve-imbalanced-data-classification-problems-749237f38b75'''
+        '''Compute the weights to use based on the inverse frequencies of each class. '''
 
-        n = len(dataset)
-        n1 = dataset.labels.sum()
-        n0 = n - n1
+        N = len(dataset)
+        n = [(dataset.labels == i).sum() for i in range(self.n_classes)]
+        # NOTE: I wonder if I should be scaling this by the number of classes, so that more classes
+        # doesn't result in larger weights? I am going to to keep things between 0 and 1. 
+        self.weights = torch.Tensor([(N / (n_i * self.n_classes)) for n_i in n]).to(self.dtype)
 
-        self.w1 = n / (n1  * 2) 
-        self.w0 = n / (n0  * 2) 
 
+    # NOTE: Targets can be class indices, as opposed to class probabilities. Should decide which one to use. 
     def forward(self, outputs, targets):
-        '''Update the internal states keeping track of the loss.'''
-        # Make sure the outputs and targets have the same shape.
-        # outputs = outputs.reshape(targets.shape)
-        outputs = outputs.view(targets.shape)
-        # reduction specifies the reduction to apply to the output. If 'none', no reduction will be applied, if 'mean,' the weighted mean of the output is taken.
-        # ce = torch.nn.functional.binary_cross_entropy(outputs, targets, reduction='none')
-        # NOTE: Switch to with_logits for numerical stability, see https://pytorch.org/docs/stable/generated/torch.nn.BCEWithLogitsLoss.html 
-        # ce = torch.nn.functional.binary_cross_entropy_with_logits(outputs, targets, reduction='none')
-        ce = torch.nn.functional.binary_cross_entropy(outputs, targets, reduction='none')
-        # Generate a weight vector using self.w1 and self.w0. 
-        w = torch.where(targets == 1, self.w1, self.w0) # .to(DEVICE)
+        '''Compute the weighted loss between the targets and outputs. 
 
+        :param outputs: A Tensor of size (batch_size, n_classes). All values should be between 0 and 1, and sum to 1. 
+        :param targets: A Tensor of size (batch_size, n_classes). All values should be 0 or 1.  
+        '''
+        outputs = outputs.view(targets.shape) # Make sure the outputs and targets have the same shape. Use view to avoid copying. 
+        # Reduction specifies the reduction to apply to the output. If 'none', no reduction will be applied, if 'mean,' the weighted mean of the output is taken.
+        ce = torch.nn.functional.cross_entropy(outputs, targets, reduction='none')
+        w = self.weights.repeat(len(outputs)) # Generate a weight vector using self.w1 and self.w0. 
         return (ce * w).mean()
 
 
 class Classifier(torch.nn.Module):
-    '''Class defining the binary classification head.'''
 
-    attrs = ['epochs', 'batch_size', 'lr', 'val_accs', 'train_losses', 'best_epoch']
-    params = ['hidden_dim', 'input_dim', 'standardize', 'half_precision']
+    def __init__(self, hidden_dim:int=512, input_dim:int=1024, output_dim:int=2, half_precision:bool=False):
 
-    def __init__(self, 
-        hidden_dim:int=512,
-        input_dim:int=1024,
-        half_precision:bool=False, 
-        scale:bool=True):
-        '''
-        Initializes a two-layer linear classification head. 
-
-        :param bce_loss_weight: The weight applied to false negatives in the BCE loss function. 
-        :param hidden_dim: The number of nodes in the second linear layer of the two-layer classifier.
-        :param input_dim: The dimensionality of the input embedding. 
-        '''
-        # Initialize the torch Module
-        super().__init__()
-
-        self.dtype = torch.float16 if half_precision else torch.float32
-
-        self.half_precision = half_precision
-        self.input_dim = input_dim 
-        self.hidden_dim = hidden_dim 
-        # self.bce_loss_weight = bce_loss_weight 
+        self.dtype = torch.bfloat16 if half_precision else torch.float32
 
         self.classifier = torch.nn.Sequential(
             torch.nn.Linear(input_dim, hidden_dim, dtype=self.dtype),
             torch.nn.ReLU(),
-            # torch.nn.Dropout(p=0.5),
-            torch.nn.Linear(hidden_dim, 1, dtype=self.dtype),
+            torch.nn.Linear(hidden_dim, output_dim, dtype=self.dtype),
             torch.nn.Sigmoid())
-
-        # Initialize model weights according to which activation is used.'''
+        # Initialize model weights according to which activation is used. See https://www.pinecone.io/learn/weight-initialization/#Summing-Up 
         torch.nn.init.kaiming_normal_(self.classifier[0].weight)
         torch.nn.init.xavier_normal_(self.classifier[2].weight)
 
-        # self.loss_func = torch.nn.functional.binary_cross_entropy_with_logits
-        self.loss_func = WeightedBCELoss()
-
+        self.loss_func = WeightedCrossEntropyLoss(half_precision=half_precision, n_classes=output_dim)
+ 
         # Parameters to be populated when the model has been fitted. 
         self.best_epoch = None
         self.epochs = None
@@ -121,12 +95,45 @@ class Classifier(torch.nn.Module):
         self.scaler = StandardScaler() if scale else None
         
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.classifier.to(self.device)
         self.to(self.device)
+
+
+
+class TernaryClassifier(Classifier):
+    '''Class defining a ternary classification head. This classifier sorts sequences into one of three categories:
+    full-length, truncated selenoprotein, and truncated non-selenoprotein.'''
+
+    categories = {0:'full_length', 1:'truncated_selenoprotein', 2:'truncated_non_selenoprotein'}
+
+    def __init__(self, half_precision:bool=False):
+
+        super(TernaryClassifier, self).__init__(output_dim=3) # Make sure to call this AFTER defining the classifier. 
+
+
+class BinaryClassifier(Classifier):
+    '''Class defining the binary classification head.'''
+
+    categories = {0:'full_length', 1:'truncated_selenoprotein'}
+
+    def __init__(self, half_precision:bool=False):
+        '''
+        Initializes a two-layer linear classification head. 
+
+        :param bce_loss_weight: The weight applied to false negatives in the BCE loss function. 
+        :param hidden_dim: The number of nodes in the second linear layer of the two-layer classifier.
+        :param input_dim: The dimensionality of the input embedding. 
+        '''
+        # Initialize the torch Module
+        super(BinaryClassifier, self).__init__(output_dim=2)
+
 
     # TODO: Do I still need the batch size parameter here?
     def forward(self, inputs:torch.FloatTensor, low_memory:bool=True):
-        '''A forward pass of the Classifier.'''
+        '''A forward pass of the Classifier.
+        
+        :param inputs:
+        :param low_meory
+        '''
         self.to(device)
         if low_memory:
             batch_size = 32
@@ -135,11 +142,11 @@ class Classifier(torch.nn.Module):
         else:
             return self.classifier(inputs) 
 
+
     def predict(self, dataset, threshold:float=0.5) -> np.ndarray:
         '''Evaluate the Classifier on the data in the input Dataset.'''   
         self.eval() # Put the model in evaluation mode. This changes the forward behavior of the model (e.g. disables dropout).
-        if self.scaler is not None:
-            dataset.scale(self.scaler)
+        dataset.scale(self.scaler)
         with torch.no_grad(): # Turn off gradient computation, which reduces memory usage. 
             outputs = self(dataset.embeddings) # Run a forward pass of the model. Batch to limit memory usage.
             # Apply sigmoid activation, which is usually applied as a part of the loss function. 
@@ -154,10 +161,6 @@ class Classifier(torch.nn.Module):
                 return outputs
 
 
-    # def _loss(self, dataset):
-    #     outputs, targets = self(dataset.get_embeddings()), dataset.labels 
-    #     return self.loss_func(outputs, targets)
-
     def fit(self, train_dataset, val_dataset, epochs:int=10, lr:float=0.01, batch_size:int=16, early_stopping:bool=True, balance_batches:bool=True, weighted_loss:bool=False):
         '''Train Classifier model on the data in the DataLoader.
 
@@ -170,16 +173,14 @@ class Classifier(torch.nn.Module):
         self.train() # Put the model in train mode.
         print(f'Classifier.fit: Training on device {self.device}.')
 
-        if self.scaler is not None:
-            self.scaler.fit(train_dataset.embeddings.cpu().numpy()) # Fit the scaler on the training dataset. 
-            train_dataset.scale(self.scaler)
-            # val_dataset.scale(self.scaler)
-        if weighted_loss:
+        self.scaler.fit(train_dataset.embeddings.cpu().numpy()) # Fit the scaler on the training dataset. 
+        train_dataset.scale(self.scaler) # NOTE: Don't need to scale the validation dataset, as this is done by predict. 
+
+        if weighted_loss: # Loss function has equal weights by default.
             self.loss_func.fit(train_dataset) # Set the weights of the loss function.
 
         # NOTE: What does the epsilon parameter do?
         optimizer = torch.optim.Adam(self.parameters(), lr=lr, eps=1e-4 if self.half_precision else 1e-8)
-
         best_epoch, best_model_weights = 0, copy.deepcopy(self.state_dict())
 
         # Want to log the initial training and validation metrics. 
@@ -194,7 +195,7 @@ class Classifier(torch.nn.Module):
             # for batch in tqdm(dataloader, desc='Classifier.fit: Processing batches...'):
             for batch in dataloader:
                 # Evaluate the model on the batch in the training dataloader. 
-                outputs, targets = self(batch['embedding'], low_memory=False), batch['label'] # Takes about 30 percent of total batch time. 
+                outputs, targets = self(batch['embedding'], low_memory=False), batch['label_one_hot_encoded'] 
                 loss = self.loss_func(outputs.ravel(), targets)
                 loss.backward() # Takes about 10 percent of total batch time. 
                 train_loss.append(loss.item()) # Store the batch loss to compute training loss across the epoch. 
@@ -236,101 +237,4 @@ class Classifier(torch.nn.Module):
             # obj = pickle.load(f)
             obj = Unpickler(f).load()
         return obj    
-
-
-
-class SimpleClassifier(Classifier):
-    '''Class defining a simplified version of the binary classification head.'''
-
-    def __init__(self, 
-        bce_loss_weight:float=1.0,
-        input_dim:int=1,
-        random_seed:int=42):
-        '''Initializes a single-layer linear classification head.'''
-
-        # Initialize the torch Module. The classifier attribute will be overridden by the rest of this init function. 
-        super().__init__()
-        torch.manual_seed(random_seed)
-        
-        self.classifier = torch.nn.Sequential(
-            torch.nn.Linear(input_dim, 1),
-            torch.nn.Sigmoid())
-
-        # Initialize model weights according to which activation is used.
-        torch.nn.init.kaiming_normal_(self.classifier[0].weight)
-        self.to(DEVICE)
-
-        self.loss_func = WeightedBCELoss(weight=bce_loss_weight)
-
-
-
-
-# def optimize(dataloader, val_dataset:Dataset, n_calls:int=50): 
-
-#     # Probably keep the weights as integers, at least for now. 
-#     search_space = [skopt.space.Real(1, 10, name='bce_loss_weight')]
-
-#     lr = 0.001
-#     epochs = 10
-
-#     # Create the objective function. Decorator allows named arguments to be inferred from search space. 
-#     @skopt.utils.use_named_args(dimensions=search_space)
-#     def objective(bce_loss_weight=None):
-#         model = Classifier(hidden_dim=512, input_dim=1024, bce_loss_weight=bce_loss_weight) # Reset the model. 
-#         model.fit(dataloader, val_dataset, epochs=epochs, lr=lr, bce_loss_weight=bce_loss_weight)
-        
-#         # Evaluate the performance of the fitted model on the data.
-#         info = model.predict(val_dataset)
-#         return -info.get_balanced_accuracy() # Return negative so as not to minimize accuracy.
-    
-#     result = skopt.gp_minimize(objective, search_space)
-#     return result.x
-
-
-    # def save(self, path:str):
-    #     info = dict()
-    #     for attr in Classifier.attrs:
-    #         info[attr] = getattr(self, attr)
-    #     for param in Classifier.params:
-    #         info[param] = getattr(self, param)
-
-    #     info['state_dict'] = self.state_dict() #.numpy()
-    #     # Save information for re-loading the scaler. 
-    #     info['scaler_mean'] = self.scaler.mean_
-    #     info['scaler_scale'] = self.scaler.scale_
-
-    #     with open(path, 'w') as f:
-    #         json.dump(info, f, cls=NumpyEncoder)
-
-    # @classmethod
-    # def load(cls, path:str):
-    #     with open(path, 'r') as f:
-    #         info = json.load(f)
-        
-    #     params = {param:info.get(param) for param in Classifier.params}
-    #     obj = cls(**params) # Initialize a new object with the stored parameters. 
-
-    #     state_dict = {k:torch.Tensor(v) for k, v in info['state_dict'].items()}
-    #     state_dict = {k:v.to(torch.float16) if obj.half_precision else v for k, v in state_dict.items()} # Convert to half-precision if specified. 
-    #     obj.load_state_dict(state_dict) # Load the saved state dict. NOTE: Might need to convert to a tensor. 
-        
-    #     # Set all the other model parameters. 
-    #     for attr in Classifier.attrs:
-    #         setattr(obj, attr, info.get(attr))
-
-    #     # Load in the values from the fitted scaler, if the saved model had been normalized. 
-    #     if obj.standardize:
-    #         obj.scaler.mean_ = np.array(info.get('scaler_mean'))
-    #         obj.scaler.scale_ = np.array(info.get('scaler_scale'))
-        
-    #     return obj
-
-
-
-
- 
-
-
-
-
 

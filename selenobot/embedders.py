@@ -162,12 +162,24 @@ class PlmEmbedder():
             return None
 
 
-def embed(df:pd.DataFrame, path:str=None):
+def embed(df:pd.DataFrame, path:str=None, append:bool=False):
     '''Embed the sequences in the input DataFrame (using all three embedding methods), and store the embeddings and metadata in an HDF5
     file at the specified path.'''
+
+    def add(store:pd.HDFStore, key:str, df:pd.DataFrame):
+        '''Add a DataFrame to the specified node in the HDF file. If append is specified, append the 
+        DataFrame rather than creating a new node.'''
+        # NOTE: The table format performs worse, but will enable modification later on. 
+        if append:
+            # Does not check if data being appended overlaps with existing data in the table, so be careful. 
+            store.append(key, df, 'table')
+        else:
+            store.put(key, df, format='table')
+
+
     df = df.sort_index() # Sort the index of the DataFrame to ensure consistent ordering. 
-    store = pd.HDFStore(path, mode='w')
-    store.put('metadata', df)
+    store = pd.HDFStore(path, mode='a' if append else 'w') # Should confirm that the file already exists. 
+    add(store, 'metadata', df)
 
     for embedder in [AacEmbedder, PlmEmbedder, LengthEmbedder]:
         embs, ids = embedder()(df.seq.values.tolist(), df.index.values.tolist())
@@ -175,12 +187,11 @@ def embed(df:pd.DataFrame, path:str=None):
         embs, ids = embs[sort_idxs, :], ids[sort_idxs]
         # I don't think failing to detach the tensors here is a problem, because it is being converted to a pandas DataFrame. 
         emb_df = pd.DataFrame(embs, index=ids)
-        store.put(embedder.name, emb_df)
+        add(store, embedder.name, emb_df) # Make sure it's in table format if I need to append to it later.
         print(f'embed: Embeddings of type {embedder.name} added to HDF file.')
 
     print(f'embed: Embedding data written to {path}')
     store.close()
-    # df = pd.concat([df, emb_df], axis=1)
-    # df.to_csv(path)
+
 
 
