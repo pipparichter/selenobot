@@ -145,7 +145,7 @@ class Classifier(torch.nn.Module):
 
         # Want to log the initial training and validation metrics. 
         val_accs = [balanced_accuracy_score(val_dataset.labels.cpu().numpy(), self.predict(val_dataset))]
-        train_losses = [self.loss_func(self(train_dataset.embeddings).ravel(), train_dataset.labels).item()]
+        train_losses = [self.loss_func(self(train_dataset.embeddings), train_dataset.labels_one_hot_encoded).item()]
 
         dataloader = get_dataloader(train_dataset, batch_size=batch_size, balance_batches=balance_batches)
         pbar = tqdm(total=epochs * len(dataloader), desc=f'Classifier.fit: Training classifier, epoch 0/{epochs}.') # Make sure the progress bar updates for each batch. 
@@ -156,7 +156,7 @@ class Classifier(torch.nn.Module):
             for batch in dataloader:
                 # Evaluate the model on the batch in the training dataloader. 
                 outputs, targets = self(batch['embedding'], low_memory=False), batch['label_one_hot_encoded'] 
-                loss = self.loss_func(outputs.ravel(), targets)
+                loss = self.loss_func(outputs, targets)
                 loss.backward() # Takes about 10 percent of total batch time. 
                 train_loss.append(loss.item()) # Store the batch loss to compute training loss across the epoch. 
                 optimizer.step()
