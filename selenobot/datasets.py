@@ -29,6 +29,7 @@ class Dataset(torch.utils.data.Dataset):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.dtype = torch.bfloat16 if half_precision else torch.float32
         self.n_features = n_features
+        self.n_classes = n_classes
 
         self.embeddings = torch.from_numpy(df[list(range(n_features))].values).to(self.device).to(self.dtype)
         

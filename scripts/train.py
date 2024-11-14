@@ -23,11 +23,15 @@ if __name__ == '__main__':
 
     model_name = f'ternary_model_{args.feature_type}.pkl' if (args.output_dim == 3) else f'binary_model_{args.feature_type}.pkl' 
 
-    train_dataset = Dataset.from_hdf(os.path.join(args.data_dir, 'train.h5'), n_classes=args.output_dim, feature_type=args.feature_type)
-    val_dataset = Dataset.from_hdf(os.path.join(args.data_dir, 'val.h5'), n_classes=args.output_dim, feature_type=args.feature_type)
+    if args.output_dim == 2:
+        train_dataset = BinaryDataset.from_hdf(os.path.join(args.data_dir, 'train.h5'), feature_type=args.feature_type)
+        val_dataset = BinaryDataset.from_hdf(os.path.join(args.data_dir, 'val.h5'), feature_type=args.feature_type)
+        model = BinaryClassifier(input_dim=1024, hidden_dim=args.hidden_dim)
+    elif args.output_dim == 3:
+        train_dataset = TernaryDataset.from_hdf(os.path.join(args.data_dir, 'train.h5'), feature_type=args.feature_type)
+        val_dataset = TernaryDataset.from_hdf(os.path.join(args.data_dir, 'val.h5'), feature_type=args.feature_type)
+        model = TernaryClassifier(input_dim=1024, hidden_dim=args.hidden_dim)
     print('Loaded training and validation datasets.')
-
-    model = TernaryClassifier(input_dim=1024, hidden_dim=args.hidden_dim) if (args.output_dim == 3) else BinaryClassifier(input_dim=1024, hidden_dim=args.hidden_dim)
 
     kwargs = dict()
     kwargs['batch_size']
