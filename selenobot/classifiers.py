@@ -38,7 +38,7 @@ class WeightedCrossEntropyLoss(torch.nn.Module):
 
         super(WeightedCrossEntropyLoss, self).__init__()
 
-        self.device = 'cuda' if torch.cuda_is_available() else 'cpu'
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.dtype = torch.bfloat16 if half_precision else torch.float32
         self.weights = torch.Tensor([1] * n_classes).to(self.dtype).to(self.device)
         self.n_classes = n_classes
