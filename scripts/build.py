@@ -110,16 +110,17 @@ def stats(df:pd.DataFrame, name:str=None):
 
 
 # NOTE: Should I dereplicate the selenoproteins before or after truncation? Seems like after would be a good idea.
-def process(file_name:str, datasets:Dict[str, List[pd.DataFrame]], label:int=0, **kwargs):
+def process(path:str, datasets:Dict[str, List[pd.DataFrame]], data_dir:str=None, label:int=0, **kwargs):
 
-    print(f'process: Processing dataset {file_name}...')
+    print(f'process: Processing dataset {path}...')
 
-    df = clean(pd.read_csv(file_name, index_col=0) **kwargs)
+    df = clean(pd.read_csv(path, index_col=0) **kwargs)
 
     if label > 0: # Truncate if the dataset is for category 1 or 2. 
         df = truncate(df, mode=label)
 
-    df = CdHit(df, name=file_name.replace('csv', ''), cwd=os.getcwd()).run(overwrite=False)
+    name = os.path.basename(path).replace('.csv', '')
+    df = CdHit(df, name=name, cwd=data_dir).run(overwrite=False)
 
     df['label'] = label # Add labels to the data marking the category. 
     # Decided to split each data group independently to avoid the mixed clusters. 
@@ -152,7 +153,8 @@ if __name__ == '__main__':
     os.chdir(args.data_dir) # Set the current working directory to avoid having to use full paths. 
 
     for category in args.categories:
-        process(source_files[category], datasets, label=category, **kwargs[category])
+        path = os.path.join(args.data_dir, source_files[category])
+        process(path, datasets, label=category, data_dir=args.data_dir **kwargs[category])
 
     # Concatenate the accumulated datasets. 
     datasets = {name:pd.concat(dfs) for name, dfs in datasets.items()}
@@ -164,4 +166,5 @@ if __name__ == '__main__':
 
     # NOTE: I want to be able to add to exsting HDF files. 
     for file_name, df in datasets.items():
-        embed(df, path=file_name, append=args.append)
+        path = os.path.join(args.data_dir, file_name)
+        embed(df, path=path, append=args.append)
