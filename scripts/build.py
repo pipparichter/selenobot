@@ -136,7 +136,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data-dir', default='../data', type=str)
     parser.add_argument('--append', action='store_true')
-    parser.add_argument('--categories', default=[0, 1, 2], action='store', nargs='*')
+    parser.add_argument('--categories', default=[0, 1, 2], action='store', type=int, nargs='*')
     parser.add_argument('--print-stats', action='store_true')
     args = parser.parse_args()
     
@@ -164,5 +164,4 @@ if __name__ == '__main__':
 
     # NOTE: I want to be able to add to exsting HDF files. 
     for file_name, df in datasets.items():
-        embed(df, path=file_name)
-        print(f'Dataset saved to {file_name}')
+        embed(df, path=file_name, append=args.append)
