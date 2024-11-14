@@ -40,6 +40,7 @@ class Dataset(torch.utils.data.Dataset):
 
         self.metadata = df[[col for col in df.columns if type(col) == str]] 
         self.ids = df.index.values
+        self.scaled = True
 
         self.length = len(df)
         
@@ -47,8 +48,10 @@ class Dataset(torch.utils.data.Dataset):
         return self.length
 
     def scale(self, scaler):
-        embeddings = scaler.transform(self.embeddings.cpu().numpy())
-        self.embeddings = torch.Tensor(embeddings).to(self.dtype).to(self.device)
+        if not self.scaled:
+            embeddings = scaler.transform(self.embeddings.cpu().numpy())
+            self.embeddings = torch.Tensor(embeddings).to(self.dtype).to(self.device)
+            self.scaled = True
 
     @classmethod
     def from_hdf(cls, path:str, feature_type:str='plm', n_classes:int=2, half_precision:bool=False):
