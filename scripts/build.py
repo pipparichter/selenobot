@@ -114,7 +114,7 @@ def process(file_name:str, datasets:Dict[str, List[pd.DataFrame]], label:int=0, 
 
     print(f'process: Processing dataset {file_name}...')
 
-    df = clean(pd.read_csv(path, index_col=0) **kwargs)
+    df = clean(pd.read_csv(file_name, index_col=0) **kwargs)
 
     if label > 0: # Truncate if the dataset is for category 1 or 2. 
         df = truncate(df, mode=label)
