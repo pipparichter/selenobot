@@ -83,8 +83,8 @@ class Classifier(torch.nn.Module):
         self.classifier = torch.nn.Sequential(
             torch.nn.Linear(input_dim, hidden_dim, dtype=self.dtype),
             torch.nn.ReLU(),
-            torch.nn.Linear(hidden_dim, output_dim, dtype=self.dtype),
-            torch.nn.Softmax(dim=1))
+            torch.nn.Linear(hidden_dim, output_dim, dtype=self.dtype))
+            # torch.nn.Softmax(dim=1))
         # Initialize model weights according to which activation is used. See https://www.pinecone.io/learn/weight-initialization/#Summing-Up 
         torch.nn.init.kaiming_normal_(self.classifier[0].weight)
         torch.nn.init.xavier_normal_(self.classifier[2].weight)
@@ -116,7 +116,7 @@ class Classifier(torch.nn.Module):
         with torch.no_grad(): # Turn off gradient computation, which reduces memory usage. 
             outputs = self(dataset.embeddings) # Run a forward pass of the model. Batch to limit memory usage.
             # Apply sigmoid activation, which is usually applied as a part of the loss function. 
-            # outputs = torch.nn.functional.sigmoid(outputs).ravel()
+            outputs = torch.nn.functional.softmax(outputs, 1)
             outputs = outputs.cpu().numpy()
             outputs = np.argmax(outputs, axis=1) # Convert out of one-hot encodings. 
             return outputs.ravel()
@@ -163,15 +163,13 @@ class Classifier(torch.nn.Module):
                 optimizer.zero_grad()
                 pbar.update(1) # Update progress bar after each batch. 
 
-                # Keep track of the number of data points the model "sees" during training. 
-                self.instances_seen_during_training += batch_size
             
             train_losses.append(np.mean(train_loss))
             val_accs.append(balanced_accuracy_score(val_dataset.labels.cpu().numpy(), self.predict(val_dataset)))
             
             pbar.set_description(f'Classifier.fit: Training classifier, epoch {epoch}/{epochs}. Validation accuracy {np.round(val_accs[-1], 2)}')
 
-            if val_accs[-1] > min(val_accs[:-1] + [0]):
+            if val_accs[-1] > max(val_accs[:-1] + [0]):
                 best_epoch = epoch
                 best_model_weights = copy.deepcopy(self.state_dict())
 
