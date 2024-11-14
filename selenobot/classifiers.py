@@ -78,7 +78,7 @@ class Classifier(torch.nn.Module):
             torch.nn.Linear(input_dim, hidden_dim, dtype=self.dtype),
             torch.nn.ReLU(),
             torch.nn.Linear(hidden_dim, output_dim, dtype=self.dtype),
-            torch.nn.Softmax())
+            torch.nn.Softmax(dim=0))
         # Initialize model weights according to which activation is used. See https://www.pinecone.io/learn/weight-initialization/#Summing-Up 
         torch.nn.init.kaiming_normal_(self.classifier[0].weight)
         torch.nn.init.xavier_normal_(self.classifier[2].weight)
@@ -93,19 +93,14 @@ class Classifier(torch.nn.Module):
 
 
     # TODO: Do I still need the batch size parameter here?
-    def forward(self, inputs:torch.FloatTensor, low_memory:bool=True):
+    def forward(self, inputs:torch.FloatTensor):
         '''A forward pass of the Classifier.
         
         :param inputs:
         :param low_memory
         '''
         self.to(device)
-        if low_memory:
-            batch_size = 32
-            outputs = [self.classifier(batch) for batch in torch.split(inputs, batch_size)]
-            return torch.concat(outputs)
-        else:
-            return self.classifier(inputs) 
+        return self.classifier(inputs) 
 
 
     def predict(self, dataset) -> np.ndarray:
@@ -144,8 +139,7 @@ class Classifier(torch.nn.Module):
         best_epoch, best_model_weights = 0, copy.deepcopy(self.state_dict())
 
         # Want to log the initial training and validation metrics. 
-        val_accs = [balanced_accuracy_score(val_dataset.labels.cpu().numpy(), self.predict(val_dataset))]
-        train_losses = [self.loss_func(self(train_dataset.embeddings), train_dataset.labels_one_hot_encoded).item()]
+        val_accs, train_losses = [], []
 
         dataloader = get_dataloader(train_dataset, batch_size=batch_size, balance_batches=balance_batches)
         pbar = tqdm(total=epochs * len(dataloader), desc=f'Classifier.fit: Training classifier, epoch 0/{epochs}.') # Make sure the progress bar updates for each batch. 
