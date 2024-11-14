@@ -40,7 +40,7 @@ class Dataset(torch.utils.data.Dataset):
 
         self.metadata = df[[col for col in df.columns if type(col) == str]] 
         self.ids = df.index.values
-        self.scaled = True
+        self.scaled = False
 
         self.length = len(df)
         
