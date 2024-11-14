@@ -156,7 +156,7 @@ class Classifier(torch.nn.Module):
         self.train_losses = []
 
         dataloader = get_dataloader(train_dataset, batch_size=batch_size, balance_batches=balance_batches)
-        pbar = tqdm(total=epochs * len(dataloader), desc=f'Classifier.fit: Training classifier, epoch 0/{epochs}. Validation accuracy {np.round(val_accs[-1], 2)}') 
+        pbar = tqdm(total=epochs * len(dataloader), desc=f'Classifier.fit: Training classifier, epoch 0/{epochs}. Validation accuracy {np.round(self.val_accs[-1], 2)}') 
 
         for epoch in range(epochs):
             epoch_train_loss = []
@@ -176,7 +176,7 @@ class Classifier(torch.nn.Module):
             self.val_accs += [self.accuracy(val_dataset)]
             self.train_losses += [np.mean(epoch_train_loss)]
             
-            pbar.set_description(f'Classifier.fit: Training classifier, epoch {epoch}/{epochs}. Validation accuracy {np.round(val_accs[-1], 2)}')
+            pbar.set_description(f'Classifier.fit: Training classifier, epoch {epoch}/{epochs}. Validation accuracy {np.round(self.val_accs[-1], 2)}')
 
             if self.val_accs[-1] > max(self.val_accs[:-1]):
                 best_epoch = epoch
