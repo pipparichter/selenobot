@@ -38,9 +38,12 @@ class WeightedCrossEntropyLoss(torch.nn.Module):
 
         super(WeightedCrossEntropyLoss, self).__init__()
 
+        self.device = 'cuda' if torch.cuda_is_available() else 'cpu'
         self.dtype = torch.bfloat16 if half_precision else torch.float32
-        self.weights = torch.Tensor([1] * n_classes).to(self.dtype)
+        self.weights = torch.Tensor([1] * n_classes).to(self.dtype).to(self.device)
         self.n_classes = n_classes
+
+        self.to(self.device) # Not actually sure if this is necessary. 
 
     def fit(self, dataset):
         '''Compute the weights to use based on the inverse frequencies of each class. '''
@@ -49,7 +52,7 @@ class WeightedCrossEntropyLoss(torch.nn.Module):
         n = [(dataset.labels == i).sum() for i in range(self.n_classes)]
         # NOTE: I wonder if I should be scaling this by the number of classes, so that more classes
         # doesn't result in larger weights? I am going to to keep things between 0 and 1. 
-        self.weights = torch.Tensor([(N / (n_i * self.n_classes)) for n_i in n]).to(self.dtype)
+        self.weights = torch.Tensor([(N / (n_i * self.n_classes)) for n_i in n]).to(self.dtype).to(self.device)
 
 
     # NOTE: Targets can be class indices, as opposed to class probabilities. Should decide which one to use. 
