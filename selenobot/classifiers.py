@@ -39,7 +39,7 @@ class WeightedCrossEntropyLoss(torch.nn.Module):
         super(WeightedCrossEntropyLoss, self).__init__()
 
         self.dtype = torch.bfloat16 if half_precision else torch.float32
-        self.weights = torch.Tensor([1] * output_dim).to(self.dtype)
+        self.weights = torch.Tensor([1] * n_classes).to(self.dtype)
         self.n_classes = n_classes
 
     def fit(self, dataset):
