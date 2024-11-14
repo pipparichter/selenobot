@@ -156,7 +156,7 @@ class Classifier(torch.nn.Module):
         self.train_losses = []
 
         dataloader = get_dataloader(train_dataset, batch_size=batch_size, balance_batches=balance_batches)
-        pbar = tqdm(total=epochs * len(dataloader), desc=f'Classifier.fit: Training classifier, epoch 0/{epochs}.') # Make sure the progress bar updates for each batch. 
+        pbar = tqdm(total=epochs * len(dataloader), desc=f'Classifier.fit: Training classifier, epoch 0/{epochs}. Validation accuracy {np.round(val_accs[-1], 2)}') 
 
         for epoch in range(epochs):
             epoch_train_loss = []
