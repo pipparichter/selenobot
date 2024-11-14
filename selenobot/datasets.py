@@ -48,6 +48,8 @@ class Dataset(torch.utils.data.Dataset):
         return self.length
 
     def scale(self, scaler):
+        # Repeatedly scaling a Dataset causes problems, though I am not sure why. I would have thought that
+        # subsequent applications of a scaler would have no effect. 
         if not self.scaled:
             embeddings = scaler.transform(self.embeddings.cpu().numpy())
             self.embeddings = torch.Tensor(embeddings).to(self.dtype).to(self.device)

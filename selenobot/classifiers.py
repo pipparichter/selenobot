@@ -122,6 +122,13 @@ class Classifier(torch.nn.Module):
             return outputs.ravel()
 
 
+    def accuracy(self, dataset) -> float:
+        '''Compute the balanced accuracy of the model on the input dataset.'''
+        labels = dataset.labels.cpu().numpy().ravel() # Get the non-one-hot encoded labels from the dataset. 
+        predictions = self.predict(dataset)
+        return balanced_accuracy_score(labels, predictions)
+
+
     def fit(self, train_dataset, val_dataset, epochs:int=10, lr:float=1e-8, batch_size:int=16, balance_batches:bool=True, weighted_loss:bool=False):
         '''Train Classifier model on the data in the DataLoader.
 
@@ -145,41 +152,41 @@ class Classifier(torch.nn.Module):
         best_epoch, best_model_weights = 0, copy.deepcopy(self.state_dict())
 
         # Want to log the initial training and validation metrics. 
-        val_accs, train_losses = [], []
+        self.val_accs = [self.accuracy(val_dataset)]
+        self.train_losses = []
 
         dataloader = get_dataloader(train_dataset, batch_size=batch_size, balance_batches=balance_batches)
         pbar = tqdm(total=epochs * len(dataloader), desc=f'Classifier.fit: Training classifier, epoch 0/{epochs}.') # Make sure the progress bar updates for each batch. 
 
         for epoch in range(epochs):
-            train_loss = []
-            # for batch in tqdm(dataloader, desc='Classifier.fit: Processing batches...'):
+            epoch_train_loss = []
+
             for batch in dataloader:
                 # Evaluate the model on the batch in the training dataloader. 
                 outputs, targets = self(batch['embedding']), batch['label_one_hot_encoded'] 
                 loss = self.loss_func(outputs, targets)
                 loss.backward() # Takes about 10 percent of total batch time. 
-                train_loss.append(loss.item()) # Store the batch loss to compute training loss across the epoch. 
+                epoch_train_loss += [loss.item()]
+                
                 optimizer.step()
                 optimizer.zero_grad()
+                
                 pbar.update(1) # Update progress bar after each batch. 
-
             
-            train_losses.append(np.mean(train_loss))
-            val_accs.append(balanced_accuracy_score(val_dataset.labels.cpu().numpy(), self.predict(val_dataset)))
+            self.val_accs += [self.accuracy(val_dataset)]
+            self.train_losses += [np.mean(epoch_train_loss)]
             
             pbar.set_description(f'Classifier.fit: Training classifier, epoch {epoch}/{epochs}. Validation accuracy {np.round(val_accs[-1], 2)}')
 
-            if val_accs[-1] > max(val_accs[:-1] + [0]):
+            if val_accs[-1] > max(val_accs[:-1]):
                 best_epoch = epoch
                 best_model_weights = copy.deepcopy(self.state_dict())
 
         print(f'Classifier.fit: Loading best model weights, encountered at epoch {best_epoch}.')
         self.load_state_dict(best_model_weights) # Load the best model weights. 
 
-        # Save training values in the model. 
+        # Save training parameters in the model. 
         self.best_epoch = best_epoch
-        self.val_accs = val_accs # Don't include the initializing np.inf loss. 
-        self.train_losses = train_losses
         self.epochs = epochs
         self.batch_size = batch_size
         self.lr = lr
