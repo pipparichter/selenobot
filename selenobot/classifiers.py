@@ -145,7 +145,7 @@ class Classifier(torch.nn.Module):
             self.loss_func.fit(train_dataset) # Set the weights of the loss function.
 
         # NOTE: What does the epsilon parameter do?
-        optimizer = torch.optim.Adam(self.parameters(), lr=lr, eps=1e-4 if self.half_precision else 1e-8)
+        optimizer = torch.optim.Adam(self.parameters(), lr=lr, eps=1e-8)
         best_epoch, best_model_weights = 0, copy.deepcopy(self.state_dict())
 
         # Want to log the initial training and validation metrics. 

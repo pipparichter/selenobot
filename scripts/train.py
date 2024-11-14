@@ -1,6 +1,6 @@
 
 from selenobot.utils import seed
-seed(42)
+seed(42) # Seed everything to ensure consistent behavior. 
 
 from selenobot.classifiers import * 
 from selenobot.datasets import * 
