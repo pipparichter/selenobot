@@ -149,7 +149,7 @@ class Classifier(torch.nn.Module):
             # for batch in tqdm(dataloader, desc='Classifier.fit: Processing batches...'):
             for batch in dataloader:
                 # Evaluate the model on the batch in the training dataloader. 
-                outputs, targets = self(batch['embedding'], low_memory=False), batch['label_one_hot_encoded'] 
+                outputs, targets = self(batch['embedding']), batch['label_one_hot_encoded'] 
                 loss = self.loss_func(outputs, targets)
                 loss.backward() # Takes about 10 percent of total batch time. 
                 train_loss.append(loss.item()) # Store the batch loss to compute training loss across the epoch. 
