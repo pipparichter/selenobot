@@ -87,7 +87,7 @@ class Dataset(torch.utils.data.Dataset):
         item = {'embedding':self.embeddings[idx], 'id':self.ids[idx], 'idx':idx}
         if self.labels is not None: # Include the label if the Dataset is labeled.
             item['label'] = self.labels[idx]
-            item['label_one_hot_encoded'] = self.labels_one_hot_encoded[idx, :]
+            item['label_one_hot_encoded'] = self.labels_one_hot_encoded[idx]
         return item
 
 

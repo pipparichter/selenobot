@@ -59,10 +59,14 @@ class WeightedCrossEntropyLoss(torch.nn.Module):
         :param outputs: A Tensor of size (batch_size, n_classes). All values should be between 0 and 1, and sum to 1. 
         :param targets: A Tensor of size (batch_size, n_classes). All values should be 0 or 1.  
         '''
+        print('outputs', outputs.shape)
+        print('targets', targets.shape)
         outputs = outputs.view(targets.shape) # Make sure the outputs and targets have the same shape. Use view to avoid copying. 
         # Reduction specifies the reduction to apply to the output. If 'none', no reduction will be applied, if 'mean,' the weighted mean of the output is taken.
         ce = torch.nn.functional.cross_entropy(outputs, targets, reduction='none')
+        print('ce', ce.shape)
         w = self.weights.repeat(len(outputs)) # Generate a weight vector using self.w1 and self.w0. 
+        print('w', w.shape)
         return (ce * w).mean()
 
 
