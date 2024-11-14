@@ -84,7 +84,7 @@ class Classifier(torch.nn.Module):
             torch.nn.Linear(input_dim, hidden_dim, dtype=self.dtype),
             torch.nn.ReLU(),
             torch.nn.Linear(hidden_dim, output_dim, dtype=self.dtype),
-            torch.nn.Softmax(dim=0))
+            torch.nn.Softmax(dim=1))
         # Initialize model weights according to which activation is used. See https://www.pinecone.io/learn/weight-initialization/#Summing-Up 
         torch.nn.init.kaiming_normal_(self.classifier[0].weight)
         torch.nn.init.xavier_normal_(self.classifier[2].weight)
