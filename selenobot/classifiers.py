@@ -36,7 +36,7 @@ class WeightedCrossEntropyLoss(torch.nn.Module):
     '''Defining a class for easily working with weighted Cross Entropy loss.'''
     def __init__(self, n_classes:int=2, half_precision:bool=False):
 
-        super(WeightedBCELoss, self).__init__()
+        super(WeightedCrossEntropyLoss, self).__init__()
 
         self.dtype = torch.bfloat16 if half_precision else torch.float32
         self.weights = torch.Tensor([1] * output_dim).to(self.dtype)
@@ -71,7 +71,7 @@ class Classifier(torch.nn.Module):
     def __init__(self, hidden_dim:int=512, input_dim:int=1024, output_dim:int=2, half_precision:bool=False):
 
         super(Classifier, self).__init__()
-        
+
         self.dtype = torch.bfloat16 if half_precision else torch.float32
 
         self.classifier = torch.nn.Sequential(

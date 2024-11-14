@@ -52,7 +52,7 @@ class Dataset(torch.utils.data.Dataset):
 
     @classmethod
     def from_hdf(cls, path:str, feature_type:str='plm', n_classes:int=2, half_precision:bool=False):
-        df = pd.read_hdf(path, key=feature_type)
+        df = pd.read_hdf(path, key=feature_type, nrows=10000)
         n_features = len(df.columns) # Get the number of features. 
         if df.index.name is None:
             df.index.name = 'id' # Forgot to set the index name in some of the files. 
