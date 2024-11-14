@@ -34,7 +34,6 @@ if __name__ == '__main__':
     print('Loaded training and validation datasets.')
 
     kwargs = dict()
-    kwargs['batch_size']
     kwargs['balance_batches'] = False if args.weighted_loss else True
     kwargs['weighted_loss'] = args.weighted_loss 
     kwargs['lr'] = 1e-8 

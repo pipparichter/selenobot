@@ -84,13 +84,6 @@ class Classifier(torch.nn.Module):
         torch.nn.init.xavier_normal_(self.classifier[2].weight)
 
         self.loss_func = WeightedCrossEntropyLoss(half_precision=half_precision, n_classes=output_dim)
- 
-        # Parameters to be populated when the model has been fitted. 
-        self.best_epoch = None
-        self.epochs = None
-        self.lr = None 
-        self.batch_size = None
-        self.train_losses, self.val_accs = None, None
 
         self.instances_seen_during_training = 0
         self.scaler = StandardScaler()
@@ -104,7 +97,7 @@ class Classifier(torch.nn.Module):
         '''A forward pass of the Classifier.
         
         :param inputs:
-        :param low_meory
+        :param low_memory
         '''
         self.to(device)
         if low_memory:
