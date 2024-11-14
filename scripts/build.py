@@ -160,7 +160,7 @@ if __name__ == '__main__':
     datasets = {name:pd.concat(dfs) for name, dfs in datasets.items()}
 
     if args.print_stats:
-        for file_name, df in datasets:
+        for file_name, df in datasets.items():
             stats(df, name=file_name)
         print()
 
