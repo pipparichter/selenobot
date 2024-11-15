@@ -19,7 +19,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     model_name = f'ternary_model_{args.feature_type}.pkl' if (args.n_classes == 3) else f'binary_model_{args.feature_type}.pkl' 
-    model_path = os.path.join(args.model_dir, model_name)
+    model_path = os.path.join(args.models_dir, model_name)
 
     if args.n_classes == 2:
         dataset = BinaryDataset.from_hdf(args.input_path, feature_type=args.feature_type)
