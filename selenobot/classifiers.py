@@ -87,7 +87,7 @@ class Classifier(torch.nn.Module):
             # torch.nn.Softmax(dim=1))
         # Initialize model weights according to which activation is used. See https://www.pinecone.io/learn/weight-initialization/#Summing-Up 
         torch.nn.init.kaiming_normal_(self.classifier[0].weight)
-        torch.nn.init.xavier_normal_(self.classifier[2].weight)
+        # torch.nn.init.xavier_normal_(self.classifier[2].weight)
 
         self.loss_func = WeightedCrossEntropyLoss(half_precision=half_precision, n_classes=output_dim)
 
