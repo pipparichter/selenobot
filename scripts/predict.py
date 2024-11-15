@@ -22,11 +22,11 @@ if __name__ == '__main__':
     model_path = os.path.join(args.models_dir, model_name)
 
     if args.n_classes == 2:
-        dataset = BinaryDataset.from_hdf(args.input_path, feature_type=args.feature_type)
         model = BinaryClassifier.load(model_path)
     elif args.output_dim == 3:
-        dataset = TernaryDataset.from_hdf(args.input_path, feature_type=args.feature_type)
         model = TernaryClassifier.load(model_path)
+        
+    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, n_classes=args.n_classes)
 
     output_file_name, _ = os.path.splitext(os.path.basename(args.input_path))
     output_file_name = output_file_name + '_predictions.csv'
