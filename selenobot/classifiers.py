@@ -210,9 +210,9 @@ class TernaryClassifier(Classifier):
 
     categories = {0:'full_length', 1:'truncated_selenoprotein', 2:'truncated_non_selenoprotein'}
 
-    def __init__(self, half_precision:bool=False):
+    def __init__(self, half_precision:bool=False, input_dim:int=1024):
 
-        super(TernaryClassifier, self).__init__(output_dim=3) # Make sure to call this AFTER defining the classifier. 
+        super(TernaryClassifier, self).__init__(output_dim=3, input_dim=input_dim) # Make sure to call this AFTER defining the classifier. 
 
 
 class BinaryClassifier(Classifier):
@@ -220,7 +220,7 @@ class BinaryClassifier(Classifier):
 
     categories = {0:'full_length', 1:'truncated_selenoprotein'}
 
-    def __init__(self, half_precision:bool=False):
+    def __init__(self, half_precision:bool=False, input_dim:int=1024):
         '''
         Initializes a two-layer linear classification head. 
 
@@ -229,5 +229,5 @@ class BinaryClassifier(Classifier):
         :param input_dim: The dimensionality of the input embedding. 
         '''
         # Initialize the torch Module
-        super(BinaryClassifier, self).__init__(output_dim=2)
+        super(BinaryClassifier, self).__init__(output_dim=2, input_dim=input_dim)
 

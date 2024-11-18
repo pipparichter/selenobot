@@ -26,11 +26,11 @@ if __name__ == '__main__':
     if args.output_dim == 2:
         train_dataset = BinaryDataset.from_hdf(os.path.join(args.data_dir, 'train.h5'), feature_type=args.feature_type)
         val_dataset = BinaryDataset.from_hdf(os.path.join(args.data_dir, 'val.h5'), feature_type=args.feature_type)
-        model = BinaryClassifier()
+        model = BinaryClassifier(input_dim=train_dataset.shape()[-1])
     elif args.output_dim == 3:
         train_dataset = TernaryDataset.from_hdf(os.path.join(args.data_dir, 'train.h5'), feature_type=args.feature_type)
         val_dataset = TernaryDataset.from_hdf(os.path.join(args.data_dir, 'val.h5'), feature_type=args.feature_type)
-        model = TernaryClassifier()
+        model = TernaryClassifier(input_dim=train_dataset.shape()[-1])
     print('Loaded training and validation datasets.')
 
     kwargs = dict()
