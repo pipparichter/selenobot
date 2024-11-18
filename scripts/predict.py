@@ -33,9 +33,8 @@ if __name__ == '__main__':
     output_path = os.path.join(args.results_dir, output_file_name)
 
     results = dataset.metadata
-    outputs, predictions = model.predict(dataset)
-    results['output'] = outputs # Store the raw model output for the highest-probability class. 
-    results['prediction'] = predictions # Store the predicted label. 
+    predictions = model.predict(dataset)
+    results = results.merge(predictions, left_index=True, right_index=True)
     results.to_csv(output_path)
 
     print(f'Predictions written to {output_path}')

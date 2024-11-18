@@ -109,7 +109,7 @@ class Classifier(torch.nn.Module):
         return self.classifier(inputs) 
 
 
-    def predict(self, dataset) -> np.ndarray:
+    def predict(self, dataset) -> pd.DataFrame:
         '''Evaluate the Classifier on the data in the input Dataset.'''   
         self.eval() # Put the model in evaluation mode. This changes the forward behavior of the model (e.g. disables dropout).
         dataset.scale(self.scaler)
@@ -119,15 +119,19 @@ class Classifier(torch.nn.Module):
             outputs = torch.nn.functional.softmax(outputs, 1)
             outputs = outputs.cpu().numpy()
 
-            predictions = np.argmax(outputs, axis=1).ravel() # Convert out of one-hot encodings. 
-            outputs = np.max(outputs, axis=1).ravel() # Return the actual probability value from the model.  
-            return outputs, predictions
+            # Organize the predictions into a DataFrame.
+            predictions = pd.DataFrame(index=dataset.ids)
+            for i, category in self.categories.items():
+                predictions[f'probability_{category}'] = outputs[:, i].ravel()
+            predictions['prediction'] = np.argmax(outputs, axis=1).ravel() # Convert out of one-hot encodings.
+
+            return predictions
 
 
     def accuracy(self, dataset) -> float:
         '''Compute the balanced accuracy of the model on the input dataset.'''
         labels = dataset.labels.cpu().numpy().ravel() # Get the non-one-hot encoded labels from the dataset. 
-        _, predictions = self.predict(dataset)
+        predictions = self.predict(dataset).prediction.values.ravel()
         return balanced_accuracy_score(labels, predictions)
 
 
