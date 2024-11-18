@@ -34,7 +34,7 @@ if __name__ == '__main__':
 
     results = dataset.metadata
     outputs, predictions = model.predict(dataset)
-    results['outputs'] = outputs # Store the raw model output for the highest-probability class. 
+    results['output'] = outputs # Store the raw model output for the highest-probability class. 
     results['prediction'] = predictions # Store the predicted label. 
     results.to_csv(output_path)
 
