@@ -14,7 +14,7 @@ if __name__ == '__main__':
     parser.add_argument('--input-path', type=str)
     parser.add_argument('--n-classes', default=2)
     parser.add_argument('--models-dir', default='../models', type=str)
-    parser.add_argument('--results-dir', default='../results', type=str)
+    parser.add_argument('--results-dir', default='.', type=str)
 
     args = parser.parse_args()
 
