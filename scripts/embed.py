@@ -20,7 +20,8 @@ if __name__ == '__main__':
     else:
         output_path = args.output_path
 
-    df = pd.read_csv(args.input_path, index_col=0)
+    # NOTE: Will this throw an error if a partial column isn't present?
+    df = pd.read_csv(args.input_path, index_col=0, dtype={'partial':str})
     embed(df, path=output_path)
     print(f'Embeddings written to {output_path}.')
 

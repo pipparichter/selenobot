@@ -58,7 +58,7 @@ class Dataset(torch.utils.data.Dataset):
     @classmethod
     def from_hdf(cls, path:str, feature_type:str='plm', n_classes:int=2, half_precision:bool=False):
         df = pd.read_hdf(path, key=feature_type)
-        n_features = len(df.columns) # Get the number of features. 
+        n_features = len(df.columns, dtype={'partial':str}) # Get the number of features. 
         if df.index.name is None:
             df.index.name = 'id' # Forgot to set the index name in some of the files. 
         metadata_df = pd.read_hdf(path, 'metadata')

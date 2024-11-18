@@ -118,14 +118,16 @@ class Classifier(torch.nn.Module):
             # Apply sigmoid activation, which is usually applied as a part of the loss function. 
             outputs = torch.nn.functional.softmax(outputs, 1)
             outputs = outputs.cpu().numpy()
-            outputs = np.argmax(outputs, axis=1) # Convert out of one-hot encodings. 
-            return outputs.ravel()
+
+            predictions = np.argmax(outputs, axis=1).ravel() # Convert out of one-hot encodings. 
+            outputs = np.max(outputs, axis=1).ravel() # Return the actual probability value from the model.  
+            return outputs, predictions
 
 
     def accuracy(self, dataset) -> float:
         '''Compute the balanced accuracy of the model on the input dataset.'''
         labels = dataset.labels.cpu().numpy().ravel() # Get the non-one-hot encoded labels from the dataset. 
-        predictions = self.predict(dataset)
+        _, predictions = self.predict(dataset)
         return balanced_accuracy_score(labels, predictions)
 
 

@@ -21,16 +21,17 @@ if __name__ == '__main__':
     parser.add_argument('--models-dir', default='../models', type=str)
     args = parser.parse_args()
 
+    input_dims = {'plm':1024, 'aac':20, 'len':1} # Dimension of the input embeddings for each feature type. 
     model_name = f'ternary_model_{args.feature_type}.pkl' if (args.output_dim == 3) else f'binary_model_{args.feature_type}.pkl' 
 
     if args.output_dim == 2:
         train_dataset = BinaryDataset.from_hdf(os.path.join(args.data_dir, 'train.h5'), feature_type=args.feature_type)
         val_dataset = BinaryDataset.from_hdf(os.path.join(args.data_dir, 'val.h5'), feature_type=args.feature_type)
-        model = BinaryClassifier(input_dim=train_dataset.shape()[-1])
+        model = BinaryClassifier(input_dim=input_dims[args.feature_type])
     elif args.output_dim == 3:
         train_dataset = TernaryDataset.from_hdf(os.path.join(args.data_dir, 'train.h5'), feature_type=args.feature_type)
         val_dataset = TernaryDataset.from_hdf(os.path.join(args.data_dir, 'val.h5'), feature_type=args.feature_type)
-        model = TernaryClassifier(input_dim=train_dataset.shape()[-1])
+        model = TernaryClassifier(input_dim=input_dims[args.feature_type])
     print('Loaded training and validation datasets.')
 
     kwargs = dict()
