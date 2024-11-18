@@ -29,7 +29,7 @@ if __name__ == '__main__':
     dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, n_classes=args.n_classes)
 
     output_file_name, _ = os.path.splitext(os.path.basename(args.input_path))
-    output_file_name = output_file_name + '_predictions.csv'
+    output_file_name = output_file_name + f"_predictions_{model_name.replace('.pkl', '')}.csv"
     output_path = os.path.join(args.results_dir, output_file_name)
 
     results = dataset.metadata
