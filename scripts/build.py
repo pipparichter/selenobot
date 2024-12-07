@@ -6,6 +6,7 @@ from typing import NoReturn, Tuple, Dict
 import numpy as np
 from tqdm import tqdm
 from sklearn.model_selection import GroupShuffleSplit
+import sklearn
 import subprocess
 import argparse
 import logging
@@ -171,7 +172,7 @@ def process(path:str, datasets:Dict[str, List[pd.DataFrame]], data_dir:str=None,
         df = truncate_non_sec(df, **kwargs)
 
     name = os.path.basename(path).replace('.csv', '')
-    df = CdHit(df, name=name, cwd=data_dir).run(overwrite=False)
+    df = CdHit(df, name=name, cwd=data_dir).run(overwrite=True)
 
     df['label'] = label # Add labels to the data marking the category. 
     # Decided to split each data group independently to avoid the mixed clusters. 
