@@ -65,7 +65,7 @@ def truncate_sec(df:pd.DataFrame, **kwargs) -> str:
         row['sec_count'] = seq.count('U') # Store the number of selenoproteins in the original sequence.
         row['truncation_size'] = len(seq) - row['sec_index'] # Store the number of amino acid residues discarded.
         row['truncation_ratio'] = row['truncation_size'] / len(row['seq']) # Store the truncation size as a ratio. 
-        roq['original_length'] = len(seq)
+        row['original_length'] = len(seq)
         row['seq'] = seq[:row['sec_index']] # Get the portion of the sequence prior to the U residue.
         df_truncated.append(row)
     df_truncated = pd.DataFrame(df_truncated, index=df.index)
