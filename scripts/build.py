@@ -7,6 +7,7 @@ import numpy as np
 from tqdm import tqdm
 from sklearn.model_selection import GroupShuffleSplit
 import sklearn
+import sklearn.neighbors
 import subprocess
 import argparse
 import logging
