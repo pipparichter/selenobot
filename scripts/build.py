@@ -11,14 +11,16 @@ import argparse
 import logging
 import warnings
 from selenobot.cdhit import CdHit
+from selenobot.utils import digitize, groupby, sample 
+
+# TODO: Figure out why there are two representative columns in the final dataset, which also have different values. Ah, it's 
+# probably from the two separate rounds of CD-HIT clustering... should clean this up. 
+
+# Label 0: Full-length proteins (both selenoproteins and non-selenoproteins). 
+# Label 1: Truncated selenoproteins. 
+# Label 2: Truncated non-selenoproteins. 
 
 warnings.simplefilter('ignore')
-
-# NOTE: Need to think about how to grab sequences for the new class (truncated non-selenoproteins). 
-# I could potentially use the sequences which are fragmented at the C-terminus (i.e. the end), and just truncate them further. 
-# I could also just subset the negative cases. How many should I grab? Would it be reasonable to make the number of 
-# truncated non-selenoproteins equal to the number of truncated selenoproteins? Seems like this might be a good idea?
-# Also need to think about how to pick truncation lengths. 
 
 
 # NOTE: C terminus is the end terminus. N terminus is where the methionine is. 
@@ -51,7 +53,7 @@ def clean(df:pd.DataFrame, bacteria_only:bool=True, allow_c_terminal_fragments:b
     return df
 
 
-def truncate(df:pd.DataFrame, mode:int=1) -> str:
+def truncate_sec(df:pd.DataFrame, **kwargs) -> str:
     '''Truncate the selenoproteins stored in the input file. This function assumes that all 
     sequences contained in the file contain selenocysteine, labeled as U.'''
     df_truncated = []
@@ -59,12 +61,61 @@ def truncate(df:pd.DataFrame, mode:int=1) -> str:
         # row['id'] = row['id'] + truncation_label # Modify the row ID to contain a label indicating truncation.
         row['sec_index'] = row['seq'].index('U') # This will raise an exception if no U residue is found.
         row['sec_count'] = row['seq'].count('U') # Store the number of selenoproteins in the original sequence.
-        row['trunc'] = len(row['seq']) - row['sec_index'] # Store the number of amino acid residues discarded.
+        row['truncation_size'] = len(row['seq']) - row['sec_index'] # Store the number of amino acid residues discarded.
         row['seq'] = row['seq'][:row['sec_index']] # Get the portion of the sequence prior to the U residue.
         df_truncated.append(row)
     df_truncated = pd.DataFrame(df_truncated, index=df.index)
     df_truncated.index.name = 'id'
     return df_truncated
+
+
+def truncate_non_sec(df:pd.DataFrame, sec_seqs:np.ndarray=None, n_bins:int=25, bandwidth:float=0.01) -> pd.DataFrame:
+    '''Sub-sample the set of all full-length proteins such that the length distribution matches that of the full-length
+    selenoproteins. Then, truncate the sampled sequences so that the truncated length distributions also match.
+
+    :param df: The DataFrame containing the complete set of SwissProt proteins. 
+    :param sec_seqs: A Numpy array containing the full-length selenoprotein sequences. 
+    :param n_bins: The number of bins to use for producing a length distribution of full-length selenoproteins. 
+        This is used when initially down-sampling SwissProt. 
+    :param bandwidth: The bandwidth to use for the kernel density estimation, which is used for creating 
+        distributions for selecting truncation ratios. 
+    :return: A pandas DataFrame containing the sub-sampled and randomly truncated SwissProt proteins. 
+    '''
+    # Compute the fraction of each selenoprotein which is lost by truncation (sec_truncation_ratios).
+    sec_seqs_truncated = np.array([seq.split('U')[0] for seq in sec_seqs])
+    sec_lengths = np.array([len(seq) for seq in sec_seqs])
+    sec_lengths_truncated = np.array([len(seq) for seq in sec_seqs_truncated]) 
+    sec_truncation_ratios = (sec_lengths - sec_lengths_truncated) / sec_lengths
+
+    # Group the lengths of the full-length selenoproteins into n_bins bins
+    hist, bin_edges = np.histogram(sec_lengths, bins=n_bins)
+    bin_labels, bin_names = digitize(sec_lengths, bin_edges)
+
+    # Sample from the DataFrame of full-length SwissProt proteins, ensuring that the length distribution matches
+    # that of the full-length selenoproteins. 
+    _, idxs = sample(df.seq.apply(len).values, hist, bin_edges, return_idxs=True)
+    # Assign each of the sampled proteins a bin label, where the bins are the same as those of the full-length selenoprotein
+    # length distribution (from above).
+    df = df.iloc[idxs].copy()
+    df['bin_label'], _ = digitize(df.seq.apply(len).values, bin_edges)
+
+    # Generate a continuous distribution for truncation ratios for each length bin. This is necessary because of 
+    # heteroscedacity: the variance in the truncation ratios of short sequences is much higher than that of long
+    # sequences, so need to generate different distributions for different length categories. 
+    kdes = dict()
+    for bin_label, bin_values in groupby(sec_truncation_ratios, bin_labels).items():
+        kde = sklearn.neighbors.KernelDensity(kernel='gaussian', bandwidth=bandwidth) 
+        kde.fit(bin_values.reshape(-1, 1))
+        kdes[bin_label] = kde
+
+    # Use the KDE to sample truncation ratios for each length bin, and apply the truncation to the full-length sequence. 
+    df_truncated = []
+    for bin_label, bin_df in df.groupby('bin_label'):
+        bin_df['truncation_size'] = kdes[bin_label].sample(n_samples=len(bin_df)).ravel() * bin_df.seq.apply(len).values
+        bin_df['seq'] = bin_df.apply(lambda row : row.seq[:-int(row.truncation_size)], axis=1)
+        df_truncated.append(bin_df)
+
+    return pd.concat(df_truncated).drop(columns=['bin_label'])
 
 
 # TODO: I think I want to make sure that the cluster size in each split dataset are roughly equivalent, as 
@@ -110,14 +161,16 @@ def stats(df:pd.DataFrame, name:str=None):
 
 
 # NOTE: Should I dereplicate the selenoproteins before or after truncation? Seems like after would be a good idea.
-def process(path:str, datasets:Dict[str, List[pd.DataFrame]], data_dir:str=None, label:int=0, **kwargs):
+def process(path:str, datasets:Dict[str, List[pd.DataFrame]], data_dir:str=None, label:int=0,  **kwargs):
 
     print(f'process: Processing dataset {path}...')
 
     df = clean(pd.read_csv(path, index_col=0), **kwargs)
 
-    if label > 0: # Truncate if the dataset is for category 1 or 2. 
-        df = truncate(df, mode=label)
+    if label == 1: # Truncate if the dataset is for category 1 or 2. 
+        df = truncate_sec(df)
+    elif label == 2:
+        df = truncate_non_sec(df, **kwargs)
 
     name = os.path.basename(path).replace('.csv', '')
     df = CdHit(df, name=name, cwd=data_dir).run(overwrite=False)
@@ -131,30 +184,25 @@ def process(path:str, datasets:Dict[str, List[pd.DataFrame]], data_dir:str=None,
     datasets['test.h5'].append(test_df)
     datasets['val.h5'].append(val_df)
 
+    return df
+
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--data-dir', default='../data', type=str)
     parser.add_argument('--append', action='store_true')
-    parser.add_argument('--categories', default=[0, 1, 2], action='store', type=int, nargs='*')
     parser.add_argument('--print-stats', action='store_true')
     args = parser.parse_args()
-    
+
+    uniprot_sprot_path = os.path.join(args.data_dir, 'uniprot_sprot.csv')
+    uniprot_sec_path = os.path.join(args.data_dir, 'uniprot_sec.csv')
+
     datasets = {'train.h5':[], 'test.h5':[], 'val.h5':[]}
-    source_files = {0:'uniprot_sprot.csv', 1:'uniprot_sec.csv', 2:'uniprot_trembl.csv'}
 
-    # Define the keyword arguments for the clean function for each category. 
-    kwargs = dict()
-    kwargs[0] = {}
-    kwargs[1] = {'allow_c_terminal_fragments':True}
-    kwargs[2] = {'allow_c_terminal_fragments':True, 'remove_selenoproteins':True}
-    
-    os.chdir(args.data_dir) # Set the current working directory to avoid having to use full paths. 
-
-    for category in args.categories:
-        path = os.path.join(args.data_dir, source_files[category])
-        process(path, datasets, label=category, data_dir=args.data_dir, **kwargs[category])
+    process(uniprot_prot_path, datasets, label=0, data_dir=args.data_dir)
+    sec_df = process(uniprot_sec_path, datasets, label=1, data_dir=args.data_dir, allow_c_terminal_fragments=True)
+    process(uniprot_path, datasets, label=2, data_dir=args.data_dir, allow_c_terminal_fragments=True, remove_selenoproteins=True, sec_seqs=sec_df.seqs.values)
 
     # Concatenate the accumulated datasets. 
     datasets = {name:pd.concat(dfs) for name, dfs in datasets.items()}

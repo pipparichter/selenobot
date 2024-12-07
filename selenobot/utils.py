@@ -1,10 +1,10 @@
-'''Utility functions for reading and writing FASTA and CSV files, amongst other things.'''
+'''Assorted utility functions which are useful in multiple scripts and modules.'''
 import pandas as pd
 import numpy as np
 import os
 from tqdm import tqdm
 import re
-from typing import Dict, NoReturn, List
+from typing import Dict, NoReturn, List, Tuple
 import configparser
 import pickle
 import subprocess
@@ -23,6 +23,72 @@ def seed(seed:int=42) -> None:
     torch.backends.cudnn.benchmark = False
     # # Set a fixed value for the hash seed (not sure what this does, so got rid of it)
     # os.environ["PYTHONHASHSEED"] = str(seed)
+
+
+
+def digitize(values:np.ndarray, bin_edges:np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    '''Assign a bin label to each input value using the specified bin edges.
+    
+    :param values: An array of values for which to assign bin labels. 
+    :param bin_edges: The bin edges. The left and right-most edges are inclusive, and bins[i-1] <= x < bins[i]. 
+    :return: A tuple containing (1) an array of size len(values) containing bin labels for each value, and (2) an array
+        of size len(bin_edges) - 1 containing names for each bin. 
+    '''
+    # Numpy digitize does not include the right-most bin edge, but the histogram function does. This
+    # leads to an annoying problem where the largest value is assigned an out-of-bounds bin value, unless
+    # the right-most bin edge is incremented. 
+    bin_edges[-1] = bin_edges[-1] + 1
+    bin_labels = np.digitize(values, bin_edges)
+    bin_names = [f'{int(bin_edges[i])}-{int(bin_edges[i + 1])}' for i in range(len(bin_edges) - 1)]
+    return (bin_labels, bin_names)
+
+
+def groupby(values:np.ndarray, keys:np.ndarray) -> Dict[int, np.ndarray]:
+    '''Group the input array of values according to the corresponding keys.
+    
+    :param values: An array of values to group. 
+    :param: An array of keys with the same shape as the values array. 
+    :return: A dictionary mapping each key to a set of corresponding values.     
+    '''
+    sort_idxs = np.argsort(keys) # Get the indices which would put the keys in order. 
+    sorted_values, sorted_keys = values[sort_idxs], keys[sort_idxs] # Sort the values and keys. 
+    
+    unique_keys, unique_idxs = np.unique(sorted_keys, return_index=True) 
+    # unique_idxs will basically contain the index of the first location of each key (i.e. bin)
+    binned_values = np.split(sorted_values, unique_idxs)[1:]
+    return {int(key):value for key, value in zip(unique_keys, binned_values)}
+
+
+def sample(values:np.ndarray, hist:np.ndarray, bin_edges:np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    '''Sample from a list of values according to the bins and bin heights from a histogram.
+    
+    :param values: An array of values to sample. 
+    :param hist: The number of entries in each histogram bin; expect output from np.histogram. 
+    :param bin_edges: The bin edges. The left and right-most edges are inclusive, and bins[i-1] <= x < bins[i]. 
+    :return: A tuple containing a subsample of the values, which should follow the distribution of the input histogram,
+        as well as the indices of the sample. 
+    '''
+
+    bin_labels, _ = digitize(values, bin_edges)
+    bin_idxs = groupby(np.arange(len(values)), bin_labels)
+    
+    # Remove bins which are outside the histogram boundaries (i.e. are less than the minimum bin edge
+    # or greater than the maximim bin edge).
+    if 0 in bin_idxs:
+        del bin_idxs[0]
+    if len(bin_edges) in bin_idxs:
+        del bin_idxs[len(bin_edges)]
+
+    # Want to take the biggest sample possible while remaining in line with the input hist. 
+    scale = min([len(idxs) / hist[label - 1] for label, idxs in bin_idxs.items()])
+
+    sample_idxs = []
+    for label, idxs in bin_idxs.items():
+        n = int(scale * hist[label - 1])
+        sample_idxs.append(np.random.choice(idxs, n, replace=False))
+    sample_idxs = np.concat(sample_idxs).ravel()
+    
+    return (values[sample_idxs], sample_idxs)
 
 
 def to_numeric(n:str):
@@ -62,93 +128,6 @@ class NumpyEncoder(json.JSONEncoder):
         return super(NumpyEncoder, self).default(obj)
 
 
-# class TrainInfo():
-#     '''A class for managing the results of training a Classifier. The information stored in this
-#     object can be used to plot training curves.'''
-
-#     def __init__(self, epochs:int=None, lr:float=None, batches_per_epoch:int=None):
-#         '''Initialize a TrainInfo object.
-        
-#         :param epochs: The number of epochs for which the model is trained. 
-#         :param lr: The learning rate at which the model was trained.
-#         :batches_per_epoch: The number of batches in each epoch during training. 
-#         '''
-#         super().__init__()
-
-#         self.epochs = epochs
-#         self.best_epoch = None
-#         self.lr = lr
-#         self.batches_per_epoch = batches_per_epoch
-
-#         # Only store the losses and accuracies, as storing the entire sets of outputs and
-#         # targets for each batch seems like too much. 
-#         self.train_losses = []
-#         self.val_losses = []
-
-
-#     def get_training_curve_data(self) -> pd.DataFrame:
-#         '''Organizes the data contained in the info into a pandas DataFrame to
-#         make it convenient to plot training curves.'''
-#         assert len(self.train_losses) == len(self.val_losses), 'TrainInfo.get_training_curve_data: The number of recorded validation and training losses should be equal.'
-#         n = len(self.train_losses) # Total number of recorded values. 
-
-#         data = {}
-#         data['metric'] = ['training loss'] * n + ['validation loss'] * n
-#         data['epoch'] = list(range(n)) * 2
-#         data['value'] = self.train_losses + self.val_losses
-
-#         return pd.DataFrame(data)
-
-
-# class TestInfo():
-#     '''A class for managing the results of evaluating a Classifier on test data.'''
-
-#     def __init__(self, outputs, targets):
-#         '''Initialize a TestInfo object, which stores data for assessing model 
-#         performance on a Dataset object.
-        
-#         :param threshold: The threshold to apply to the model outputs when computing predictions.
-#         '''
-#         # Make sure outputs and targets are stored as one-dimensional numpy arrays. 
-#         self.outputs = outputs.detach().numpy().ravel()
-
-#         if targets is not None:
-#             self.targets = targets.detach().numpy().ravel()
-#         else:
-#             self.targets = None
-
-#         self.loss = None
-
-
-#     def get_balanced_accuracy(self, threshold:float=0.5) -> float:
-#         '''Applies a threshold to the model outputs, and uses it to compute a balanced accuracy score.'''
-#         outputs = self.apply_threshold(threshold=threshold)
-#         # Compute balanced accuracy using a builtin sklearn function. 
-#         return sklearn.metrics.balanced_accuracy_score(self.targets, outputs)
-
-#     def get_auc(self) -> float:
-#         '''Computes the AUC score for the contained outputs and targets.'''
-#         return sklearn.metrics.roc_auc_score(self.targets, self.outputs)
-    
-#     def get_expected_calibration_error(self, nbins:int=10) -> float:
-#         '''Calculate the expected calibration error of the test predictions.'''
-#         # First, sort the predictions into bins. 
-#         bins = np.linspace(0, 1, num=nbins + 1, endpoint=True)
-#         # Setting right=False means the lower bound is inclusive, and the upper bound is non-inclusive. 
-#         bin_idxs = np.digitize(self.outputs, bins, right=False)
-
-#         err = 0
-#         n = len(self.outputs) # Get the total number of outputs. 
-#         # Should note that bin indices seem to start at 1. 0 is for things that are outside of the bin range. 
-#         for b in range(1, len(bins)):
-#             m = sum(bin_idxs == b) # Get the number of things in the bin.
-
-#             if m > 0:
-#                 bin_acc = self.targets[bin_idxs == b].mean()
-#                 bin_conf = self.outputs[bin_idxs == b].mean()
-#                 err += (m/n) * abs(bin_acc - bin_conf)
-        
-#         return err
 
 
     
