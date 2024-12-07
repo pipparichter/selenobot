@@ -94,7 +94,7 @@ def truncate_non_sec(df:pd.DataFrame, sec_seqs:np.ndarray=None, n_bins:int=25, b
 
     # Sample from the DataFrame of full-length SwissProt proteins, ensuring that the length distribution matches
     # that of the full-length selenoproteins. 
-    _, idxs = sample(df.seq.apply(len).values, hist, bin_edges, return_idxs=True)
+    _, idxs = sample(df.seq.apply(len).values, hist, bin_edges)
     # Assign each of the sampled proteins a bin label, where the bins are the same as those of the full-length selenoprotein
     # length distribution (from above).
     df = df.iloc[idxs].copy()
