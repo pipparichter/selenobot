@@ -119,6 +119,8 @@ def truncate_non_sec(df:pd.DataFrame, sec_seqs:np.ndarray=None, n_bins:int=25, b
 
     df_truncated = pd.concat(df_truncated).drop(columns=['bin_label'])
     df_truncated.index.name = 'id'
+    print('df_truncated')
+    print(df_truncated)
     return df_truncated
 
 

@@ -49,7 +49,8 @@ class CdHit():
         FastaFile.from_df(self.df, add_description=False).write(self.input_path)
 
         clstr_path = self._run(self.dereplicate_output_path, c=self.c_dereplicate, overwrite=overwrite) # Run CD-HIT and get the path of the output file. 
-        clstr_df = ClstrFile(clstr_path).to_df(reps_only=True) # Load in the cluster file and convert to a DataFrame. 
+        clstr_df = ClstrFile(clstr_path).to_df(reps_only=True) # Load in the cluster file and convert to a DataFrame.
+        print(clstr_df) 
 
         # Because CD-HIT filters out short sequences, the clstr_df might be smaller than the fasta_df. 
         df = self.df.copy().merge(clstr_df, left_index=True, right_index=True, how='right')
