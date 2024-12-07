@@ -115,12 +115,10 @@ def truncate_non_sec(df:pd.DataFrame, sec_seqs:np.ndarray=None, n_bins:int=25, b
         bin_df['seq'] = bin_df.apply(lambda row : row.seq[:-int(row.truncation_size)], axis=1)
         df_truncated.append(bin_df)
 
-    return pd.concat(df_truncated).drop(columns=['bin_label'])
+    df_truncated = pd.concat(df_truncated).drop(columns=['bin_label'])
+    df_truncated.index.name = 'id'
+    return df_truncated
 
-
-# TODO: I think I want to make sure that the cluster size in each split dataset are roughly equivalent, as 
-# more clusters relative to the total size of the cluster would mean more statistical "power" within the dataset. 
-# I would want them to be relatively equal. 
 
 def split(df:pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     '''Divide the uniprot data into training, testing, and validation datasets. The split is cluster-aware, and ensures that
@@ -200,9 +198,9 @@ if __name__ == '__main__':
 
     datasets = {'train.h5':[], 'test.h5':[], 'val.h5':[]}
 
-    process(uniprot_prot_path, datasets, label=0, data_dir=args.data_dir)
+    process(uniprot_sprot_path, datasets, label=0, data_dir=args.data_dir)
     sec_df = process(uniprot_sec_path, datasets, label=1, data_dir=args.data_dir, allow_c_terminal_fragments=True)
-    process(uniprot_path, datasets, label=2, data_dir=args.data_dir, allow_c_terminal_fragments=True, remove_selenoproteins=True, sec_seqs=sec_df.seqs.values)
+    process(uniprot_sprot_path, datasets, label=2, data_dir=args.data_dir, allow_c_terminal_fragments=True, remove_selenoproteins=True, sec_seqs=sec_df.seqs.values)
 
     # Concatenate the accumulated datasets. 
     datasets = {name:pd.concat(dfs) for name, dfs in datasets.items()}
