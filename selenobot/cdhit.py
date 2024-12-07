@@ -67,7 +67,7 @@ class CdHit():
         # Enforce order in the dereplicate -> cluster pipleline.
         assert self.dereplicated, 'CdHit.cluster: Stored DataFrame has not yet been dereplicated.'
         assert not self.clustered, 'CdHit.cluster: Stored DataFrame has already been clustered.'
-
+        print(self.df)
         # Don't include the descriptions with the FASTA file, because CD-HIT output files remove them anyway. 
         FastaFile.from_df(self.df, add_description=False).write(self.input_path)
 
