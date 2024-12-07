@@ -60,11 +60,13 @@ def truncate_sec(df:pd.DataFrame, **kwargs) -> str:
     sequences contained in the file contain selenocysteine, labeled as U.'''
     df_truncated = []
     for row in tqdm(df.to_dict(orient='records'), 'truncate: Truncating selenoproteins...'):
-        # row['id'] = row['id'] + truncation_label # Modify the row ID to contain a label indicating truncation.
-        row['sec_index'] = row['seq'].index('U') # This will raise an exception if no U residue is found.
-        row['sec_count'] = row['seq'].count('U') # Store the number of selenoproteins in the original sequence.
-        row['truncation_size'] = len(row['seq']) - row['sec_index'] # Store the number of amino acid residues discarded.
-        row['seq'] = row['seq'][:row['sec_index']] # Get the portion of the sequence prior to the U residue.
+        seq = row['seq'] # Extract the sequence from the row. 
+        row['sec_index'] = seq.index('U') # This will raise an exception if no U residue is found.
+        row['sec_count'] = seq.count('U') # Store the number of selenoproteins in the original sequence.
+        row['truncation_size'] = len(seq) - row['sec_index'] # Store the number of amino acid residues discarded.
+        row['truncation_ratio'] = row['truncation_size'] / len(row['seq']) # Store the truncation size as a ratio. 
+        roq['original_length'] = len(seq)
+        row['seq'] = seq[:row['sec_index']] # Get the portion of the sequence prior to the U residue.
         df_truncated.append(row)
     df_truncated = pd.DataFrame(df_truncated, index=df.index)
     df_truncated.index.name = 'id'
@@ -88,6 +90,7 @@ def truncate_non_sec(df:pd.DataFrame, sec_seqs:np.ndarray=None, n_bins:int=25, b
     sec_lengths = np.array([len(seq) for seq in sec_seqs])
     sec_lengths_truncated = np.array([len(seq) for seq in sec_seqs_truncated]) 
     sec_truncation_ratios = (sec_lengths - sec_lengths_truncated) / sec_lengths
+    print(truncation_ratios)
 
     # Group the lengths of the full-length selenoproteins into n_bins bins
     hist, bin_edges = np.histogram(sec_lengths, bins=n_bins)
