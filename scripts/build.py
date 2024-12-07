@@ -160,7 +160,7 @@ def stats(df:pd.DataFrame, name:str=None):
 
 
 # NOTE: Should I dereplicate the selenoproteins before or after truncation? Seems like after would be a good idea.
-def process(path:str, datasets:Dict[str, List[pd.DataFrame]], data_dir:str=None, label:int=0,  **kwargs):
+def process(path:str, datasets:Dict[str, List[pd.DataFrame]], data_dir:str=None, label:int=0, name:str=None, **kwargs):
 
     print(f'process: Processing dataset {path}...')
 
@@ -171,9 +171,6 @@ def process(path:str, datasets:Dict[str, List[pd.DataFrame]], data_dir:str=None,
     elif label == 2:
         df = truncate_non_sec(df, **kwargs)
 
-    print(df)
-
-    name = os.path.basename(path).replace('.csv', '')
     df = CdHit(df, name=name, cwd=data_dir).run(overwrite=False)
 
     df['label'] = label # Add labels to the data marking the category. 
@@ -201,9 +198,9 @@ if __name__ == '__main__':
 
     datasets = {'train.h5':[], 'test.h5':[], 'val.h5':[]}
 
-    process(uniprot_sprot_path, datasets, label=0, data_dir=args.data_dir)
-    sec_df = process(uniprot_sec_path, datasets, label=1, data_dir=args.data_dir, allow_c_terminal_fragments=True)
-    process(uniprot_sprot_path, datasets, label=2, data_dir=args.data_dir, allow_c_terminal_fragments=True, remove_selenoproteins=True, sec_df=sec_df)
+    process(uniprot_sprot_path, datasets, name='full_length', label=0, data_dir=args.data_dir)
+    sec_df = process(uniprot_sec_path, datasets, name='truncated_selenoprotein', label=1, data_dir=args.data_dir, allow_c_terminal_fragments=True)
+    process(uniprot_sprot_path, datasets, name='truncated_non_selenoprotein', label=2, data_dir=args.data_dir, allow_c_terminal_fragments=True, remove_selenoproteins=True, sec_df=sec_df)
 
     # Concatenate the accumulated datasets. 
     datasets = {name:pd.concat(dfs) for name, dfs in datasets.items()}
@@ -211,7 +208,6 @@ if __name__ == '__main__':
     if args.print_stats:
         for file_name, df in datasets.items():
             stats(df, name=file_name)
-        print()
 
     # NOTE: I want to be able to add to exsting HDF files. 
     for file_name, df in datasets.items():
