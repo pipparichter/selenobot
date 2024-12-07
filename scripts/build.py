@@ -172,7 +172,7 @@ def process(path:str, datasets:Dict[str, List[pd.DataFrame]], data_dir:str=None,
         df = truncate_non_sec(df, **kwargs)
 
     name = os.path.basename(path).replace('.csv', '')
-    df = CdHit(df, name=name, cwd=data_dir).run(overwrite=True)
+    df = CdHit(df, name=name, cwd=data_dir).run(overwrite=False)
 
     df['label'] = label # Add labels to the data marking the category. 
     # Decided to split each data group independently to avoid the mixed clusters. 
@@ -201,7 +201,7 @@ if __name__ == '__main__':
 
     process(uniprot_sprot_path, datasets, label=0, data_dir=args.data_dir)
     sec_df = process(uniprot_sec_path, datasets, label=1, data_dir=args.data_dir, allow_c_terminal_fragments=True)
-    process(uniprot_sprot_path, datasets, label=2, data_dir=args.data_dir, allow_c_terminal_fragments=True, remove_selenoproteins=True, sec_seqs=sec_df.seqs.values)
+    process(uniprot_sprot_path, datasets, label=2, data_dir=args.data_dir, allow_c_terminal_fragments=True, remove_selenoproteins=True, sec_seqs=sec_df.seq.values)
 
     # Concatenate the accumulated datasets. 
     datasets = {name:pd.concat(dfs) for name, dfs in datasets.items()}
