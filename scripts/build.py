@@ -171,6 +171,8 @@ def process(path:str, datasets:Dict[str, List[pd.DataFrame]], data_dir:str=None,
     elif label == 2:
         df = truncate_non_sec(df, **kwargs)
 
+    print(df)
+
     name = os.path.basename(path).replace('.csv', '')
     df = CdHit(df, name=name, cwd=data_dir).run(overwrite=False)
 
