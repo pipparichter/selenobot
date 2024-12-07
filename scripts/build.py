@@ -73,24 +73,20 @@ def truncate_sec(df:pd.DataFrame, **kwargs) -> str:
     return df_truncated
 
 
-def truncate_non_sec(df:pd.DataFrame, sec_seqs:np.ndarray=None, n_bins:int=25, bandwidth:float=0.01, **kwargs) -> pd.DataFrame:
+def truncate_non_sec(df:pd.DataFrame, sec_df:np.ndarray=None, n_bins:int=25, bandwidth:float=0.01, **kwargs) -> pd.DataFrame:
     '''Sub-sample the set of all full-length proteins such that the length distribution matches that of the full-length
     selenoproteins. Then, truncate the sampled sequences so that the truncated length distributions also match.
 
     :param df: The DataFrame containing the complete set of SwissProt proteins. 
-    :param sec_seqs: A Numpy array containing the full-length selenoprotein sequences. 
+    :param sec_df: 
     :param n_bins: The number of bins to use for producing a length distribution of full-length selenoproteins. 
         This is used when initially down-sampling SwissProt. 
     :param bandwidth: The bandwidth to use for the kernel density estimation, which is used for creating 
         distributions for selecting truncation ratios. 
     :return: A pandas DataFrame containing the sub-sampled and randomly truncated SwissProt proteins. 
     '''
-    # Compute the fraction of each selenoprotein which is lost by truncation (sec_truncation_ratios).
-    sec_seqs_truncated = np.array([seq.split('U')[0] for seq in sec_seqs])
-    sec_lengths = np.array([len(seq) for seq in sec_seqs])
-    sec_lengths_truncated = np.array([len(seq) for seq in sec_seqs_truncated]) 
-    sec_truncation_ratios = (sec_lengths - sec_lengths_truncated) / sec_lengths
-    print(truncation_ratios)
+    sec_lengths = sec_df.original_length.values
+    sec_truncation_ratios = sec_df.truncation_ratio.values
 
     # Group the lengths of the full-length selenoproteins into n_bins bins
     hist, bin_edges = np.histogram(sec_lengths, bins=n_bins)
@@ -122,8 +118,6 @@ def truncate_non_sec(df:pd.DataFrame, sec_seqs:np.ndarray=None, n_bins:int=25, b
 
     df_truncated = pd.concat(df_truncated).drop(columns=['bin_label'])
     df_truncated.index.name = 'id'
-    print('df_truncated')
-    print(df_truncated)
     return df_truncated
 
 
@@ -207,7 +201,7 @@ if __name__ == '__main__':
 
     process(uniprot_sprot_path, datasets, label=0, data_dir=args.data_dir)
     sec_df = process(uniprot_sec_path, datasets, label=1, data_dir=args.data_dir, allow_c_terminal_fragments=True)
-    process(uniprot_sprot_path, datasets, label=2, data_dir=args.data_dir, allow_c_terminal_fragments=True, remove_selenoproteins=True, sec_seqs=sec_df.seq.values)
+    process(uniprot_sprot_path, datasets, label=2, data_dir=args.data_dir, allow_c_terminal_fragments=True, remove_selenoproteins=True, sec_df=sec_df)
 
     # Concatenate the accumulated datasets. 
     datasets = {name:pd.concat(dfs) for name, dfs in datasets.items()}
