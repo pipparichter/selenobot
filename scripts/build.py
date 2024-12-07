@@ -70,7 +70,7 @@ def truncate_sec(df:pd.DataFrame, **kwargs) -> str:
     return df_truncated
 
 
-def truncate_non_sec(df:pd.DataFrame, sec_seqs:np.ndarray=None, n_bins:int=25, bandwidth:float=0.01) -> pd.DataFrame:
+def truncate_non_sec(df:pd.DataFrame, sec_seqs:np.ndarray=None, n_bins:int=25, bandwidth:float=0.01, **kwargs) -> pd.DataFrame:
     '''Sub-sample the set of all full-length proteins such that the length distribution matches that of the full-length
     selenoproteins. Then, truncate the sampled sequences so that the truncated length distributions also match.
 
