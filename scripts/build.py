@@ -23,6 +23,7 @@ from selenobot.utils import digitize, groupby, sample
 # Label 2: Truncated non-selenoproteins. 
 
 warnings.simplefilter('ignore')
+utils.seed(42)
 
 
 # NOTE: C terminus is the end terminus. N terminus is where the methionine is. 
@@ -95,6 +96,7 @@ def truncate_non_sec(df:pd.DataFrame, sec_df:np.ndarray=None, n_bins:int=25, ban
     # Sample from the DataFrame of full-length SwissProt proteins, ensuring that the length distribution matches
     # that of the full-length selenoproteins. 
     _, idxs = sample(df.seq.apply(len).values, hist, bin_edges)
+    print(f'truncate_non_sec: Sampled {len(idxs)} full-length non-selenoproteins for truncation.')
     # Assign each of the sampled proteins a bin label, where the bins are the same as those of the full-length selenoprotein
     # length distribution (from above).
     df = df.iloc[idxs].copy()
@@ -171,7 +173,7 @@ def process(path:str, datasets:Dict[str, List[pd.DataFrame]], data_dir:str=None,
     elif label == 2:
         df = truncate_non_sec(df, **kwargs)
 
-    df = CdHit(df, name=name, cwd=data_dir).run(overwrite=False)
+    df = CdHit(df, name=name, cwd=data_dir).run(overwrite=True)
 
     df['label'] = label # Add labels to the data marking the category. 
     # Decided to split each data group independently to avoid the mixed clusters. 
