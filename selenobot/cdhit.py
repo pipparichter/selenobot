@@ -53,12 +53,9 @@ class CdHit():
         clstr_df = ClstrFile(clstr_path).to_df(reps_only=True) # Load in the cluster file and convert to a DataFrame.
 
         # Because CD-HIT filters out short sequences, the clstr_df might be smaller than the fasta_df. 
-        df = self.df.copy().merge(clstr_df, left_index=True, right_index=True, how='right')
+        df = clstr_df.merge(self.df, left_index=True, right_index=True, how='inner')
         print(f'CdHit.dereplicate: Dereplication of clusters with {self.c_dereplicate} similarity eliminated {len(self.df) - len(df)} sequences from {self.name}.')
         print(df)
-        print(clstr_df)
-        print(self.df)
-        print(np.sum(self.df.index.isin(clstr_df.index)))
         # df should now only contain the representative sequences. Store in the object.
         self.dereplicated = True # Mark the DataFrame as dereplicated. 
         self.df = df.drop(columns=['cluster']) # Don't need the cluster column after dereplication. 
@@ -71,7 +68,6 @@ class CdHit():
         # Enforce order in the dereplicate -> cluster pipleline.
         assert self.dereplicated, 'CdHit.cluster: Stored DataFrame has not yet been dereplicated.'
         assert not self.clustered, 'CdHit.cluster: Stored DataFrame has already been clustered.'
-        print(self.df)
         # Don't include the descriptions with the FASTA file, because CD-HIT output files remove them anyway. 
         FastaFile.from_df(self.df, add_description=False).write(self.input_path)
 
