@@ -54,7 +54,7 @@ class CdHit():
 
         # Because CD-HIT filters out short sequences, the clstr_df might be smaller than the fasta_df. 
         df = clstr_df.merge(self.df, left_index=True, right_index=True, how='inner')
-        print(f'CdHit.dereplicate: Dereplication of clusters with {self.c_dereplicate} similarity eliminated {len(self.df) - len(df)} sequences from {self.name}.')
+        print(f'CdHit.dereplicate: Dereplication of clusters with {self.c_dereplicate} similarity eliminated {len(self.df) - len(df)} sequences from {self.name}. {len(df)} sequences remaining.')
         # df should now only contain the representative sequences. Store in the object.
         self.dereplicated = True # Mark the DataFrame as dereplicated. 
         self.df = df.drop(columns=['cluster', 'representative']) # Don't need the cluster column after dereplication. 
@@ -73,7 +73,8 @@ class CdHit():
 
         clstr_path = self._run(self.cluster_output_path, c=self.c_cluster, overwrite=overwrite) # Run CD-HIT and get the path of the output file. 
         clstr_df = ClstrFile(clstr_path).to_df(reps_only=False) # Load in the cluster file and convert to a DataFrame. 
-        assert len(clstr_df) == len(self.df), f'len(clstr_df) = {len(clstr_df)} and len(self.df) - {len(self.df)}'
+        assert len(clstr_df) == len(self.df), f'CdHit.cluster: There should be a cluster assigned to each remaining sequence. len(clstr_df) = {len(clstr_df)} and len(self.df) = {len(self.df)}'
+
         df = clstr_df.merge(self.df, left_index=True, right_index=True, how='inner')
         # The DataFrame should now contain the clustering information. 
         # df should now only contain the representative sequences. Store in the object.
