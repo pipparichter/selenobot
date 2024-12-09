@@ -45,6 +45,7 @@ class AacEmbedder():
 
         for seq in seqs:
             # NOTE: I am pretty much just ignoring all the non-standard amino acids. 
+            print(seq)
             seq = [aa for aa in seq if aa in AacEmbedder.aa_to_int_map]
             # assert np.all([aa in aa_to_int_map for aa in seq]), 'embedder.AacEmbedder.__call__: Some amino acids in the input sequences are not present in the amino-acid-to-integer map.'
 
