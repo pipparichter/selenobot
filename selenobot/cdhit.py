@@ -2,6 +2,7 @@ import os
 import subprocess
 from selenobot.files import ClstrFile, FastaFile
 import pandas as pd
+import numpy as np 
 
 
 class CdHit():
