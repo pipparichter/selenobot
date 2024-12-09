@@ -55,7 +55,7 @@ class CdHit():
         # Because CD-HIT filters out short sequences, the clstr_df might be smaller than the fasta_df. 
         df = clstr_df.merge(self.df, left_index=True, right_index=True, how='inner')
         print(f'CdHit.dereplicate: Dereplication of clusters with {self.c_dereplicate} similarity eliminated {len(self.df) - len(df)} sequences from {self.name}.')
-        print(df)
+        print(df.columns)
         # df should now only contain the representative sequences. Store in the object.
         self.dereplicated = True # Mark the DataFrame as dereplicated. 
         self.df = df.drop(columns=['cluster']) # Don't need the cluster column after dereplication. 
