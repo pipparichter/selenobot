@@ -58,7 +58,6 @@ class CdHit():
         # df should now only contain the representative sequences. Store in the object.
         self.dereplicated = True # Mark the DataFrame as dereplicated. 
         self.df = df.drop(columns=['cluster', 'representative']) # Don't need the cluster column after dereplication. 
-        print(self.df)
         self.cleanup()
 
     def cluster(self, overwrite:bool=False) -> pd.DataFrame:

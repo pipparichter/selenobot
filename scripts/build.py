@@ -13,7 +13,7 @@ import argparse
 import logging
 import warnings
 from selenobot.cdhit import CdHit
-from selenobot.utils import digitize, groupby, sample 
+from selenobot.utils import digitize, groupby, sample, seed
 
 # TODO: Figure out why there are two representative columns in the final dataset, which also have different values. Ah, it's 
 # probably from the two separate rounds of CD-HIT clustering... should clean this up. 
@@ -23,7 +23,7 @@ from selenobot.utils import digitize, groupby, sample
 # Label 2: Truncated non-selenoproteins. 
 
 warnings.simplefilter('ignore')
-utils.seed(42)
+seed(42)
 
 
 # NOTE: C terminus is the end terminus. N terminus is where the methionine is. 
