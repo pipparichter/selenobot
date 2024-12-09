@@ -180,6 +180,8 @@ def embed(df:pd.DataFrame, path:str=None, append:bool=False):
     df = df.sort_index() # Sort the index of the DataFrame to ensure consistent ordering. 
     store = pd.HDFStore(path, mode='a' if append else 'w') # Should confirm that the file already exists. 
     add(store, 'metadata', df)
+    print(df)
+    print(df.seq)
 
     for embedder in [AacEmbedder, PlmEmbedder, LengthEmbedder]:
         embs, ids = embedder()(df.seq.values.tolist(), df.index.values.tolist())
