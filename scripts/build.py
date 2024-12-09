@@ -173,7 +173,7 @@ def process(path:str, datasets:Dict[str, List[pd.DataFrame]], data_dir:str=None,
     elif label == 2:
         df = truncate_non_sec(df, **kwargs)
 
-    df = CdHit(df, name=name, cwd=data_dir).run(overwrite=True)
+    df = CdHit(df, name=name, cwd=data_dir).run(overwrite=False)
 
     df['label'] = label # Add labels to the data marking the category. 
     # Decided to split each data group independently to avoid the mixed clusters. 
