@@ -56,6 +56,8 @@ class CdHit():
         print(f'CdHit.dereplicate: Dereplication of clusters with {self.c_dereplicate} similarity eliminated {len(self.df) - len(df)} sequences from {self.name}.')
         print(df)
         print(clstr_df)
+        print(self.df)
+        print(np.sum(self.df.index.isin(clstr_df.index)))
         # df should now only contain the representative sequences. Store in the object.
         self.dereplicated = True # Mark the DataFrame as dereplicated. 
         self.df = df.drop(columns=['cluster']) # Don't need the cluster column after dereplication. 
