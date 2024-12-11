@@ -27,13 +27,13 @@ class LengthEmbedder():
         return np.array(lengths), np.array(ids)
 
 
-class AacEmbedder():
+class AACEmbedder():
     name = 'aac'
     aa_to_int_map = {aa: i for i, aa in enumerate(list('ARNDCQEGHILKMFPOSTWYV'))}
 
     def __init__(self):
-        '''Initializes an AacEmbedder object.'''
-        super(AacEmbedder, self).__init__()
+        '''Initializes an AACEmbedder object.'''
+        super(AACEmbedder, self).__init__()
         self.type = 'aac'
 
     def __call__(self, seqs:List[str], ids:List[str]) -> torch.Tensor:
@@ -45,15 +45,14 @@ class AacEmbedder():
 
         for seq in seqs:
             # NOTE: I am pretty much just ignoring all the non-standard amino acids. 
-            print(seq)
-            seq = [aa for aa in seq if aa in AacEmbedder.aa_to_int_map]
-            # assert np.all([aa in aa_to_int_map for aa in seq]), 'embedder.AacEmbedder.__call__: Some amino acids in the input sequences are not present in the amino-acid-to-integer map.'
+            seq = [aa for aa in seq if aa in AACEmbedder.aa_to_int_map]
+            # assert np.all([aa in aa_to_int_map for aa in seq]), 'embedder.AACEmbedder.__call__: Some amino acids in the input sequences are not present in the amino-acid-to-integer map.'
 
             # Map each amino acid to an integer using the internal map. 
             # seq = np.array([self.aa_to_int_map[aa] for aa in seq])
-            seq = np.array([AacEmbedder.aa_to_int_map[aa] for aa in seq])
+            seq = np.array([AACEmbedder.aa_to_int_map[aa] for aa in seq])
             
-            emb = np.zeros(shape=(len(seq), len(AacEmbedder.aa_to_int_map)))
+            emb = np.zeros(shape=(len(seq), len(AACEmbedder.aa_to_int_map)))
             emb[np.arange(len(seq)), seq] = 1
             emb = np.sum(emb, axis=0)
             # Now need to normalize according to sequence length. 
@@ -64,7 +63,7 @@ class AacEmbedder():
         return np.array(embs), np.array(ids)
 
 
-class PlmEmbedder():
+class PLMEmbedder():
     '''Adapted from Josh's code, which he adapted from https://github.com/agemagician/ProtTrans/blob/master/Embedding/prott5_embedder.py'''
     name = 'plm'
 
@@ -111,7 +110,7 @@ class PlmEmbedder():
                         e = e.mean(dim=0) # If mean pooling is specified, average over sequence length. 
                     embs.append((i, e)) # Append the ID and embedding to the list. 
 
-        for i, s in tqdm(seqs, desc='PlmEmbedder.__call__'):
+        for i, s in tqdm(seqs, desc='PLMEmbedder.__call__'):
             # Switch to single-sequence processing if length limit is exceeded.
             if len(s) > max_seq_length:
                 outputs = self.embed_batch([s])
@@ -159,7 +158,7 @@ class PlmEmbedder():
                 outputs = self.model(**inputs)
                 return outputs
         except RuntimeError:
-            print('PlmEmbedder.embed_batch: RuntimeError during embedding. Try lowering batch size.')
+            print('PLMEmbedder.embed_batch: RuntimeError during embedding. Try lowering batch size.')
             return None
 
 
@@ -184,7 +183,7 @@ def embed(df:pd.DataFrame, path:str=None, append:bool=False):
     print(df)
     print(df.seq)
 
-    for embedder in [AacEmbedder, PlmEmbedder, LengthEmbedder]:
+    for embedder in [AACEmbedder, PLMEmbedder, LengthEmbedder]:
         embs, ids = embedder()(df.seq.values.tolist(), df.index.values.tolist())
         sort_idxs = np.argsort(ids)
         embs, ids = embs[sort_idxs, :], ids[sort_idxs]

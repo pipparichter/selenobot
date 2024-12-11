@@ -31,11 +31,15 @@ class Dataset(torch.utils.data.Dataset):
         self.n_features = n_features
         self.n_classes = n_classes
 
-        self.embeddings = torch.from_numpy(df[list(range(n_features))].values).to(self.device).to(self.dtype)
+
+        if n_features is not None:
+            self.embeddings = torch.from_numpy(df[list(range(n_features))].values).to(self.device).to(self.dtype)
+        else:
+            self.embeddings = None
         
         self.labels, self.labels_one_hot_encoded = None, None
         if ('label' in df.columns):
-            self.labels =  torch.from_numpy(df['label'].values).type(torch.LongTensor)
+            self.labels = torch.from_numpy(df['label'].values).type(torch.LongTensor)
             self.labels_one_hot_encoded = one_hot(self.labels, num_classes=self.n_classes).to(self.dtype).to(self.device)
 
         self.metadata = df[[col for col in df.columns if type(col) == str]] 
@@ -56,12 +60,15 @@ class Dataset(torch.utils.data.Dataset):
             self.scaled = True
 
     @classmethod
-    def from_hdf(cls, path:str, feature_type:str='plm', n_classes:int=2, half_precision:bool=False):
+    def from_hdf(cls, path:str, feature_type:str=None, n_classes:int=2, half_precision:bool=False):
+        metadata_df = pd.read_hdf(path, 'metadata')
+        if feature_type is None:
+            return cls(metadata_df, n_features=None, half_precision=half_precision) 
+
         df = pd.read_hdf(path, key=feature_type)
         n_features = len(df.columns) # Get the number of features. 
         if df.index.name is None:
             df.index.name = 'id' # Forgot to set the index name in some of the files. 
-        metadata_df = pd.read_hdf(path, 'metadata')
         df = df.merge(metadata_df, right_index=True, left_index=True, how='inner')
         return cls(df, n_features=n_features, half_precision=half_precision)
     
