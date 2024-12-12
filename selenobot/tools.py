@@ -1,13 +1,13 @@
 import os 
 import subprocess
-from selenobot.files import ClstrFile, FastaFile
+from selenobot.files import CDHITFile, FASTAFile
 import pandas as pd
 import numpy as np 
 
 
 class MUSCLE():
 
-    def __init__(self, df:pd.DataFrame, name:str='tmp', cwd:str=os.getcwd()):
+    def __init__(self, df:pd.DataFrame, name:str='untitled', cwd:str=os.getcwd()):
         
         self.cwd = cwd
         self.df = df 
@@ -18,14 +18,43 @@ class MUSCLE():
     def run(self):
 
         # Write the DataFrame to a FASTA file so it can be used with MUSCLE. 
-        FastaFile.from_df(self.df, add_description=False).write(self.input_path)
+        FASTAFile.from_df(self.df, add_description=False).write(self.input_path)
 
         subprocess.run(f'muscle -in {self.input_path} -out {self.output_path}') 
         return self.output_path
 
     def cleanup(self):
         os.remove(self.input_path)
-        
+
+
+class MMseqs():
+    def __init(self, df:pd.DataFrame, name:str='untitled', cwd=os.getcwd()):
+
+
+
+        self.cwd = cwd
+        self.df = df 
+        self.name = name
+
+        # Need a directory to store temporary files. If one does not already exist, create it in the working directory.
+        self.tmp_dir = os.path.join(cwd, 'tmp')
+        if not os.path.exists(self.tmp_dir):
+            os.mkdir(self.tmp_dir)
+
+        self.input_path = os.path.join(self.cwd, f'{name}.fa')
+        self.output_path = os.path.join(self.cwd, f'{name}.afa') # This is a FASTA file format. 
+
+    def run(self, min_seq_id:float=0.2, e:float=0, c:float=0, cluster_mode:int=0):
+        ''' 
+        :param min_seq_id: A minimum sequence identity defined as the equivalent similarity score (derived from a training set) of the local alignment (including gap penalties) 
+            divided by the maximum of the lengths of the two locally aligned sequence segments. 
+        :param e: A maximum E-value threshold computed according to the gap-corrected Karlin-Altschul statistics using the ALP library.
+        :param c: A minimum coverage between 0 and 1, which is defined by the number of aligned residue pairs divided by 
+            the maximum of the length of query and target sequences alnRes/max(qLen,tLen). 
+        '''
+        FASTAFile.from_df(self.df, add_description=False).write(self.input_path)
+
+        cmd = f'mmseqs easy-cluster {args.input_path} {name} tmp --min-seq-id 0.5 -c 0.8 --cov-mode 1'
 
 
 class CDHIT():
@@ -84,10 +113,10 @@ class CDHIT():
         assert not self.clustered, 'CDHIT.dereplicate: Stored DataFrame has already been clustered.'
 
         # Don't include the descriptions with the FASTA file, because CD-HIT output files remove them anyway. 
-        FastaFile.from_df(self.df, add_description=False).write(self.input_path)
+        FASTAFile.from_df(self.df, add_description=False).write(self.input_path)
 
         clstr_path = self._run(self.dereplicate_output_path, c=self.c_dereplicate, overwrite=overwrite) # Run CD-HIT and get the path of the output file. 
-        clstr_df = ClstrFile(clstr_path).to_df(reps_only=True) # Load in the cluster file and convert to a DataFrame.
+        clstr_df = CDHITFile(clstr_path).to_df(reps_only=True) # Load in the cluster file and convert to a DataFrame.
 
         # Because CD-HIT filters out short sequences, the clstr_df might be smaller than the fasta_df. 
         df = clstr_df.merge(self.df, left_index=True, right_index=True, how='inner')
@@ -106,10 +135,10 @@ class CDHIT():
         # assert self.dereplicated, 'CDHIT.cluster: Stored DataFrame has not yet been dereplicated.'
         assert not self.clustered, 'CDHIT.cluster: Stored DataFrame has already been clustered.'
         # Don't include the descriptions with the FASTA file, because CD-HIT output files remove them anyway. 
-        FastaFile.from_df(self.df, add_description=False).write(self.input_path)
+        FASTAFile.from_df(self.df, add_description=False).write(self.input_path)
 
         clstr_path = self._run(self.cluster_output_path, c=self.c_cluster, overwrite=overwrite) # Run CD-HIT and get the path of the output file. 
-        clstr_df = ClstrFile(clstr_path).to_df(reps_only=False) # Load in the cluster file and convert to a DataFrame. 
+        clstr_df = CDHITFile(clstr_path).to_df(reps_only=False) # Load in the cluster file and convert to a DataFrame. 
         assert len(clstr_df) == len(self.df), f'CDHIT.cluster: There should be a cluster assigned to each remaining sequence. len(clstr_df) = {len(clstr_df)} and len(self.df) = {len(self.df)}'
 
         df = clstr_df.merge(self.df, left_index=True, right_index=True, how='inner')

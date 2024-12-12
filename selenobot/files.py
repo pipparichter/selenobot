@@ -47,10 +47,10 @@ class File():
 # dereplicate first and then group to separate for the train, test, validation split. 
 
 # TODO: Should probably use BioPython for this. Was there a reason I didn't?
-class FastaFile(File):
+class FASTAFile(File):
 
     def __init__(self, path:str=None, seqs:List[str]=None, ids:List[str]=None, descriptions:List[str]=None):
-        '''Initialize a FastaFile object.'''
+        '''Initialize a FASTAFile object.'''
         super().__init__(path) 
 
         if (path is not None):
@@ -116,7 +116,7 @@ class FastaFile(File):
 
 # TODO: Are the amino acids sequences listed in each cluster in any particular order?
 
-class ClstrFile(File):
+class CDHITFile(File):
 
     def __init__(self, path:str):
         '''
@@ -152,7 +152,7 @@ class ClstrFile(File):
             self.cluster_sizes.append(len(entries))
 
     def to_df(self, reps_only:bool=False) -> pd.DataFrame:
-        '''Convert a ClstrFile to a pandas DataFrame.'''
+        '''Convert a CDHITFile to a pandas DataFrame.'''
         df = pd.DataFrame({'id':self.ids, 'cluster':self.clusters, 'representative':self.representative}) 
         df.cluster = df.cluster.astype(int) # This will speed up grouping clusters later on. 
         if reps_only: # If specified, only get the representatives from each cluster. 
@@ -226,23 +226,24 @@ class EmbeddingsFile(File):
         return df
 
 
-class NcbiXmlFile(File):
-    '''These files are obtained from the NCBI FTP site, and contain metadata information for sequences in SwissProt (files are also available
-    for TREMBL entries, but I did not download these).'''
+class XMLFile(File):
     # tags = ['taxon', 'accession', 'entry', 'organism', 'sequence']
     # tags = ['accession', 'organism', 'sequence']
+    # TODO: Read more about namespaces. 
 
-    @staticmethod
-    def find(namespace:str, elem, name:str, attrs:Dict[str, str]=None):
-        xpath = f'.//{namespace}{name}'
+
+    def find(self, elem, name:str, attrs:Dict[str, str]=None):
+        '''Find the first tag in the entry element which has the specified names and attributes.'''
+        xpath = f'.//{self.namespace}{name}' #TODO: Remind myself how these paths work. 
         if attrs is not None:
             for attr, value in attrs.items():
                 xpath += f'[@{attr}=\'{value}\']'
         return elem.find(xpath)
 
-    @staticmethod
-    def findall(namespace:str, elem, name:str, attrs:Dict[str, str]=None):
-        xpath = f'.//{namespace}{name}'
+
+    def findall(self, elem, name:str, attrs:Dict[str, str]=None):
+        '''Find all tags in the entry element which have the specified names and attributes.'''
+        xpath = f'.//{self.namespace}{name}'
         if attrs is not None:
             for attr, value in attrs.items():
                 xpath += f'[@{attr}=\'{value}\']'
@@ -250,44 +251,54 @@ class NcbiXmlFile(File):
 
     @staticmethod
     def get_tag(elem) -> str:
+        # Namespaces look like [EXAMPLE] specify the location in the tree. 
         namespace, tag = elem.tag.split('}') # Remove the namespace from the tag. 
         namespace = namespace + '}'
         return namespace, tag 
 
-    @staticmethod
-    def get_taxonomy(namespace:str, entry) -> Dict[str, str]:
+    def get_annotation(self, entry) -> Dict[str, str]:
+        '''Grab the functional description and KEGG ortho group (if they exist) for the entry.'''
+        annotation = dict()
+        kegg_entry = self.find(entry, 'dbReference', attrs={'type':'KEGG'}) 
+        if kegg_entry is not None:
+            annotation['kegg'] = kegg_entry.attrib['id']
+        function_entry = self.find(entry, 'comment', attrs={'type':'function'}) 
+        if function_entry is not None:
+            # Need to look at the "text" tag stored under the function entry.
+            annotation['function'] = self.find(function_entry, 'text').text 
+        return annotation
+
+    def get_taxonomy(self, entry) -> Dict[str, str]:
         '''Extract the taxonomy information from the organism tag group.'''
         levels = ['domain', 'kingdom', 'phylum', 'class', 'order', 'family', 'genus']
-        taxonomy = {level:taxon.text for taxon, level in zip(NcbiXmlFile.findall(namespace, entry, 'taxon'), levels)}
-        taxonomy['species'] = NcbiXmlFile.find(namespace, entry, 'name').text
-        taxonomy['ncbi_taxonomy_id'] = NcbiXmlFile.find(namespace, entry, 'dbReference', attrs={'type':'NCBI Taxonomy'}).attrib['id'] # , attrs={'type':'NCBI Taxonomy'})[0].id
+        taxonomy = {level:taxon.text for taxon, level in zip(self.findall(entry, 'taxon'), levels)}
+        taxonomy['species'] = self.find(entry, 'name').text
+        taxonomy['ncbi_taxonomy_id'] = self.find(entry, 'dbReference', attrs={'type':'NCBI Taxonomy'}).attrib['id'] # , attrs={'type':'NCBI Taxonomy'})[0].id
         return taxonomy
 
-    @staticmethod
-    def get_refseq(namespace:str, entry) -> Dict[str, str]:
+    def get_refseq(self, entry) -> Dict[str, str]:
         '''Get references to RefSeq database in case I want to access the nucleotide sequence later on.'''
         refseq = dict()
-        refseq_entry = NcbiXmlFile.find(namespace, entry, 'dbReference', attrs={'type':'RefSeq'}) # Can we assume there is always a RefSeq entry? No. 
+        refseq_entry = self.find(entry, 'dbReference', attrs={'type':'RefSeq'}) # Can we assume there is always a RefSeq entry? No. 
         if (refseq_entry is not None):
             refseq['refseq_protein_id'] = refseq_entry.attrib['id']
-            refseq['refseq_nucleotide_id'] = NcbiXmlFile.find(namespace, refseq_entry, 'property', attrs={'type':'nucleotide sequence ID'}).attrib['value']
+            refseq['refseq_nucleotide_id'] = self.find(refseq_entry, 'property', attrs={'type':'nucleotide sequence ID'}).attrib['value']
         else:
             refseq['refseq_protein_id'] = None
             refseq['refseq_nucleotide_id'] = None
         return refseq
 
-    @staticmethod
-    def get_non_terminal_residue(namespace:str, entry) -> Dict[str, str]:
+    def get_non_terminal_residue(self, entry) -> Dict[str, str]:
         '''If the entry passed into the function has a non-terminal residue(s), find the position(s) where it occurs; 
         there can be two non-terminal residues, one at the start of the sequence, and one at the end.'''
         # Figure out of the sequence is a fragment, i.e. if it has a non-terminal residue. 
-        non_terminal_residue_entries = NcbiXmlFile.findall(namespace, entry, 'feature', attrs={'type':'non-terminal residue'})
-        # assert len(non_terminal_residues) < 2, f'NcbiXmlFile.__init__: Found more than one ({len(non_terminal_residue)}) non-terminal residue, which is unexpected.'
+        non_terminal_residue_entries = self.findall(entry, 'feature', attrs={'type':'non-terminal residue'})
+        # assert len(non_terminal_residues) < 2, f'XMLFile.__init__: Found more than one ({len(non_terminal_residue)}) non-terminal residue, which is unexpected.'
         if len(non_terminal_residue_entries) > 0:
             positions = []
             for non_terminal_residue_entry in non_terminal_residue_entries:
                 # Get the location of the non-terminal residue. 
-                position = NcbiXmlFile.find(namespace, non_terminal_residue_entry, 'position').attrib['position']
+                position = self.find(non_terminal_residue_entry, 'position').attrib['position']
                 positions.append(position)
             positions = ','.join(positions)
         else:
@@ -297,29 +308,32 @@ class NcbiXmlFile(File):
     def __init__(self, path:str, load_seqs:bool=True, chunk_size:int=100):
         super().__init__(path)
 
-        pbar = tqdm(etree.iterparse(path, events=('start', 'end')), desc='NcbiXmlFile.__init__: Parsing NCBI XML file...')
+        pbar = tqdm(etree.iterparse(path, events=('start', 'end')), desc='XMLFile.__init__: Parsing NCBI XML file...')
         entry, df = None, []
-        for event, elem in pbar:
-            namespace, tag = NcbiXmlFile.get_tag(elem)
+        for event, elem in pbar: # The file tree gets accumulated in the elem variable as the iterator progresses. 
+            namespace, tag = XMLFile.get_tag(elem) # Extract the tag and namespace from the element. 
+            self.namespace = namespace # Save the current namespace in the object.
+
             if (tag == 'entry') and (event == 'start'):
                 entry = elem
             if (tag == 'entry') and (event == 'end'):
                 accessions = [accession.text for accession in entry.findall(namespace + 'accession')]
-                row = NcbiXmlFile.get_taxonomy(namespace, entry) 
-                row.update(NcbiXmlFile.get_refseq(namespace, entry))
-                row.update(NcbiXmlFile.get_non_terminal_residue(namespace, entry))
+                row = self.get_taxonomy(entry) 
+                row.update(self.get_refseq(entry))
+                row.update(self.get_non_terminal_residue(entry))
+                row.update(self.get_annotation(entry))
 
                 if load_seqs:
-                    row['seq'] = NcbiXmlFile.findall(namespace, entry, 'sequence')[-1].text
-                row['name'] = NcbiXmlFile.find(namespace, entry, 'name').text 
-
+                    row['seq'] = self.findall(entry, 'sequence')[-1].text
+                row['name'] = self.find(entry, 'name').text 
 
                 for accession in accessions:
                     row['id'] = accession 
                     df.append(row.copy())
-                elem.clear()
+
+                elem.clear() # Clear the element to avoid loading everything into memory. 
                 pbar.update(len(accessions))
-                pbar.set_description(f'NcbiXmlFile.__init__: Parsing NCBI XML file, row {len(df)}...')
+                pbar.set_description(f'XMLFile.__init__: Parsing NCBI XML file, row {len(df)}...')
 
         self.df = pd.DataFrame(df).set_index('id')
 

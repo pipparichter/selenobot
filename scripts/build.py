@@ -12,7 +12,7 @@ import subprocess
 import argparse
 import logging
 import warnings
-from selenobot.cdhit import CdHit
+from selenobot.tools import CDHIT
 from selenobot.utils import digitize, groupby, sample, seed
 
 # TODO: Figure out why there are two representative columns in the final dataset, which also have different values. Ah, it's 
@@ -27,7 +27,7 @@ seed(42)
 
 
 # NOTE: C terminus is the end terminus. N terminus is where the methionine is. 
-def clean(df:pd.DataFrame, bacteria_only:bool=True, allow_c_terminal_fragments:bool=False, remove_selenoproteins:bool=False, **kwargs) -> pd.DataFrame:
+def clean(df:pd.DataFrame, bacteria_only:bool=True, allow_c_terminal_fragments:bool=False, remove_selenoproteins:bool=False, max_length:int=None, **kwargs) -> pd.DataFrame:
     '''''' 
     # There are duplicates here, as there were multiple accessions for the same protein. 
     df = df.drop_duplicates('name', keep='first')
@@ -38,9 +38,14 @@ def clean(df:pd.DataFrame, bacteria_only:bool=True, allow_c_terminal_fragments:b
         print(f'clean: Removed {non_bacterial.sum()} non-bacterial proteins from the DataFrame. {len(df)} sequences remaining.') 
 
     if remove_selenoproteins: # TODO: Add a check to make sure this catches everything... 
-        selenoprotein = df.seq.str.contains('U')
-        df = df[~selenoprotein]
-        print(f'clean: Removed {selenoprotein.sum()} selenoproteins from the DataFrame. {len(df)} sequences remaining.') 
+        is_a_selenoprotein = df.seq.str.contains('U')
+        df = df[~is_a_selenoprotein]
+        print(f'clean: Removed {is_a_selenoprotein.sum()} selenoproteins from the DataFrame. {len(df)} sequences remaining.') 
+
+    if max_length is not None:
+        exceeds_max_length = df.seq.apply(len) > max_length
+        df = df[~exceeds_max_length]
+        print(f'clean: Removed {exceeds_max_length.sum()} proteins which exceed {max_length} amino acids in length from the DataFrame. {len(df)} sequences remaining.') 
 
     # Remove fragmented proteins from the DataFrame.
     # This function checks to see if there is a non-terminal residue at the beginning of the protein (i.e. N-terminal). 
@@ -173,7 +178,7 @@ def process(path:str, datasets:Dict[str, List[pd.DataFrame]], data_dir:str=None,
     elif label == 2:
         df = truncate_non_sec(df, **kwargs)
 
-    df = CdHit(df, name=name, cwd=data_dir).run(overwrite=False)
+    df = CDHIT(df, name=name, cwd=data_dir).run(overwrite=False)
 
     df['label'] = label # Add labels to the data marking the category. 
     # Decided to split each data group independently to avoid the mixed clusters. 

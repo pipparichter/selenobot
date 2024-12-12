@@ -23,7 +23,7 @@ from sklearn.preprocessing import StandardScaler
 from selenobot.tools import CDHIT, MUSCLE
 from Bio.Seq import Seq 
 from Bio.SeqRecord import SeqRecord
-from Bio.Align import MultipleSeqAlignment
+
 
 # warnings.simplefilter('ignore')
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -142,7 +142,7 @@ class NN(torch.nn.Module):
     def __init__(self, hidden_dim:int=512, input_dim:int=1024, output_dim:int=2, half_precision:bool=False):
 
         super(Classifier, self).__init__()
-
+       
         self.dtype = torch.bfloat16 if half_precision else torch.float32
 
         self.model = torch.nn.Sequential(
@@ -186,7 +186,7 @@ class NN(torch.nn.Module):
 
             # Organize the predictions into a DataFrame.
             predictions = pd.DataFrame(index=dataset.ids)
-            for i, category in self.categories.items():
+            for i, category in dataset.categories.items():
                 predictions[f'probability_{category}'] = outputs[:, i].ravel()
             predictions['prediction'] = np.argmax(outputs, axis=1).ravel() # Convert out of one-hot encodings.
 
@@ -264,6 +264,20 @@ class NN(torch.nn.Module):
 
 
 
+class Classifier():
+
+    model_types = ['hmm', 'nn']
+
+    def __init__(self, n_classes:int=2, model_type:str='nn', **kwargs):
+        
+        self.model = HMM(n_classes=n_classes, **kwargs) if model_type == 'hmm' else NN(output_dim=n_classes, **kwargs)
+
+    def fit(self, train_dataset, val_dataset, **kwargs):
+        self.model.fit(train_dataset, val_dataset, **kwargs)
+
+    def predict(self, dataset) -> pd.DataFrame:
+        return self.model.predict(dataset)
+
     @classmethod
     def load(cls, path:str):
         with open(path, 'rb') as f:
@@ -271,50 +285,9 @@ class NN(torch.nn.Module):
             obj = Unpickler(f).load()
         return obj    
 
-
-
-class Classifier():
-
-    model_types = ['hmm', 'nn']
-
-    def __init__(self, model_type:str='nn', n_classes:int=2):
-        
-        self.model = HMM(n_classes=n_classes, **kwargs) if model_type == 'hmm' else NN(output_dim=n_classes, **kwargs)
-
-    @classmethod
-    def load(cls, path:str):
-        pass 
-
     def save(self, path:str):
         with open(path, 'wb') as f:
             pickle.dump(self, f)
 
 
-class TernaryClassifier(Classifier):
-    '''Class defining a ternary classification head. This classifier sorts sequences into one of three categories:
-    full-length, truncated selenoprotein, and truncated non-selenoprotein.'''
-
-    categories = {0:'full_length', 1:'truncated_selenoprotein', 2:'truncated_non_selenoprotein'}
-
-    def __init__(self, model_type:str='hmm', **kwargs):
- 
-        super(TernaryClassifier, self).__init__(output_dim=3, input_dim=input_dim) # Make sure to call this AFTER defining the classifier. 
-
-
-
-class BinaryClassifier(Classifier):
-    '''Class defining the binary classification head.'''
-
-    categories = {0:'full_length', 1:'truncated_selenoprotein'}
-
-    def __init__(self, half_precision:bool=False, input_dim:int=1024):
-        '''
-        Initializes a two-layer linear classification head. 
-
-        :param bce_loss_weight: The weight applied to false negatives in the BCE loss function. 
-        :param hidden_dim: The number of nodes in the second linear layer of the two-layer classifier.
-        :param input_dim: The dimensionality of the input embedding. 
-        '''
-        # Initialize the torch Module
-        # super(BinaryClassifier, self).__init__(output_dim=2, input_dim=input_dim)
 
