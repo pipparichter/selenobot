@@ -186,8 +186,9 @@ class NN(torch.nn.Module):
 
             # Organize the predictions into a DataFrame.
             predictions = pd.DataFrame(index=dataset.ids)
-            for i, category in dataset.categories.items():
-                predictions[f'probability_{category}'] = outputs[:, i].ravel()
+            # for i, category in dataset.categories.items():
+            for i in range(outputs.shape[-1]):
+                predictions[f'probability_{dataset.categories[i]}'] = outputs[:, i].ravel()
             predictions['prediction'] = np.argmax(outputs, axis=1).ravel() # Convert out of one-hot encodings.
 
             return predictions

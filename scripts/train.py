@@ -21,7 +21,7 @@ if __name__ == '__main__':
     parser.add_argument('--models-dir', default='../models', type=str)
     args = parser.parse_args()
 
-    input_dims = {'plm':1024, 'aac':20, 'len':1} # Dimension of the input embeddings for each feature type. 
+    input_dims = {'plm':1024, 'aac':21, 'len':1} # Dimension of the input embeddings for each feature type. 
     model_name = f'ternary_model_{args.feature_type}.pkl' if (args.output_dim == 3) else f'binary_model_{args.feature_type}.pkl' 
 
     model = Classifier(n_classes=args.output_dim, input_dim=input_dims[args.feature_type])

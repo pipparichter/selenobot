@@ -12,20 +12,18 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--feature-type', default='plm', type=str)
     parser.add_argument('--input-path', type=str)
-    parser.add_argument('--n-classes', default=2)
+    parser.add_argument('--n-classes', default=2, type=int, choices=[2, 3])
     parser.add_argument('--models-dir', default='../models', type=str)
     parser.add_argument('--results-dir', default='.', type=str)
 
     args = parser.parse_args()
 
     model_name = f'ternary_model_{args.feature_type}.pkl' if (args.n_classes == 3) else f'binary_model_{args.feature_type}.pkl' 
+    print(model_name)
     model_path = os.path.join(args.models_dir, model_name)
 
-    if args.n_classes == 2:
-        model = BinaryClassifier.load(model_path)
-    elif args.output_dim == 3:
-        model = TernaryClassifier.load(model_path)
-        
+    model = Classifier.load(model_path)
+    
     dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, n_classes=args.n_classes)
 
     output_file_name, _ = os.path.splitext(os.path.basename(args.input_path))
