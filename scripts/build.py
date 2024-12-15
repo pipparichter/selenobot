@@ -95,6 +95,7 @@ def truncate_non_sec(df:pd.DataFrame, sec_df:np.ndarray=None, n_bins:int=25, ban
     sec_truncation_ratios = sec_df.truncation_ratio.values
 
     # Group the lengths of the full-length selenoproteins into n_bins bins
+    print(f'truncate_non_sec: Generating a selenoprotein length distribution with {n_bins} bins.')
     hist, bin_edges = np.histogram(sec_lengths, bins=n_bins)
     bin_labels, bin_names = digitize(sec_lengths, bin_edges)
 
@@ -111,10 +112,13 @@ def truncate_non_sec(df:pd.DataFrame, sec_df:np.ndarray=None, n_bins:int=25, ban
     # heteroscedacity: the variance in the truncation ratios of short sequences is much higher than that of long
     # sequences, so need to generate different distributions for different length categories. 
     kdes = dict()
+
+    pbar = tqdm(total=len(np.unique(bin_labels)), desc='truncate_non_sec: Generating KDEs of length bins...')
     for bin_label, bin_values in groupby(sec_truncation_ratios, bin_labels).items():
         kde = sklearn.neighbors.KernelDensity(kernel='gaussian', bandwidth=bandwidth) 
         kde.fit(bin_values.reshape(-1, 1))
         kdes[bin_label] = kde
+        pbar.update(1)
 
     # Use the KDE to sample truncation ratios for each length bin, and apply the truncation to the full-length sequence. 
     df_truncated = []
