@@ -133,7 +133,7 @@ def split(df:pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     no CD-HIT-generated cluster is split between datasets. The data is first divided into a training set (80 percent) and test
     set (20 percent), and the training data is further divided into a training (80 percent) and validation (20 percent) set.'''
 
-    groups = df['cluster'].values # Extract cluster labels. 
+    groups = df['cdhit_cluster'].values # Extract cluster labels. 
     gss = GroupShuffleSplit(n_splits=1, train_size=0.8)
 
     idxs, test_idxs = list(gss.split(df.values, groups=groups))[0]
@@ -156,8 +156,8 @@ def stats(df:pd.DataFrame, name:str=None):
 
     size = len(df)
     fraction_selenoproteins = np.round(df.label.sum() / size, 2)
-    mean_cluster_size = np.round(df.groupby('cluster').apply(len).mean(), 2)
-    n_clusters = len(df.cluster.unique()) 
+    mean_cluster_size = np.round(df.groupby('cdhit_cluster').apply(len).mean(), 2)
+    n_clusters = len(df.cdhit_cluster.unique()) 
 
     print(f'stats: Dataset size:', size)
     print(f'stats: Fraction of selenoproteins:', fraction_selenoproteins)
