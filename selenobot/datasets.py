@@ -26,23 +26,21 @@ class Dataset(torch.utils.data.Dataset):
         :param half_precision: Whether or not to use half-precision floats. 
         :param n_classes: The number of classes in the labels. 
         '''
-
+        self.n_classes = n_classes
+        self.n_features = n_features
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.dtype = torch.bfloat16 if half_precision else torch.float32
-        self.n_features = n_features
-        self.n_classes = n_classes
-
+        self.labels, self.labels_one_hot_encoded = None, None
+        if ('label' in df.columns):
+            df = df[df.label.isin(list(range(n_classes)))] # Filter the DataFrame to only include entries for relevant classes. 
+            self.labels = torch.from_numpy(df['label'].values).type(torch.LongTensor)
+            self.labels_one_hot_encoded = one_hot(self.labels, num_classes=self.n_classes).to(self.dtype).to(self.device)
 
         if n_features is not None:
             self.embeddings = torch.from_numpy(df[list(range(n_features))].values).to(self.device).to(self.dtype)
         else:
             self.embeddings = None
         
-        self.labels, self.labels_one_hot_encoded = None, None
-        if ('label' in df.columns):
-            self.labels = torch.from_numpy(df['label'].values).type(torch.LongTensor)
-            self.labels_one_hot_encoded = one_hot(self.labels, num_classes=self.n_classes).to(self.dtype).to(self.device)
-
         self.metadata = df[[col for col in df.columns if type(col) == str]] 
         self.ids = df.index.values
         self.scaled = False
@@ -64,14 +62,14 @@ class Dataset(torch.utils.data.Dataset):
     def from_hdf(cls, path:str, feature_type:str=None, n_classes:int=2, half_precision:bool=False):
         metadata_df = pd.read_hdf(path, 'metadata')
         if feature_type is None:
-            return cls(metadata_df, n_features=None, half_precision=half_precision) 
+            return cls(metadata_df, n_features=None, n_classes=n_classes, half_precision=half_precision) 
 
         df = pd.read_hdf(path, key=feature_type)
         n_features = len(df.columns) # Get the number of features. 
         if df.index.name is None:
             df.index.name = 'id' # Forgot to set the index name in some of the files. 
         df = df.merge(metadata_df, right_index=True, left_index=True, how='inner')
-        return cls(df, n_features=n_features, half_precision=half_precision)
+        return cls(df, n_features=n_features, n_classes=n_classes, half_precision=half_precision)
     
     def shape(self):
         return self.embeddings.shape
@@ -102,38 +100,6 @@ class Dataset(torch.utils.data.Dataset):
             item['label'] = self.labels[idx]
             item['label_one_hot_encoded'] = self.labels_one_hot_encoded[idx]
         return item
-
-
-
-class BinaryDataset(Dataset):
-    categories = {0:'full_length', 1:'truncated_selenoprotein'}
-    
-    def __init__(self, df:pd.DataFrame, n_features:int=1024, half_precision:bool=False):
-        '''Initializes a Dataset from a pandas DataFrame containing embeddings and labels.
-        
-        :param df: A pandas DataFrame containing the data to store in the Dataset. 
-        :param half_precision: Whether or not to use half-precision floats. 
-        '''
-        assert 'label' in df.columns, 'BinaryDataset.__init__: A BinaryDataset must be labeled.'
-        df = df[df.label.isin(list(BinaryDataset.categories.keys()))]
-        
-        super(BinaryDataset, self).__init__(df, half_precision=half_precision, n_features=n_features, n_classes=2)
-
-
-
-class TernaryDataset(Dataset):
-    
-    def __init__(self, df:pd.DataFrame, n_features:int=1024, half_precision:bool=False):
-        '''Initializes a Dataset from a pandas DataFrame containing embeddings and labels.
-        
-        :param df: A pandas DataFrame containing the data to store in the Dataset. 
-        :param half_precision: Whether or not to use half-precision floats. 
-        '''
-        assert 'label' in df.columns, 'BinaryDataset.__init__: A TernaryDataset must be labeled.'
-        df = df[df.label.isin(list(TernaryDataset.categories.keys()))]
-        
-        super(TernaryDataset, self).__init__(df, half_precision=half_precision, n_features=n_features, n_classes=3)
-
 
 
 def get_dataloader(dataset:Dataset, batch_size:int=16, balance_batches:bool=False) -> DataLoader:

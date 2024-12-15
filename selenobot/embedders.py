@@ -8,6 +8,7 @@ from tqdm import tqdm
 import numpy as np
 import pandas as pd
 from transformers import T5Tokenizer, T5EncoderModel
+import itertools
 
 from typing import List, Tuple
 
@@ -27,40 +28,41 @@ class LengthEmbedder():
         return np.array(lengths), np.array(ids)
 
 
-class AACEmbedder():
-    name = 'aac'
-    aa_to_int_map = {aa: i for i, aa in enumerate(list('ARNDCQEGHILKMFPOSTWYV'))}
+class KmerEmbedder():
+    name = 'kmer'
+    amino_acids = list('ARNDCQEGHILKMFPOSTWYV')
+    # aa_to_int_map = {aa: i for i, aa in enumerate(list('ARNDCQEGHILKMFPOSTWYV'))}
 
-    def __init__(self):
+    def __init__(self, k:int=1):
         '''Initializes an AACEmbedder object.'''
         super(AACEmbedder, self).__init__()
-        self.type = 'aac'
+        self.type = f'{k}mer'
+        self.k = k
+        # Sort list of k-mers to ensure consistent ordering
+        self.kmers = sorted([''.join(kmer) for kmer in itertools.permutations(KmerEmbedder.amino_acids)])
+        self.kmer_to_int_map = {kmer:i for i, kmer in enumerate(self.kmers)}
+
+    def _get_kmers(self, seq:str):
+        '''Encode a sequence using k-mers.'''
+        assert len(seq) > self.k, f'KmerEmbedder._get_kmers: Input sequence has length {len(seq)}, which is too short for k-mers of size {self.k}.'
+        
+        kmers = {kmer:0 for kmer in self.kmers}
+        for i in range(len(seq) - self.k):
+            kmer = seq[i:i + self.k]
+            kmers[kmer] += 1
+        # Normalize the k-mer counts by sequence length. 
+        kmers = {kmer:count / len(seq) for kmer, count in kmers.items()}
+        return kmers
 
     def __call__(self, seqs:List[str], ids:List[str]) -> torch.Tensor:
         '''Takes a list of amino acid sequences, and produces a PyTorch tensor containing the lengths
         of each sequence.'''
-        # aas = 'ARNDCQEGHILKMFPOSUTWYVBZXJ'
 
-        embs = []
+        embs = [self.get_kmers(seq) for seq in seqs]
+        embs = pd.DataFrame(embs)
+        embs = embs[self.kmers] # Make sure column ordering is consistent. 
 
-        for seq in seqs:
-            # NOTE: I am pretty much just ignoring all the non-standard amino acids. 
-            seq = [aa for aa in seq if aa in AACEmbedder.aa_to_int_map]
-            # assert np.all([aa in aa_to_int_map for aa in seq]), 'embedder.AACEmbedder.__call__: Some amino acids in the input sequences are not present in the amino-acid-to-integer map.'
-
-            # Map each amino acid to an integer using the internal map. 
-            # seq = np.array([self.aa_to_int_map[aa] for aa in seq])
-            seq = np.array([AACEmbedder.aa_to_int_map[aa] for aa in seq])
-            
-            emb = np.zeros(shape=(len(seq), len(AACEmbedder.aa_to_int_map)))
-            emb[np.arange(len(seq)), seq] = 1
-            emb = np.sum(emb, axis=0)
-            # Now need to normalize according to sequence length. 
-            emb = emb / len(seq)
-            embs.append(list(emb))
-
-        # encoded_seqs is now a 2D list. Convert to a tensor so it works as a model input. 
-        return np.array(embs), np.array(ids)
+        return embs.values, np.array(ids)
 
 
 class PLMEmbedder():
@@ -162,7 +164,7 @@ class PLMEmbedder():
             return None
 
 
-def embed(df:pd.DataFrame, path:str=None, append:bool=False):
+def embed(df:pd.DataFrame, path:str=None, append:bool=False, k_values:List[int]=[1, 2, 3, 4]):
     '''Embed the sequences in the input DataFrame (using all three embedding methods), and store the embeddings and metadata in an HDF5
     file at the specified path.'''
 
@@ -180,17 +182,18 @@ def embed(df:pd.DataFrame, path:str=None, append:bool=False):
     df = df.sort_index() # Sort the index of the DataFrame to ensure consistent ordering. 
     store = pd.HDFStore(path, mode='a' if append else 'w') # Should confirm that the file already exists. 
     add(store, 'metadata', df)
-    print(df)
-    print(df.seq)
 
-    for embedder in [AACEmbedder, PLMEmbedder, LengthEmbedder]:
-        embs, ids = embedder()(df.seq.values.tolist(), df.index.values.tolist())
+    embedders = [PLMEmbedder(), LengthEmbedder()]
+    embedders += [KmerEmbedder(k=k) for k in k_values]
+
+    for embedder in embedders:
+        embs, ids = embedder(df.seq.values.tolist(), df.index.values.tolist())
         sort_idxs = np.argsort(ids)
         embs, ids = embs[sort_idxs, :], ids[sort_idxs]
         # I don't think failing to detach the tensors here is a problem, because it is being converted to a pandas DataFrame. 
         emb_df = pd.DataFrame(embs, index=ids)
-        add(store, embedder.name, emb_df) # Make sure it's in table format if I need to append to it later.
-        print(f'embed: Embeddings of type {embedder.name} added to HDF file.')
+        add(store, embedder.type, emb_df) # Make sure it's in table format if I need to append to it later.
+        print(f'embed: Embeddings of type {embedder.type} added to HDF file.')
 
     print(f'embed: Embedding data written to {path}')
     store.close()

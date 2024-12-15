@@ -1,6 +1,6 @@
 import os 
 import subprocess
-from selenobot.files import CDHITFile, FASTAFile
+from selenobot.files import CDHITFile, FASTAFile, MMseqsFile
 import pandas as pd
 import numpy as np 
 
@@ -28,9 +28,7 @@ class MUSCLE():
 
 
 class MMseqs():
-    def __init(self, df:pd.DataFrame, name:str='untitled', cwd=os.getcwd()):
-
-
+    def __init__(self, df:pd.DataFrame, name:str='untitled', cwd=os.getcwd()):
 
         self.cwd = cwd
         self.df = df 
@@ -42,9 +40,9 @@ class MMseqs():
             os.mkdir(self.tmp_dir)
 
         self.input_path = os.path.join(self.cwd, f'{name}.fa')
-        self.output_path = os.path.join(self.cwd, f'{name}.afa') # This is a FASTA file format. 
+        self.output_path = os.path.join(self.cwd, f'{name}_cluster.tsv')
 
-    def run(self, min_seq_id:float=0.2, e:float=0, c:float=0, cluster_mode:int=0):
+    def run(self, min_seq_id:float=0.2, overwrite:bool=False) -> pd.DataFrame:
         ''' 
         :param min_seq_id: A minimum sequence identity defined as the equivalent similarity score (derived from a training set) of the local alignment (including gap penalties) 
             divided by the maximum of the lengths of the two locally aligned sequence segments. 
@@ -52,9 +50,17 @@ class MMseqs():
         :param c: A minimum coverage between 0 and 1, which is defined by the number of aligned residue pairs divided by 
             the maximum of the length of query and target sequences alnRes/max(qLen,tLen). 
         '''
-        FASTAFile.from_df(self.df, add_description=False).write(self.input_path)
+        if (not os.path.exists(self.output_path)) or overwrite:
+            FASTAFile.from_df(self.df, add_description=False).write(self.input_path)
+            cmd = f'mmseqs easy-cluster {self.input_path} {self.name} tmp --min-seq-id {min_seq_id}'
+            subprocess.run(cmd, shell=True, check=True)
+        else:
+            print(f'MMseqs.run: Using pre-saved clustering results at {self.output_path}')
 
-        cmd = f'mmseqs easy-cluster {args.input_path} {name} tmp --min-seq-id 0.5 -c 0.8 --cov-mode 1'
+        cluster_df = MMseqsFile(self.output_path).to_df()
+        self.df = self.df.merge(cluster_df, left_index=True, right_index=True)
+        return self.df
+            
 
 
 class CDHIT():
@@ -85,7 +91,7 @@ class CDHIT():
         '''
         self.cwd = cwd
         # If the input DataFrame has already been clustered, make sure to drop the columns before re-clustering.
-        self.df = df[[col for col in df.columns if col not in ['cluster', 'representative']]]
+        self.df = df[[col for col in df.columns if col not in ['cdhit_cluster', 'cdhit_representative']]]
         self.name = name
 
         self.dereplicated, self.clustered = False, False
@@ -124,7 +130,7 @@ class CDHIT():
         # df should now only contain the representative sequences. Store in the object.
         self.dereplicated = True # Mark the DataFrame as dereplicated. 
 
-        self.df = df.drop(columns=['cluster', 'representative']) # Don't need the cluster column after dereplication. 
+        self.df = df.drop(columns=['cdhit_cluster', 'cdhit_representative']) # Don't need the cluster column after dereplication. 
         self.cleanup()
 
     def _cluster(self, overwrite:bool=False) -> pd.DataFrame:

@@ -14,12 +14,11 @@ if __name__ == '__main__':
     parser.add_argument('--input-path', type=str)
     parser.add_argument('--n-classes', default=2, type=int, choices=[2, 3])
     parser.add_argument('--models-dir', default='../models', type=str)
-    parser.add_argument('--results-dir', default='.', type=str)
+    parser.add_argument('--results-dir', default='../data/validation', type=str)
 
     args = parser.parse_args()
 
     model_name = f'ternary_model_{args.feature_type}.pkl' if (args.n_classes == 3) else f'binary_model_{args.feature_type}.pkl' 
-    print(model_name)
     model_path = os.path.join(args.models_dir, model_name)
 
     model = Classifier.load(model_path)

@@ -113,6 +113,18 @@ class FASTAFile(File):
         f.close()
 
 
+class MMseqsFile(File):
+    def __init__(self, path:str):
+        '''Manages the parsing of an MMseqs cluster file. The output is a TSV with two columns, where the first column is the 
+        cluster representative and the second column is the cluster member.'''
+        self.df = pd.read_csv(path, delimiter='\t', names=['mmseqs_representative', 'id'])
+        # Add integer IDs for each cluster. 
+        cluster_ids = {rep:i for i, rep in enumerate(self.df.mmseqs_representative.unique())}
+        self.df['mmseqs_cluster'] = [cluster_ids[rep] for rep in self.df.mmseqs_representative]
+
+    def to_df(self) -> pd.DataFrame:
+        return self.df.set_index('id')
+
 
 # TODO: Are the amino acids sequences listed in each cluster in any particular order?
 
@@ -153,10 +165,10 @@ class CDHITFile(File):
 
     def to_df(self, reps_only:bool=False) -> pd.DataFrame:
         '''Convert a CDHITFile to a pandas DataFrame.'''
-        df = pd.DataFrame({'id':self.ids, 'cluster':self.clusters, 'representative':self.representative}) 
-        df.cluster = df.cluster.astype(int) # This will speed up grouping clusters later on. 
+        df = pd.DataFrame({'id':self.ids, 'cdhit_cluster':self.clusters, 'cdhit_representative':self.representative}) 
+        df.cdhit_cluster = df.cdhit_cluster.astype(int) # This will speed up grouping clusters later on. 
         if reps_only: # If specified, only get the representatives from each cluster. 
-            df = df[df.representative]
+            df = df[df.cdhit_representative]
         return df.set_index('id')
 
     
