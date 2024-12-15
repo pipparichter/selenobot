@@ -35,7 +35,7 @@ class KmerEmbedder():
 
     def __init__(self, k:int=1):
         '''Initializes an AACEmbedder object.'''
-        super(AACEmbedder, self).__init__()
+        super(KmerEmbedder, self).__init__()
         self.type = f'{k}mer'
         self.k = k
         # Sort list of k-mers to ensure consistent ordering
