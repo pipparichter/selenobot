@@ -65,7 +65,7 @@ def truncate_sec(df:pd.DataFrame, **kwargs) -> str:
     '''Truncate the selenoproteins stored in the input file. This function assumes that all 
     sequences contained in the file contain selenocysteine, labeled as U.'''
     df_truncated = []
-    for row in tqdm(df.to_dict(orient='records'), 'truncate: Truncating selenoproteins...'):
+    for row in tqdm(df.to_dict(orient='records'), 'truncate_sec: Truncating selenoproteins...'):
         seq = row['seq'] # Extract the sequence from the row. 
         row['sec_index'] = seq.index('U') # This will raise an exception if no U residue is found.
         row['sec_count'] = seq.count('U') # Store the number of selenoproteins in the original sequence.
@@ -76,6 +76,7 @@ def truncate_sec(df:pd.DataFrame, **kwargs) -> str:
         df_truncated.append(row)
     df_truncated = pd.DataFrame(df_truncated, index=df.index)
     df_truncated.index.name = 'id'
+    print(f'truncate_sec: Complete.')
     return df_truncated
 
 
