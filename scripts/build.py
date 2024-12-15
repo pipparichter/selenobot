@@ -118,6 +118,7 @@ def truncate_non_sec(df:pd.DataFrame, sec_df:np.ndarray=None, n_bins:int=25, ban
     # pbar = tqdm(total=len(np.unique(bin_labels)), desc='truncate_non_sec: Generating KDEs of length bins...')
     for bin_label, bin_values in groupby(sec_truncation_ratios, bin_labels).items():
         print(bin_label)
+        print(len(bin_values))
         kde = sklearn.neighbors.KernelDensity(kernel='gaussian', bandwidth=bandwidth) 
         kde.fit(bin_values.reshape(-1, 1))
         kdes[bin_label] = kde
