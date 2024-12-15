@@ -129,8 +129,10 @@ def truncate_non_sec(df:pd.DataFrame, sec_df:np.ndarray=None, n_bins:int=25, ban
         df_truncated.append(bin_df)
         pbar.update(len(bin_df))
 
+    print(f'truncate_non_sec: Creating DataFrame of truncated non-selenoproteins.')
     df_truncated = pd.concat(df_truncated).drop(columns=['bin_label'])
     df_truncated.index.name = 'id'
+    print(f'truncate_non_sec: Complete.')
     return df_truncated
 
 
