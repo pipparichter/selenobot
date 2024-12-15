@@ -27,7 +27,7 @@ seed(42)
 
 
 # NOTE: C terminus is the end terminus. N terminus is where the methionine is. 
-def clean(df:pd.DataFrame, bacteria_only:bool=True, allow_c_terminal_fragments:bool=False, remove_selenoproteins:bool=False, max_length:int=None, **kwargs) -> pd.DataFrame:
+def clean(df:pd.DataFrame, bacteria_only:bool=True, allow_c_terminal_fragments:bool=False, remove_selenoproteins:bool=False, max_length:int=2000, **kwargs) -> pd.DataFrame:
     '''''' 
     # There are duplicates here, as there were multiple accessions for the same protein. 
     df = df.drop_duplicates('name', keep='first')
@@ -210,6 +210,7 @@ if __name__ == '__main__':
     process(uniprot_sprot_path, datasets, name='truncated_non_selenoprotein', label=2, data_dir=args.data_dir, allow_c_terminal_fragments=True, remove_selenoproteins=True, sec_df=sec_df)
 
     # Concatenate the accumulated datasets. 
+    print('Concatenating datasets...')
     datasets = {name:pd.concat(dfs) for name, dfs in datasets.items()}
 
     if args.print_stats:
