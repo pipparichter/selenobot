@@ -122,10 +122,12 @@ def truncate_non_sec(df:pd.DataFrame, sec_df:np.ndarray=None, n_bins:int=25, ban
 
     # Use the KDE to sample truncation ratios for each length bin, and apply the truncation to the full-length sequence. 
     df_truncated = []
+    pbar = tqdm(total=len(df), desc='truncate_non_sec: Sampling truncation sizes from KDEs...')
     for bin_label, bin_df in df.groupby('bin_label'):
         bin_df['truncation_size'] = kdes[bin_label].sample(n_samples=len(bin_df)).ravel() * bin_df.seq.apply(len).values
         bin_df['seq'] = bin_df.apply(lambda row : row.seq[:-int(row.truncation_size)], axis=1)
         df_truncated.append(bin_df)
+        pbar.update(len(bin_df))
 
     df_truncated = pd.concat(df_truncated).drop(columns=['bin_label'])
     df_truncated.index.name = 'id'
