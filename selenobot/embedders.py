@@ -57,8 +57,9 @@ class KmerEmbedder():
     def __call__(self, seqs:List[str], ids:List[str]) -> torch.Tensor:
         '''Takes a list of amino acid sequences, and produces a PyTorch tensor containing the lengths
         of each sequence.'''
-
-        embs = [self.get_kmers(seq) for seq in seqs]
+        embs = []
+        for seq in tqdm(seqs, desc='KmerEmbedder.__call__'):
+            embs.append(self._get_kmers(seq))
         embs = pd.DataFrame(embs)
         embs = embs[self.kmers] # Make sure column ordering is consistent. 
 
