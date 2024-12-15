@@ -74,6 +74,7 @@ def truncate_sec(df:pd.DataFrame, **kwargs) -> str:
         row['original_length'] = len(seq)
         row['seq'] = seq[:row['sec_index']] # Get the portion of the sequence prior to the U residue.
         df_truncated.append(row)
+    print(f'truncate_sec: Creating DataFrame of {len(df_truncated)} truncated selenoproteins.')
     df_truncated = pd.DataFrame(df_truncated, index=df.index)
     df_truncated.index.name = 'id'
     print(f'truncate_sec: Complete.')
