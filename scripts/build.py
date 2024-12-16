@@ -12,7 +12,7 @@ import subprocess
 import argparse
 import logging
 import warnings
-from selenobot.tools import CDHIT
+from selenobot.tools import Clusterer
 from selenobot.utils import digitize, groupby, sample, seed
 
 # TODO: Figure out why there are two representative columns in the final dataset, which also have different values. Ah, it's 
@@ -74,10 +74,10 @@ def truncate_sec(df:pd.DataFrame, **kwargs) -> str:
         row['original_length'] = len(seq)
         row['seq'] = seq[:row['sec_index']] # Get the portion of the sequence prior to the U residue.
         df_truncated.append(row)
-    print(f'truncate_sec: Creating DataFrame of {len(df_truncated)} truncated selenoproteins.')
+    # print(f'truncate_sec: Creating DataFrame of {len(df_truncated)} truncated selenoproteins.')
     df_truncated = pd.DataFrame(df_truncated, index=df.index)
     df_truncated.index.name = 'id'
-    print(f'truncate_sec: Complete.')
+    # print(f'truncate_sec: Complete.')
     return df_truncated
 
 
@@ -115,27 +115,26 @@ def truncate_non_sec(df:pd.DataFrame, sec_df:np.ndarray=None, n_bins:int=25, ban
     # sequences, so need to generate different distributions for different length categories. 
     kdes = dict()
 
-    # pbar = tqdm(total=len(np.unique(bin_labels)), desc='truncate_non_sec: Generating KDEs of length bins...')
+    pbar = tqdm(total=len(np.unique(bin_labels)), desc='truncate_non_sec: Generating KDEs of length bins...')
     for bin_label, bin_values in groupby(sec_truncation_ratios, bin_labels).items():
-        print(len(bin_values))
         kde = sklearn.neighbors.KernelDensity(kernel='gaussian', bandwidth=bandwidth) 
         kde.fit(bin_values.reshape(-1, 1))
         kdes[bin_label] = kde
-        # pbar.update(1)
+        pbar.update(1)
 
     # Use the KDE to sample truncation ratios for each length bin, and apply the truncation to the full-length sequence. 
     df_truncated = []
-    # pbar = tqdm(total=len(df), desc='truncate_non_sec: Sampling truncation sizes from KDEs...')
+    pbar = tqdm(total=len(df), desc='truncate_non_sec: Sampling truncation sizes from KDEs...')
     for bin_label, bin_df in df.groupby('bin_label'):
         bin_df['truncation_size'] = kdes[bin_label].sample(n_samples=len(bin_df)).ravel() * bin_df.seq.apply(len).values
         bin_df['seq'] = bin_df.apply(lambda row : row.seq[:-int(row.truncation_size)], axis=1)
         df_truncated.append(bin_df)
-        # pbar.update(len(bin_df))
+        pbar.update(len(bin_df))
 
-    print(f'truncate_non_sec: Creating DataFrame of truncated non-selenoproteins.')
+    # print(f'truncate_non_sec: Creating DataFrame of truncated non-selenoproteins.')
     df_truncated = pd.concat(df_truncated).drop(columns=['bin_label'])
     df_truncated.index.name = 'id'
-    print(f'truncate_non_sec: Complete.')
+    # print(f'truncate_non_sec: Complete.')
     return df_truncated
 
 
@@ -144,7 +143,7 @@ def split(df:pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     no CD-HIT-generated cluster is split between datasets. The data is first divided into a training set (80 percent) and test
     set (20 percent), and the training data is further divided into a training (80 percent) and validation (20 percent) set.'''
 
-    groups = df['cdhit_cluster'].values # Extract cluster labels. 
+    groups = df['mmseqs_cluster'].values # Extract cluster labels. 
     gss = GroupShuffleSplit(n_splits=1, train_size=0.8)
 
     idxs, test_idxs = list(gss.split(df.values, groups=groups))[0]
@@ -166,19 +165,20 @@ def stats(df:pd.DataFrame, name:str=None):
     print(f'\nstats: Information for {name}')
 
     size = len(df)
-    fraction_selenoproteins = np.round(df.label.sum() / size, 2)
     mean_cluster_size = np.round(df.groupby('cdhit_cluster').apply(len).mean(), 2)
     n_clusters = len(df.cdhit_cluster.unique()) 
 
     print(f'stats: Dataset size:', size)
-    print(f'stats: Fraction of selenoproteins:', fraction_selenoproteins)
     print(f'stats: Mean cluster size (80%):', mean_cluster_size)
     print(f'stats: Number of clusters (80%):', n_clusters)
+    for label, label_df in df.groupby(label):
+        label_fraction = np.round(len(label_df) / size, 2)
+        print(f'stats: Fraction of dataset with label {label}: {label_fraction}')
 
 
 
 # NOTE: Should I dereplicate the selenoproteins before or after truncation? Seems like after would be a good idea.
-def process(path:str, datasets:Dict[str, List[pd.DataFrame]], data_dir:str=None, label:int=0, name:str=None, **kwargs):
+def process(path:str, datasets:Dict[str, List[pd.DataFrame]], data_dir:str=None, label:int=0, name:str=None, overwrite:bool=True, **kwargs):
 
     print(f'process: Processing dataset {path}...')
 
@@ -189,7 +189,8 @@ def process(path:str, datasets:Dict[str, List[pd.DataFrame]], data_dir:str=None,
     elif label == 2:
         df = truncate_non_sec(df, **kwargs)
 
-    df = CDHIT(df, name=name, cwd=data_dir).run(overwrite=False)
+    clusterer = Clusterer(name=name, cwd=data_dir)
+    df = clusterer.run(df, overwrite=overwrite)
 
     df['label'] = label # Add labels to the data marking the category. 
     # Decided to split each data group independently to avoid the mixed clusters. 
@@ -208,6 +209,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data-dir', default='../data', type=str)
     parser.add_argument('--append', action='store_true')
+    parser.add_argument('--overwrite', action='store_true')
     parser.add_argument('--print-stats', action='store_true')
     args = parser.parse_args()
 
@@ -216,12 +218,11 @@ if __name__ == '__main__':
 
     datasets = {'train.h5':[], 'test.h5':[], 'val.h5':[]}
 
-    process(uniprot_sprot_path, datasets, name='full_length', label=0, data_dir=args.data_dir)
+    process(uniprot_sprot_path, datasets, name='full_length', label=0, data_dir=args.data_dir, overwrite=args.overwrite)
     sec_df = process(uniprot_sec_path, datasets, name='truncated_selenoprotein', label=1, data_dir=args.data_dir, allow_c_terminal_fragments=True)
     process(uniprot_sprot_path, datasets, name='truncated_non_selenoprotein', label=2, data_dir=args.data_dir, allow_c_terminal_fragments=True, remove_selenoproteins=True, sec_df=sec_df)
 
     # Concatenate the accumulated datasets. 
-    print('Concatenating datasets...')
     datasets = {name:pd.concat(dfs) for name, dfs in datasets.items()}
 
     if args.print_stats:

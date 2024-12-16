@@ -122,8 +122,12 @@ class MMseqsFile(File):
         cluster_ids = {rep:i for i, rep in enumerate(self.df.mmseqs_representative.unique())}
         self.df['mmseqs_cluster'] = [cluster_ids[rep] for rep in self.df.mmseqs_representative]
 
-    def to_df(self) -> pd.DataFrame:
-        return self.df.set_index('id')
+    def to_df(self, reps_only:bool=False) -> pd.DataFrame:
+        if reps_only:
+            df = self.df.drop_duplicates('mmseqs_representative', keep='first').set_index('id')
+        else:
+            df = self.df.set_index('id')
+        return df
 
 
 # TODO: Are the amino acids sequences listed in each cluster in any particular order?
