@@ -171,7 +171,7 @@ def stats(df:pd.DataFrame, name:str=None):
     print(f'stats: Dataset size:', size)
     print(f'stats: Mean cluster size (80%):', mean_cluster_size)
     print(f'stats: Number of clusters (80%):', n_clusters)
-    for label, label_df in df.groupby(label):
+    for label, label_df in df.groupby('label'):
         label_fraction = np.round(len(label_df) / size, 2)
         print(f'stats: Fraction of dataset with label {label}: {label_fraction}')
 
