@@ -166,7 +166,7 @@ def stats(df:pd.DataFrame, name:str=None):
 
     size = len(df)
     mean_cluster_size = np.round(df.groupby('mmseqs_cluster').apply(len).mean(), 2)
-    n_clusters = len(df.cdhit_cluster.unique()) 
+    n_clusters = len(df.mmseqs_cluster.unique()) 
 
     print(f'stats: Dataset size:', size)
     print(f'stats: Mean cluster size (80%):', mean_cluster_size)
