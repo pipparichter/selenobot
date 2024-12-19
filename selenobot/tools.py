@@ -130,7 +130,7 @@ class Clusterer():
         return df 
 
 
-    def cluster(self, df:pd.DataFrame, overwrite:bool=False, sequence_identity:float=0.4) -> pd.DataFrame:
+    def cluster(self, df:pd.DataFrame, overwrite:bool=False, sequence_identity:float=0.3) -> pd.DataFrame:
         '''Use a lower sequence similarity threshold (specified by the c_cluster attribute) to cluster the proteins
         in the self.input_file. This is for use in the training-testing-validation split, to ensure that there is
         '''
@@ -143,7 +143,7 @@ class Clusterer():
         cluster_file_path = self.tool.run(self.input_path, output_path, sequence_identity=sequence_identity, overwrite=overwrite)
         cluster_df = self.file_type(cluster_file_path).to_df(reps_only=False) # Load in the cluster file and convert to a DataFrame. Don't load only the representatives. 
 
-        assert len(cluster_df) == len(df), f'CDHIT.cluster: There should be a cluster assigned to each sequence. len(clstr_df) = {len(cluster_df)} and len(self.df) = {len(df)}'
+        assert len(cluster_df) == len(df), f'Clusterer.cluster: There should be a cluster assigned to each sequence. len(clustr_df) = {len(cluster_df)} and len(df) = {len(df)}'
 
         # The DataFrame should now contain the clustering information. 
         df = cluster_df.merge(df, left_index=True, right_index=True, how='inner')
