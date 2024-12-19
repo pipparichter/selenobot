@@ -41,7 +41,7 @@ class MMseqs():
             cmd = f'mmseqs easy-cluster {input_path} {output_path} {self.tmp_dir} --min-seq-id {sequence_identity}'
             if verbose:
                 print(cmd)
-            subprocess.run(cmd, shell=True, check=True)
+            subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
         else:
             print(f'MMseqs.run: Using pre-saved clustering results at {output_path}')
 
@@ -126,7 +126,7 @@ class Clusterer():
         print(f'Clusterer.dereplicate: Dereplication of clusters with {sequence_identity} similarity eliminated {n - len(df)} sequences from {self.name}. {len(df)} sequences remaining.')
 
         df = df.drop(columns=[f'{self.tool_name}_cluster', f'{self.tool_name}_representative']) # Don't need the cluster column after dereplication. 
-        os.remove(self.input_path) # Remove the temporary FASTA file. 
+        # os.remove(self.input_path) # Remove the temporary FASTA file. 
         return df 
 
 
@@ -148,7 +148,7 @@ class Clusterer():
         # The DataFrame should now contain the clustering information. 
         df = cluster_df.merge(df, left_index=True, right_index=True, how='inner')
 
-        os.remove(self.input_path) # Remove the temporary FASTA file. 
+        # os.remove(self.input_path) # Remove the temporary FASTA file. 
         return df 
 
 
