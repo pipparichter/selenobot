@@ -220,7 +220,7 @@ if __name__ == '__main__':
 
     process(uniprot_sprot_path, datasets, name='full_length', label=0, data_dir=args.data_dir, overwrite=args.overwrite)
     sec_df = process(uniprot_sec_path, datasets, name='truncated_selenoprotein', label=1, data_dir=args.data_dir, allow_c_terminal_fragments=True, overwrite=args.overwrite)
-    process(uniprot_sprot_path, datasets, name='truncated_non_selenoprotein', label=2, data_dir=args.data_dir, allow_c_terminal_fragments=True, remove_selenoproteins=True, sec_df=sec_df, overwrite=True)
+    process(uniprot_sprot_path, datasets, name='truncated_non_selenoprotein', label=2, data_dir=args.data_dir, allow_c_terminal_fragments=True, remove_selenoproteins=True, sec_df=sec_df, overwrite=args.overwrite)
 
     # Concatenate the accumulated datasets. 
     datasets = {name:pd.concat(dfs) for name, dfs in datasets.items()}
