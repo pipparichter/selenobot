@@ -129,6 +129,8 @@ class PLMEmbedder():
                 add(outputs, batch=[(i, s)])
                 continue
 
+            print(f'PLMEmbedder.__call__: Processing sequence {i} with length {len(s)}.', flush=True)
+
             # Add the sequence to the batch, and keep track of total amino acids in the batch. 
             curr_batch.append((i, s))
             curr_aa_count += len(s)
