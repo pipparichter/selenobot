@@ -193,6 +193,10 @@ def embed(df:pd.DataFrame, path:str=None, append:bool=False, k_values:List[int]=
 
 
     df = df.sort_index() # Sort the index of the DataFrame to ensure consistent ordering. 
+    seq_is_nan = df.seq.isnull()
+    print(f'embed: Removing {np.sum(seq_is_nan)} null entries from the sequence DataFrame. {len(df) - np.sum(seq_is_nam)} sequences remaining.')
+    df = df[~seq_is_nan]
+
     store = pd.HDFStore(path, mode='a' if append else 'w') # Should confirm that the file already exists. 
     add(store, 'metadata', df)
 
