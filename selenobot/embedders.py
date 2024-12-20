@@ -23,7 +23,7 @@ class LengthEmbedder():
     def __init__(self):
         '''Initializes a LengthEmbedder object.'''
         # There is no tokenizer in this case, so leave it as the default None. 
-        super(LengthEmbedder, self).__init__()
+        # super(LengthEmbedder, self).__init__()
         self.type = 'len'
 
     def __call__(self, seqs:List[str], ids:List[str]):
@@ -40,8 +40,8 @@ class KmerEmbedder():
     # aa_to_int_map = {aa: i for i, aa in enumerate(list('ARNDCQEGHILKMFPOSTWYV'))}
 
     def __init__(self, k:int=1):
-        '''Initializes an AACEmbedder object.'''
-        super(KmerEmbedder, self).__init__()
+        '''Initializes an KmerEmbedder object.'''
+        # super(KmerEmbedder, self).__init__()
         self.type = f'{k}mer'
         self.k = k
         # Sort list of k-mers to ensure consistent ordering
@@ -78,7 +78,7 @@ class PLMEmbedder():
 
     def __init__(self, model_name:str='Rostlab/prot_t5_xl_half_uniref50-enc', mean_pool:bool=True, half_precision:bool=True):
         '''Initializes a PLM embedder object.'''
-
+        self.type = 'plm'
         self.dtype = torch.float16 if half_precision else torch.float32
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.mean_pool = mean_pool
