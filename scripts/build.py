@@ -200,7 +200,7 @@ def process(path:str, datasets:Dict[str, List[pd.DataFrame]], data_dir:str=None,
 
     df['label'] = label # Add labels to the data marking the category. 
     # Decided to split each data group independently to avoid the mixed clusters. 
-    print(f'process: Generating train-test-validation split for {ame}...')
+    print(f'process: Generating train-test-validation split for {name}...')
     train_df, test_df, val_df = split(df) 
 
     # Append the split DataFrames to the lists for concatenation later on. 
