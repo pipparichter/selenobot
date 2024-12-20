@@ -16,6 +16,8 @@ from typing import List, Tuple
 # https://stackoverflow.com/questions/75580592/why-is-tqdm-output-directed-to-sys-stderr-and-not-to-sys-stdout 
 # I think I want to print to stdout. 
 
+# NOTE: The model I am using is apparently usable on 8GB of RAM, so I am not sure why it is failing. 
+
 class LengthEmbedder():
     name = 'len'
     def __init__(self):
@@ -82,6 +84,7 @@ class PLMEmbedder():
         self.mean_pool = mean_pool
         print(f'PLMEmbedder.__init__: Loading pre-trained model {model_name}.', flush=True)
         self.model = T5EncoderModel.from_pretrained(model_name, torch_dtype=self.dtype)
+        print(f'PLMEmbedder.__init__: Model loaded successfully.', flush=True)
         self.model.to(self.device) # Move model to GPU.
         self.model.eval() # Set model to evaluation model.
         # Should be a T5Tokenizer object. 
