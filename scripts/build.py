@@ -115,32 +115,31 @@ def truncate_non_sec(df:pd.DataFrame, sec_df:np.ndarray=None, n_bins:int=10, ban
     # sequences, so need to generate different distributions for different length categories. 
     kdes = dict()
 
-    # pbar = tqdm(total=len(np.unique(bin_labels)), desc='truncate_non_sec: Generating KDEs of length bins...')
+    pbar = tqdm(total=len(np.unique(bin_labels)), desc='truncate_non_sec: Generating KDEs of length bins...')
     for bin_label, bin_values in groupby(sec_truncation_ratios, bin_labels).items():
         print(f'truncate_non_sec: Fitting KDE for length bin {bin_label}.')
         kde = sklearn.neighbors.KernelDensity(kernel='gaussian', bandwidth=bandwidth) 
         kde.fit(bin_values.reshape(-1, 1))
         kdes[bin_label] = kde
-        # pbar.update(1)
+        pbar.update(1)
     # pbar.close()
 
     # Use the KDE to sample truncation ratios for each length bin, and apply the truncation to the full-length sequence. 
     df_truncated = []
-    # pbar = tqdm(total=len(df), desc='truncate_non_sec: Sampling truncation sizes from KDEs...')
-    print(f'truncate_non_sec: Sampling {len(df)} truncation sizes from KDE.')
+    pbar = tqdm(total=len(df), desc='truncate_non_sec: Sampling truncation sizes from KDEs...')
+    # print(f'truncate_non_sec: Sampling {len(df)} truncation sizes from KDE.')
     for bin_label, bin_df in df.groupby('bin_label'):
-        print(f'truncate_non_sec: Sampling {len(bin_df)} truncation sizes from KDE.')
+        # print(f'truncate_non_sec: Sampling {len(bin_df)} truncation sizes from KDE.')
         bin_df['truncation_size'] = kdes[bin_label].sample(n_samples=len(bin_df), random_state=42).ravel() * bin_df.seq.apply(len).values
         bin_df['seq'] = bin_df.apply(lambda row : row.seq[:-int(row.truncation_size)], axis=1)
         df_truncated.append(bin_df)
-        # pbar.update(len(bin_df))
-    # pbar.close()
+        pbar.update(len(bin_df))
+    pbar.close()
 
     print(f'truncate_non_sec: Creating DataFrame of truncated non-selenoproteins.')
     df_truncated = pd.concat(df_truncated).drop(columns=['bin_label'])
     df_truncated.index.name = 'id'
-    df_truncated.to_csv('truncated_non_sec.csv')
-    print(f'truncate_non_sec: Complete.')
+    # print(f'truncate_non_sec: Complete.')
     return df_truncated
 
 
@@ -153,18 +152,17 @@ def split(df:pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     gss = GroupShuffleSplit(n_splits=1, train_size=0.8)
 
     idxs, test_idxs = list(gss.split(df.values, groups=groups))[0]
-    print(f'split: Completed initial split, holdout test set contains {len(test_idxs)} sequences.')
+    # print(f'split: Completed initial split, holdout test set contains {len(test_idxs)} sequences.')
     test_df = df.iloc[test_idxs].copy()
     # Now working only with the remaining sequence data, not in the test set. 
     df, groups = df.iloc[idxs].copy(), groups[idxs]
 
     train_idxs, val_idxs = list(gss.split(df.values, groups=groups))[0]
-    print(f'split: Completed second split, holdout validation set contains {len(val_idxs)} sequences.')
+    # print(f'split: Completed second split, holdout validation set contains {len(val_idxs)} sequences.')
 
     train_df = df.iloc[train_idxs].copy()
     val_df = df.iloc[val_idxs].copy() 
-    print('split: Split complete.')
-    # print(len(train_df), len(test_df), len(val_df))
+    # print('split: Split complete.')
     
     return train_df, test_df, val_df
 
@@ -220,12 +218,14 @@ if __name__ == '__main__':
     parser.add_argument('--append', action='store_true')
     parser.add_argument('--overwrite', action='store_true')
     parser.add_argument('--print-stats', action='store_true')
+    parser.add_argument('--save-metadata', action='store_true')
+    parser.add_argument('--embed', action='store_true')
     args = parser.parse_args()
 
     uniprot_sprot_path = os.path.join(args.data_dir, 'uniprot_sprot.csv')
     uniprot_sec_path = os.path.join(args.data_dir, 'uniprot_sec.csv')
 
-    datasets = {'train.h5':[], 'test.h5':[], 'val.h5':[]}
+    datasets = {'train':[], 'test':[], 'val':[]}
 
     process(uniprot_sprot_path, datasets, name='full_length', label=0, data_dir=args.data_dir, overwrite=args.overwrite)
     sec_df = process(uniprot_sec_path, datasets, name='truncated_selenoprotein', label=1, data_dir=args.data_dir, allow_c_terminal_fragments=True, overwrite=args.overwrite)
@@ -238,7 +238,15 @@ if __name__ == '__main__':
         for file_name, df in datasets.items():
             stats(df, name=file_name)
 
-    # NOTE: I want to be able to add to exsting HDF files. 
-    for file_name, df in datasets.items():
-        path = os.path.join(args.data_dir, file_name)
-        embed(df, path=path, append=args.append)
+    if args.save_metadata:
+        # NOTE: I want to be able to add to exsting HDF files. 
+        for file_name, df in datasets.items():
+            # path = os.path.join(args.data_dir, file_name + '.csv')
+            path = os.path.join('.', file_name + '.csv')
+            embed(df, path=path, append=args.append)
+
+    if args.embed:
+        # NOTE: I want to be able to add to exsting HDF files. 
+        for file_name, df in datasets.items():
+            path = os.path.join(args.data_dir, file_name + '.h5')
+            embed(df, path=path, append=args.append)
