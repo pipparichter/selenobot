@@ -122,6 +122,7 @@ def truncate_non_sec(df:pd.DataFrame, sec_df:np.ndarray=None, n_bins:int=10, ban
         kde.fit(bin_values.reshape(-1, 1))
         kdes[bin_label] = kde
         # pbar.update(1)
+    # pbar.close()
 
     # Use the KDE to sample truncation ratios for each length bin, and apply the truncation to the full-length sequence. 
     df_truncated = []
@@ -133,6 +134,7 @@ def truncate_non_sec(df:pd.DataFrame, sec_df:np.ndarray=None, n_bins:int=10, ban
         bin_df['seq'] = bin_df.apply(lambda row : row.seq[:-int(row.truncation_size)], axis=1)
         df_truncated.append(bin_df)
         # pbar.update(len(bin_df))
+    # pbar.close()
 
     print(f'truncate_non_sec: Creating DataFrame of truncated non-selenoproteins.')
     df_truncated = pd.concat(df_truncated).drop(columns=['bin_label'])
@@ -198,6 +200,7 @@ def process(path:str, datasets:Dict[str, List[pd.DataFrame]], data_dir:str=None,
 
     df['label'] = label # Add labels to the data marking the category. 
     # Decided to split each data group independently to avoid the mixed clusters. 
+    print(f'process: Generating train-test-validation split for {ame}...')
     train_df, test_df, val_df = split(df) 
 
     # Append the split DataFrames to the lists for concatenation later on. 
