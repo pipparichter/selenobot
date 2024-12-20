@@ -37,7 +37,7 @@ class LengthEmbedder():
 
 class KmerEmbedder():
     name = 'kmer'
-    amino_acids = list('ARNDCQEGHILKMFPOSTWYV')
+    amino_acids = list('ARNDCQEGHILKMFPSTWYV') # Don't include non-standard amino acids. 
     # aa_to_int_map = {aa: i for i, aa in enumerate(list('ARNDCQEGHILKMFPOSTWYV'))}
 
     def __init__(self, k:int=1):
@@ -56,7 +56,8 @@ class KmerEmbedder():
         kmers = {kmer:0 for kmer in self.kmers}
         for i in range(len(seq) - self.k):
             kmer = seq[i:i + self.k]
-            kmers[kmer] += 1
+            if kmer in kmers:
+                kmers[kmer] += 1
         # Normalize the k-mer counts by sequence length. 
         kmers = {kmer:count / len(seq) for kmer, count in kmers.items()}
         return kmers
@@ -64,6 +65,7 @@ class KmerEmbedder():
     def __call__(self, seqs:List[str], ids:List[str]) -> torch.Tensor:
         '''Takes a list of amino acid sequences, and produces a PyTorch tensor containing the lengths
         of each sequence.'''
+        seqs = [s.replace('U', 'X').replace('Z', 'X').replace('O', 'X') for s in seqs] # Replace non-standard amino acids with X token.
         embs = []
         for seq in tqdm(seqs, desc='KmerEmbedder.__call__', file=sys.stdout):
             embs.append(self._get_kmers(seq))
