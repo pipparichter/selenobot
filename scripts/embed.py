@@ -23,6 +23,6 @@ if __name__ == '__main__':
     # NOTE: Will this throw an error if a partial column isn't present?
     df = pd.read_csv(args.input_path, index_col=0, dtype={'partial':str})
     embed(df, path=output_path)
-    print(f'Embeddings written to {output_path}.')
+    print(f'Embeddings written to {output_path}.', flush=True)
 
 

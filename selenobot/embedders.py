@@ -12,6 +12,10 @@ import itertools
 
 from typing import List, Tuple
 
+# NOTE: tqdm progress bars print to standard error for reasons which are not relevant to me... 
+# https://stackoverflow.com/questions/75580592/why-is-tqdm-output-directed-to-sys-stderr-and-not-to-sys-stdout 
+# I think I want to print to stdout. 
+
 class LengthEmbedder():
     name = 'len'
     def __init__(self):
@@ -58,7 +62,7 @@ class KmerEmbedder():
         '''Takes a list of amino acid sequences, and produces a PyTorch tensor containing the lengths
         of each sequence.'''
         embs = []
-        for seq in tqdm(seqs, desc='KmerEmbedder.__call__'):
+        for seq in tqdm(seqs, desc='KmerEmbedder.__call__', file=sys.stdout):
             embs.append(self._get_kmers(seq))
         embs = pd.DataFrame(embs)
         embs = embs[self.kmers] # Make sure column ordering is consistent. 
@@ -113,7 +117,7 @@ class PLMEmbedder():
                         e = e.mean(dim=0) # If mean pooling is specified, average over sequence length. 
                     embs.append((i, e)) # Append the ID and embedding to the list. 
 
-        for i, s in tqdm(seqs, desc='PLMEmbedder.__call__'):
+        for i, s in tqdm(seqs, desc='PLMEmbedder.__call__', file=sys.stdout):
             # Switch to single-sequence processing if length limit is exceeded.
             if len(s) > max_seq_length:
                 outputs = self.embed_batch([s])
@@ -155,13 +159,13 @@ class PLMEmbedder():
         batch = [' '.join(list(s)) for s in batch]
         # Should contain input_ids and attention_mask. Make sure everything's on the GPU. 
         # The tokenizer defaults mean that add_special_tokens=True and padding=True is equivalent to padding='longest'
-        inputs = {k:torch.tensor(v).to(self.device) for k, v in self.tokenizer(batch, padding=True).items()} # , cleanup_tokenization_spaces=True).items()}
+        inputs = {k:torch.tensor(v).to(self.device) for k, v in self.tokenizer(batch, padding=True, cleanup_tokenization_spaces=True).items()} 
         try:
             with torch.no_grad():
                 outputs = self.model(**inputs)
                 return outputs
         except RuntimeError:
-            print('PLMEmbedder.embed_batch: RuntimeError during embedding. Try lowering batch size.')
+            print('PLMEmbedder.embed_batch: RuntimeError during embedding. Try lowering batch size.', flush=True)
             return None
 
 
@@ -188,15 +192,16 @@ def embed(df:pd.DataFrame, path:str=None, append:bool=False, k_values:List[int]=
     embedders += [KmerEmbedder(k=k) for k in k_values]
 
     for embedder in embedders:
+        print(f'embed: Generating embeddings of type {embedder.type}.', flush=True)
         embs, ids = embedder(df.seq.values.tolist(), df.index.values.tolist())
         sort_idxs = np.argsort(ids)
         embs, ids = embs[sort_idxs, :], ids[sort_idxs]
         # I don't think failing to detach the tensors here is a problem, because it is being converted to a pandas DataFrame. 
         emb_df = pd.DataFrame(embs, index=ids)
         add(store, embedder.type, emb_df) # Make sure it's in table format if I need to append to it later.
-        print(f'embed: Embeddings of type {embedder.type} added to HDF file.')
+        print(f'embed: Embeddings of type {embedder.type} added to HDF file.', flush=True)
 
-    print(f'embed: Embedding data written to {path}')
+    print(f'embed: Embedding data written to {path}', flush=True)
     store.close()
 
 
