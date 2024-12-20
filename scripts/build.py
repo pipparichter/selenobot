@@ -204,9 +204,9 @@ def process(path:str, datasets:Dict[str, List[pd.DataFrame]], data_dir:str=None,
     train_df, test_df, val_df = split(df) 
 
     # Append the split DataFrames to the lists for concatenation later on. 
-    datasets['train.h5'].append(train_df)
-    datasets['test.h5'].append(test_df)
-    datasets['val.h5'].append(val_df)
+    datasets['train'].append(train_df)
+    datasets['test'].append(test_df)
+    datasets['val'].append(val_df)
 
     return df
 
@@ -243,7 +243,7 @@ if __name__ == '__main__':
         for file_name, df in datasets.items():
             # path = os.path.join(args.data_dir, file_name + '.csv')
             path = os.path.join('.', file_name + '.csv')
-            embed(df, path=path, append=args.append)
+            df.to_csv(path)
 
     if args.embed:
         # NOTE: I want to be able to add to exsting HDF files. 
