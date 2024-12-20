@@ -45,7 +45,7 @@ class KmerEmbedder():
         self.type = f'{k}mer'
         self.k = k
         # Sort list of k-mers to ensure consistent ordering
-        self.kmers = sorted([''.join(kmer) for kmer in itertools.permutations(KmerEmbedder.amino_acids)])
+        self.kmers = sorted([''.join(kmer) for kmer in itertools.permutations(KmerEmbedder.amino_acids, k)])
         self.kmer_to_int_map = {kmer:i for i, kmer in enumerate(self.kmers)}
 
     def _get_kmers(self, seq:str):
@@ -176,7 +176,7 @@ class PLMEmbedder():
             return None
 
 
-def embed(df:pd.DataFrame, path:str=None, append:bool=False, k_values:List[int]=[1, 2, 3]):
+def embed(df:pd.DataFrame, path:str=None, append:bool=False, k_values:List[int]=[1, 2, 3, 4]):
     '''Embed the sequences in the input DataFrame (using all three embedding methods), and store the embeddings and metadata in an HDF5
     file at the specified path.'''
 
@@ -196,7 +196,6 @@ def embed(df:pd.DataFrame, path:str=None, append:bool=False, k_values:List[int]=
     add(store, 'metadata', df)
 
     embedders = [PLMEmbedder(), LengthEmbedder()]
-    print('here')
     embedders += [KmerEmbedder(k=k) for k in k_values]
 
     for embedder in embedders:
