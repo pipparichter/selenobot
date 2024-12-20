@@ -79,11 +79,12 @@ class PLMEmbedder():
 
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.mean_pool = mean_pool
+        print(f'PLMEmbedder.__init__: Loading pre-trained model {model_name}.')
         self.model = T5EncoderModel.from_pretrained(model_name)
         self.model.to(self.device) # Move model to GPU.
         self.model.eval() # Set model to evaluation model.
         # Should be a T5Tokenizer object. 
-        self.tokenizer = T5Tokenizer.from_pretrained(model_name, do_lower_case=False, legacy=True) #, cleanup_tokenization_spaces=False)
+        self.tokenizer = T5Tokenizer.from_pretrained(model_name, do_lower_case=False, legacy=True, clean_up_tokenization_spaces=True) 
 
 
     def __call__(self, seqs:List[str], ids:List[str], max_aa_per_batch:int=10000, max_seq_per_batch:int=100, max_seq_length:int=1000):
@@ -159,7 +160,7 @@ class PLMEmbedder():
         batch = [' '.join(list(s)) for s in batch]
         # Should contain input_ids and attention_mask. Make sure everything's on the GPU. 
         # The tokenizer defaults mean that add_special_tokens=True and padding=True is equivalent to padding='longest'
-        inputs = {k:torch.tensor(v).to(self.device) for k, v in self.tokenizer(batch, padding=True, cleanup_tokenization_spaces=True).items()} 
+        inputs = {k:torch.tensor(v).to(self.device) for k, v in self.tokenizer(batch, padding=True, clean_up_tokenization_spaces=True).items()} 
         try:
             with torch.no_grad():
                 outputs = self.model(**inputs)
