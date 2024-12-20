@@ -201,7 +201,7 @@ def embed(df:pd.DataFrame, path:str=None, append:bool=False, k_values:List[int]=
 
     for embedder in embedders:
         print(f'embed: Generating embeddings of type {embedder.type}.', flush=True)
-        for seq in seq.values.tolist():
+        for seq in df.seq.values.tolist():
             if type(seq) != str:
                 print(seq)
         embs, ids = embedder(df.seq.values.tolist(), df.index.values.tolist())
