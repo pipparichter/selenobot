@@ -84,7 +84,7 @@ class PLMEmbedder():
         self.mean_pool = mean_pool
         print(f'PLMEmbedder.__init__: Loading pre-trained model {model_name}.', flush=True)
         self.model = T5EncoderModel.from_pretrained(model_name, torch_dtype=self.dtype)
-        print(f'PLMEmbedder.__init__: Model loaded successfully.', flush=True)
+        # print(f'PLMEmbedder.__init__: Model loaded successfully.', flush=True)
         self.model.to(self.device) # Move model to GPU.
         self.model.eval() # Set model to evaluation model.
         # Should be a T5Tokenizer object. 
@@ -196,6 +196,7 @@ def embed(df:pd.DataFrame, path:str=None, append:bool=False, k_values:List[int]=
     add(store, 'metadata', df)
 
     embedders = [PLMEmbedder(), LengthEmbedder()]
+    print('here')
     embedders += [KmerEmbedder(k=k) for k in k_values]
 
     for embedder in embedders:
