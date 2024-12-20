@@ -153,15 +153,17 @@ def split(df:pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     gss = GroupShuffleSplit(n_splits=1, train_size=0.8)
 
     idxs, test_idxs = list(gss.split(df.values, groups=groups))[0]
-    print('here')
+    print(f'split: Completed initial split, holdout test set contains {len(test_idxs)} sequences.')
     test_df = df.iloc[test_idxs].copy()
     # Now working only with the remaining sequence data, not in the test set. 
     df, groups = df.iloc[idxs].copy(), groups[idxs]
 
     train_idxs, val_idxs = list(gss.split(df.values, groups=groups))[0]
+    print(f'split: Completed second split, holdout validation set contains {len(val_idxs)} sequences.')
 
     train_df = df.iloc[train_idxs].copy()
     val_df = df.iloc[val_idxs].copy() 
+    print('split: Split complete.')
     # print(len(train_df), len(test_df), len(val_df))
     
     return train_df, test_df, val_df
