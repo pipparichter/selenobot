@@ -204,10 +204,7 @@ def embed(df:pd.DataFrame, path:str=None, append:bool=False, k_values:List[int]=
     embedders += [KmerEmbedder(k=k) for k in k_values]
 
     for embedder in embedders:
-        print(f'embed: Generating embeddings of type {embedder.type}.', flush=True)
-        for seq in df.seq.values.tolist():
-            if type(seq) != str:
-                print(seq)
+        # print(f'embed: Generating embeddings of type {embedder.type}.', flush=True)
         embs, ids = embedder(df.seq.values.tolist(), df.index.values.tolist())
         sort_idxs = np.argsort(ids)
         embs, ids = embs[sort_idxs, :], ids[sort_idxs]
