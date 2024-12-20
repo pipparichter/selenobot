@@ -74,13 +74,14 @@ class PLMEmbedder():
     '''Adapted from Josh's code, which he adapted from https://github.com/agemagician/ProtTrans/blob/master/Embedding/prott5_embedder.py'''
     name = 'plm'
 
-    def __init__(self, model_name:str='Rostlab/prot_t5_xl_half_uniref50-enc', mean_pool:bool=True):
+    def __init__(self, model_name:str='Rostlab/prot_t5_xl_half_uniref50-enc', mean_pool:bool=True, half_precision:bool=True):
         '''Initializes a PLM embedder object.'''
 
+        self.dtype = torch.float16 if half_precision else torch.float32
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.mean_pool = mean_pool
-        print(f'PLMEmbedder.__init__: Loading pre-trained model {model_name}.')
-        self.model = T5EncoderModel.from_pretrained(model_name)
+        print(f'PLMEmbedder.__init__: Loading pre-trained model {model_name}.', flush=True)
+        self.model = T5EncoderModel.from_pretrained(model_name, torch_dtype=self.dtype)
         self.model.to(self.device) # Move model to GPU.
         self.model.eval() # Set model to evaluation model.
         # Should be a T5Tokenizer object. 
