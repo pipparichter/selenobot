@@ -115,16 +115,18 @@ def truncate_non_sec(df:pd.DataFrame, sec_df:np.ndarray=None, n_bins:int=10, ban
     # sequences, so need to generate different distributions for different length categories. 
     kdes = dict()
 
-    pbar = tqdm(total=len(np.unique(bin_labels)), desc='truncate_non_sec: Generating KDEs of length bins...')
+    # pbar = tqdm(total=len(np.unique(bin_labels)), desc='truncate_non_sec: Generating KDEs of length bins...')
     for bin_label, bin_values in groupby(sec_truncation_ratios, bin_labels).items():
+        print(f'truncate_non_sec: Fitting KDE for length bin {bin_label}.')
         kde = sklearn.neighbors.KernelDensity(kernel='gaussian', bandwidth=bandwidth) 
         kde.fit(bin_values.reshape(-1, 1))
         kdes[bin_label] = kde
-        pbar.update(1)
+        # pbar.update(1)
 
     # Use the KDE to sample truncation ratios for each length bin, and apply the truncation to the full-length sequence. 
     df_truncated = []
     # pbar = tqdm(total=len(df), desc='truncate_non_sec: Sampling truncation sizes from KDEs...')
+    print(f'truncate_non_sec: Sampling {len(df)} truncation sizes from KDE.')
     for bin_label, bin_df in df.groupby('bin_label'):
         print(f'truncate_non_sec: Sampling {len(bin_df)} truncation sizes from KDE.')
         bin_df['truncation_size'] = kdes[bin_label].sample(n_samples=len(bin_df), random_state=42).ravel() * bin_df.seq.apply(len).values
