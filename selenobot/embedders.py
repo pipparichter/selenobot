@@ -61,7 +61,7 @@ class KmerEmbedder():
             kmer = seq[i:i + self.k]
             if kmer in kmers:
                 kmers[kmer] += 1
-                
+
         # Normalize the k-mer counts by sequence length. 
         kmers = {kmer:count / len(seq) for kmer, count in kmers.items()}
         return kmers
@@ -75,7 +75,7 @@ class KmerEmbedder():
         for id_, seq in tqdm(zip(ids, seqs), desc='KmerEmbedder.__call__', file=sys.stdout):
             emb = self._get_kmers(seq)
             if emb is not None:
-                embs.append(id_, emb)
+                embs.append((id_, emb))
 
         embs = pd.DataFrame([e for i, e in embs])
         embs = embs[self.kmers] # Make sure column ordering is consistent. 
