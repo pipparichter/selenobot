@@ -77,10 +77,11 @@ class KmerEmbedder():
             if emb is not None:
                 embs.append((id_, emb))
 
-        embs = pd.DataFrame([e for i, e in embs])
+        # Convert list of tuples to a DataFrame for processing. 
+        embs = pd.DataFrame([e for i, e in embs], index=[i for i, e in embs])
         embs = embs[self.kmers] # Make sure column ordering is consistent. 
 
-        return embs.values, np.array([i for i, e in embs])
+        return embs.values, embs.index.values
 
 
 class PLMEmbedder():
