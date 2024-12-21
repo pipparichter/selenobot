@@ -10,7 +10,7 @@ import pandas as pd
 import sys
 from transformers import T5Tokenizer, T5EncoderModel
 import itertools
-
+import re   
 from typing import List, Tuple
 
 # NOTE: tqdm progress bars print to standard error for reasons which are not relevant to me... 
@@ -43,7 +43,7 @@ class KmerEmbedder():
     def __init__(self, k:int=1):
         '''Initializes an KmerEmbedder object.'''
         # super(KmerEmbedder, self).__init__()
-        self.type = f'{k}mer'
+        self.type = f'aa_{k}mer'
         self.k = k
         # Sort list of k-mers to ensure consistent ordering
         self.kmers = sorted([''.join(kmer) for kmer in itertools.permutations(KmerEmbedder.amino_acids, k)])
@@ -177,7 +177,7 @@ class PLMEmbedder():
             return None
 
 
-def embed(df:pd.DataFrame, path:str=None, append:bool=False, k_values:List[int]=[1, 2, 3, 4]):
+def embed(df:pd.DataFrame, path:str=None, append:bool=False, embedders:List=[PLMEmbedder(), LengthEmbedder(), KmerEmbedder(k=1)]): # k_values:List[int]=[1, 2, 3, 4]):
     '''Embed the sequences in the input DataFrame (using all three embedding methods), and store the embeddings and metadata in an HDF5
     file at the specified path.'''
 
@@ -194,14 +194,11 @@ def embed(df:pd.DataFrame, path:str=None, append:bool=False, k_values:List[int]=
 
     df = df.sort_index() # Sort the index of the DataFrame to ensure consistent ordering. 
     seq_is_nan = df.seq.isnull()
-    print(f'embed: Removing {np.sum(seq_is_nan)} null entries from the sequence DataFrame. {len(df) - np.sum(seq_is_nan)} sequences remaining.')
+    print(f'embed: Removing {np.sum(seq_is_nan)} null entries from the sequence DataFrame. {len(df) - np.sum(seq_is_nan)} sequences remaining.', flush=True)
     df = df[~seq_is_nan]
 
     store = pd.HDFStore(path, mode='a' if append else 'w') # Should confirm that the file already exists. 
     add(store, 'metadata', df)
-
-    embedders = [PLMEmbedder(), LengthEmbedder()]
-    embedders += [KmerEmbedder(k=k) for k in k_values]
 
     for embedder in embedders:
         # print(f'embed: Generating embeddings of type {embedder.type}.', flush=True)
