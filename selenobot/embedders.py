@@ -72,7 +72,7 @@ class KmerEmbedder():
         seqs = [s.replace('U', 'X').replace('Z', 'X').replace('O', 'X') for s in seqs] # Replace non-standard amino acids with X token.
         embs = []
 
-        for id_, seq in tqdm(zip(ids, seqs), desc='KmerEmbedder.__call__', file=sys.stdout):
+        for id_, seq in tqdm(list(zip(ids, seqs)), desc='KmerEmbedder.__call__', file=sys.stdout):
             emb = self._get_kmers(seq)
             if emb is not None:
                 embs.append((id_, emb))
