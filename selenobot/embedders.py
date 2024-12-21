@@ -51,13 +51,17 @@ class KmerEmbedder():
 
     def _get_kmers(self, seq:str):
         '''Encode a sequence using k-mers.'''
-        assert len(seq) > self.k, f'KmerEmbedder._get_kmers: Input sequence has length {len(seq)}, which is too short for k-mers of size {self.k}.'
-        
+        # assert len(seq) > self.k, f'KmerEmbedder._get_kmers: Input sequence has length {len(seq)}, which is too short for k-mers of size {self.k}.'
+        if len(seq) < self.k:
+            print(f'KmerEmbedder._get_kmers: Input sequence has length {len(seq)}, which is too short for k-mers of size {self.k}.', flush=True)
+            return None
+
         kmers = {kmer:0 for kmer in self.kmers}
         for i in range(len(seq) - self.k):
             kmer = seq[i:i + self.k]
             if kmer in kmers:
                 kmers[kmer] += 1
+                
         # Normalize the k-mer counts by sequence length. 
         kmers = {kmer:count / len(seq) for kmer, count in kmers.items()}
         return kmers
@@ -67,12 +71,16 @@ class KmerEmbedder():
         of each sequence.'''
         seqs = [s.replace('U', 'X').replace('Z', 'X').replace('O', 'X') for s in seqs] # Replace non-standard amino acids with X token.
         embs = []
-        for seq in tqdm(seqs, desc='KmerEmbedder.__call__', file=sys.stdout):
-            embs.append(self._get_kmers(seq))
-        embs = pd.DataFrame(embs)
+
+        for id_, seq in tqdm(zip(ids, seqs), desc='KmerEmbedder.__call__', file=sys.stdout):
+            emb = self._get_kmers(seq)
+            if emb is not None:
+                embs.append(id_, emb)
+
+        embs = pd.DataFrame([e for i, e in embs])
         embs = embs[self.kmers] # Make sure column ordering is consistent. 
 
-        return embs.values, np.array(ids)
+        return embs.values, np.array([i for i, e in embs])
 
 
 class PLMEmbedder():
