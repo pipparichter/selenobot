@@ -186,40 +186,32 @@ class PLMEmbedder():
             return None
 
 
-def embed(df:pd.DataFrame, path:str=None, append:bool=False, embedders:List=[]): # k_values:List[int]=[1, 2, 3, 4]):
+def embed(df:pd.DataFrame, path:str=None, overwrite:bool=False, embedders:List=[]): 
     '''Embed the sequences in the input DataFrame (using all three embedding methods), and store the embeddings and metadata in an HDF5
     file at the specified path.'''
 
-    def add(store:pd.HDFStore, key:str, df:pd.DataFrame):
-        '''Add a DataFrame to the specified node in the HDF file. If append is specified, append the 
-        DataFrame rather than creating a new node.'''
-        # NOTE: The table format performs worse, but will enable modification later on. 
-        if append:
-            # Does not check if data being appended overlaps with existing data in the table, so be careful. 
-            store.append(key, df, 'table')
-        else:
-            store.put(key, df, format='table')
-
+    store = pd.HDFStore(path, mode='a' if (not overwrite) else 'w') # Should confirm that the file already exists. 
+    existing_keys = [key.replace('/', '') for key in store.keys()]
 
     df = df.sort_index() # Sort the index of the DataFrame to ensure consistent ordering. 
     seq_is_nan = df.seq.isnull()
     print(f'embed: Removing {np.sum(seq_is_nan)} null entries from the sequence DataFrame. {len(df) - np.sum(seq_is_nan)} sequences remaining.', flush=True)
     df = df[~seq_is_nan]
 
-    store = pd.HDFStore(path, mode='a' if append else 'w') # Should confirm that the file already exists. 
-    add(store, 'metadata', df)
+    store.put('metadata', df, format='fixed', data_columns=None)
 
     for embedder in embedders:
-        # print(f'embed: Generating embeddings of type {embedder.type}.', flush=True)
-        embs, ids = embedder(df.seq.values.tolist(), df.index.values.tolist())
-        sort_idxs = np.argsort(ids)
-        embs, ids = embs[sort_idxs, :], ids[sort_idxs]
-        # I don't think failing to detach the tensors here is a problem, because it is being converted to a pandas DataFrame. 
-        emb_df = pd.DataFrame(embs, index=ids)
-        add(store, embedder.type, emb_df) # Make sure it's in table format if I need to append to it later.
-        print(f'embed: Embeddings of type {embedder.type} added to HDF file.', flush=True)
+        if (embedder.type in existing_keys) and (not overwrite):
+            print(f'Embeddings of type {embedder.type} are already present in {path}')
+        else:
+            embs, ids = embedder(df.seq.values.tolist(), df.index.values.tolist())
+            sort_idxs = np.argsort(ids)
+            embs, ids = embs[sort_idxs, :], ids[sort_idxs]
+            # I don't think failing to detach the tensors here is a problem, because it is being converted to a pandas DataFrame. 
+            emb_df = pd.DataFrame(embs, index=ids)
+            store.put(embedder.type, emb_df, format='fixed', data_columns=None) 
+            print(f'embed: Embeddings of type {embedder.type} added to {path}.', flush=True)
 
-    print(f'embed: Embedding data written to {path}', flush=True)
     store.close()
 
 
