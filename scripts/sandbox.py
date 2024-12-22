@@ -16,5 +16,12 @@ SCRIPTS_DIR = os.path.join(ROOT_DIR, 'scripts') # Get the path where results are
 # f = NcbiXmlFile(os.path.join(DATA_DIR, 'uniprot_sprot.xml'))
 # f.dataframe().to_csv(os.path.join(DATA_DIR, 'uniprot_sprot.csv'))
 
-df = pd.read_csv(os.path.join(DATA_DIR, 'uniprot_truncated.csv'))
-embed(df, os.path.join(DATA_DIR, 'uniprot_truncated.h5'))
+# df = pd.read_csv(os.path.join(DATA_DIR, 'uniprot_truncated.csv'))
+# embed(df, os.path.join(DATA_DIR, 'uniprot_truncated.h5'))
+
+# Remove the aa_4mer embeddings from the validation and testing datasets. 
+for file_name in ['test.h5', 'val.h5']:
+    store = pd.HDFStore(file_name)
+    store.remove('aa_4mer')
+    store.close()
+    print(f'Removed aa_4mer embeddings from {file_name}.')
