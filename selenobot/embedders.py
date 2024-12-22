@@ -186,7 +186,7 @@ class PLMEmbedder():
             return None
 
 
-def embed(df:pd.DataFrame, path:str=None, overwrite:bool=False, embedders:List=[]): 
+def embed(df:pd.DataFrame, path:str=None, overwrite:bool=False, embedders:List=[], format_='table   '): 
     '''Embed the sequences in the input DataFrame (using all three embedding methods), and store the embeddings and metadata in an HDF5
     file at the specified path.'''
 
@@ -198,7 +198,8 @@ def embed(df:pd.DataFrame, path:str=None, overwrite:bool=False, embedders:List=[
     print(f'embed: Removing {np.sum(seq_is_nan)} null entries from the sequence DataFrame. {len(df) - np.sum(seq_is_nan)} sequences remaining.', flush=True)
     df = df[~seq_is_nan]
 
-    store.put('metadata', df, format='fixed', data_columns=None)
+    if 'metadata' not in existing_keys:
+        store.put('metadata', df, format=format_, data_columns=None)
 
     for embedder in embedders:
         if (embedder.type in existing_keys) and (not overwrite):
@@ -209,7 +210,7 @@ def embed(df:pd.DataFrame, path:str=None, overwrite:bool=False, embedders:List=[
             embs, ids = embs[sort_idxs, :], ids[sort_idxs]
             # I don't think failing to detach the tensors here is a problem, because it is being converted to a pandas DataFrame. 
             emb_df = pd.DataFrame(embs, index=ids)
-            store.put(embedder.type, emb_df, format='fixed', data_columns=None) 
+            store.put(embedder.type, emb_df, format=format_, data_columns=None) 
             print(f'embed: Embeddings of type {embedder.type} added to {path}.', flush=True)
 
     store.close()
