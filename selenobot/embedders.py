@@ -201,7 +201,7 @@ def embed(df:pd.DataFrame, path:str=None, overwrite:bool=False, embedders:List=[
     if 'metadata' not in existing_keys:
         # Avoid mixed column data types. 
         string_cols = [col for col in df.columns if (df[col].dtype == 'object')] 
-        train_metadata_df[string_cols] = train_metadata_df[string_cols].fillna('None')
+        df[string_cols] = df[string_cols].fillna('None')
         store.put('metadata', df, format=format_, data_columns=None)
 
     for embedder in embedders:
