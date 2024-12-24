@@ -11,7 +11,7 @@ if __name__ == '__main__':
     parser.add_argument('--output-path', type=str, default=None, help='The path where the embeddings will be written.')
     parser.add_argument('--input-path', type=str, default=None, help='The path to the CSV file with the sequences and metadata.')
     parser.add_argument('--overwrite', action='store_true')
-    parser.add_argument('--types', nargs='+', default=['plm', 'len', 'aa_1mer'])
+    parser.add_argument('--types', nargs='+', default=['plm', 'len', 'aa_1mer', 'aa_2mer', 'aa_3mer'])
     args = parser.parse_args()
 
     if args.output_path is None:
