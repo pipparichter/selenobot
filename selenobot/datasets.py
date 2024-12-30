@@ -9,6 +9,7 @@ from typing import List, Dict, NoReturn, Iterator
 import re
 import subprocess
 import time
+import copy
 from torch.nn.functional import one_hot
 from torch.utils.data import DataLoader
 
@@ -29,6 +30,8 @@ class Dataset(torch.utils.data.Dataset):
         self.n_classes = n_classes
         self.n_features = n_features
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.half_precision = half_precision 
+
         self.dtype = torch.bfloat16 if half_precision else torch.float32
         self.labels, self.labels_one_hot_encoded = None, None
         if ('label' in df.columns):
@@ -44,19 +47,33 @@ class Dataset(torch.utils.data.Dataset):
         self.metadata = df[[col for col in df.columns if type(col) == str]] 
         self.ids = df.index.values
         self.scaled = False
-
         self.length = len(df)
         
     def __len__(self) -> int:
         return self.length
 
+    def __copy__(self):
+        '''Create a copy of the Dataset object.'''
+        embeddings = copy.deepcopy(self.embeddings.cpu().numpy())
+        metadata = self.metadata.copy(deep=True)
+        # df = metadata.merge(pd.DataFrame(embeddings, index=self.ids), left_index=True, right_index=True, validate='one_to_one')
+        df = pd.concat([metadata, pd.DataFrame(embeddings, index=self.ids)], ignore_index=False, axis=1)
+        dataset = Dataset(df, n_features=self.n_features, n_classes=self.n_classes, half_precision=self.half_precision)
+        dataset.scaled = self.scaled 
+        return dataset
+
+
     def scale(self, scaler):
-        # Repeatedly scaling a Dataset causes problems, though I am not sure why. I would have thought that
+        # NOTE: Repeatedly scaling a Dataset causes problems, though I am not sure why. I would have thought that
         # subsequent applications of a scaler would have no effect. 
-        if not self.scaled:
-            embeddings = scaler.transform(self.embeddings.cpu().numpy())
-            self.embeddings = torch.Tensor(embeddings).to(self.dtype).to(self.device)
-            self.scaled = True
+        assert not self.scaled, 'Dataset.scale: The dataset has already been scaled.'
+        dataset = copy.copy(self)
+        embeddings = dataset.embeddings.cpu().numpy()
+        embeddings = scaler.transform(embeddings)
+        embeddings = torch.Tensor(embeddings).to(dataset.dtype).to(dataset.device)
+        dataset.embeddings = embeddings
+        dataset.scaled = True
+        return dataset
 
     @classmethod
     def from_hdf(cls, path:str, feature_type:str=None, n_classes:int=2, half_precision:bool=False):
@@ -100,6 +117,15 @@ class Dataset(torch.utils.data.Dataset):
             item['label'] = self.labels[idx]
             item['label_one_hot_encoded'] = self.labels_one_hot_encoded[idx]
         return item
+
+    # def sort(self, idxs):
+    #     assert len(idxs) == self.__len__(), f'Dataset.sort: List of indices has length {len(idxs)}, which does not match the length of the dataset {self.__len__()}.'
+    #     self.embeddings = self.embeddings[idxs]
+    #     self.metadata = self.metadata.iloc[idxs]
+    #     if self.labels is not None:
+    #         self.labels = labels[idxs]
+    #     self.ids = self.ids[idxs]
+
 
 
 def get_dataloader(dataset:Dataset, batch_size:int=16, balance_batches:bool=False) -> DataLoader:
