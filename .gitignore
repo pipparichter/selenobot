@@ -7,3 +7,4 @@ data.zip
 **/selenobot.egg-info
 selenobot-local.cfg
 results/*
+**/tmp/

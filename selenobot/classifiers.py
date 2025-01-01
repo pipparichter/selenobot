@@ -20,7 +20,6 @@ import io
 import pickle
 import joblib
 from sklearn.preprocessing import StandardScaler
-from selenobot.tools import CDHIT, MUSCLE
 from Bio.Seq import Seq 
 from Bio.SeqRecord import SeqRecord
 
@@ -82,59 +81,59 @@ class WeightedCrossEntropyLoss(torch.nn.Module):
 # TODO: Do I want to use a non-Gaussian emission probability?
 # TODO: Do I want a different HMM for different clusters in each category? And possibly base them on multi-sequence alignments. 
 
-class HMM():
+# class HMM():
     
-    def __init__(self, n_classes:int=2, half_precision:bool=False, models_dir:str='../models/'):
-        self.models = {i:[] for i in range(n_classes)} 
-        self.msas = {i:[] for i in range(n_classes)}
+#     def __init__(self, n_classes:int=2, half_precision:bool=False, models_dir:str='../models/'):
+#         self.models = {i:[] for i in range(n_classes)} 
+#         self.msas = {i:[] for i in range(n_classes)}
 
-        self.models_dir = models_dir
-        # Apparently no way to create a custom alphabet, so id it id a problem I will replace non-standard AAs. 
-        self.alphabet = pyhmmer.easel.Alphabet.amino() # There are 20 regular amino acids and 9 extra symbols in this alphabet. 
+#         self.models_dir = models_dir
+#         # Apparently no way to create a custom alphabet, so id it id a problem I will replace non-standard AAs. 
+#         self.alphabet = pyhmmer.easel.Alphabet.amino() # There are 20 regular amino acids and 9 extra symbols in this alphabet. 
 
-    def align(self, df:pd.DataFrame, label:int=None, cluster:int=None):
+#     def align(self, df:pd.DataFrame, label:int=None, cluster:int=None):
         
-        name = f'{label}_{cluster}'
-        alignment_path = MUSCLE(df, name=name, cwd=self.models_dir).run()
-        self.msas[label].append(alignment_path)
+#         name = f'{label}_{cluster}'
+#         alignment_path = MUSCLE(df, name=name, cwd=self.models_dir).run()
+#         self.msas[label].append(alignment_path)
         
-    # I don't need a validation dataset here... should I combine, or ignore?
-    def fit(self, train_dataset, val_dataset): 
+#     # I don't need a validation dataset here... should I combine, or ignore?
+#     def fit(self, train_dataset, val_dataset): 
         
-        n_msas = 0
-        for label, df in tqdm(train_dataset.metadata.groupby('label'), desc='HMM.fit: Generating multi-sequence alignments...'):
-            # First, cluster the training dataset at 50 percent sequence similarity. 
-            cdhit = CDHIT(df, name='hmm', c_cluster=0.5, cwd=self.models_dir)
-            # Sequences have already been de-replicated, so don't do that again. 
-            df = cdhit.run(overwrite=False, dereplicate=False)
-            # Generate a MSA for each cluster. 
-            for cluster, cluster_df in df.groupby(cluster):
-                self.align(cluster_df, label=label, cluster=cluster)
-                n_msas += 1
+#         n_msas = 0
+#         for label, df in tqdm(train_dataset.metadata.groupby('label'), desc='HMM.fit: Generating multi-sequence alignments...'):
+#             # First, cluster the training dataset at 50 percent sequence similarity. 
+#             cdhit = CDHIT(df, name='hmm', c_cluster=0.5, cwd=self.models_dir)
+#             # Sequences have already been de-replicated, so don't do that again. 
+#             df = cdhit.run(overwrite=False, dereplicate=False)
+#             # Generate a MSA for each cluster. 
+#             for cluster, cluster_df in df.groupby(cluster):
+#                 self.align(cluster_df, label=label, cluster=cluster)
+#                 n_msas += 1
 
-        pbar = tqdm(total=n_msas, desc='HMM.fit: Building HMMs...')
-        for label, alignment_paths in self.msas.items():
-            for alignment_path in alignment_paths:
+#         pbar = tqdm(total=n_msas, desc='HMM.fit: Building HMMs...')
+#         for label, alignment_paths in self.msas.items():
+#             for alignment_path in alignment_paths:
 
-                msa = phmmer.easel.MSAFile(alignment_path, digital=True, alphabet=self.alphabet)
-                msa.name = os.path.basename(alignment_path).replace('.afa', '') # Need to set this for the HMM. 
-                builder = pyhmmer.plan7.Builder(self.alphabet)
-                background = pyhmmer.plan7.Background(self.alphabet)
+#                 msa = phmmer.easel.MSAFile(alignment_path, digital=True, alphabet=self.alphabet)
+#                 msa.name = os.path.basename(alignment_path).replace('.afa', '') # Need to set this for the HMM. 
+#                 builder = pyhmmer.plan7.Builder(self.alphabet)
+#                 background = pyhmmer.plan7.Background(self.alphabet)
 
-                # What are the other outputs?
-                model, _, _ = builder.build_msa(msa, self.alphabet)
-                self.models[label].append(model)
-                pbar.update(1)
+#                 # What are the other outputs?
+#                 model, _, _ = builder.build_msa(msa, self.alphabet)
+#                 self.models[label].append(model)
+#                 pbar.update(1)
     
-    def predict(self, dataset):
+#     def predict(self, dataset):
 
-        seqs = dataset.metadata.seq.values
-        # Need to digitize the hits  so they work with the HMMs. 
-        queries = [pyhmmer.easel.DigitalSequence(self.alphabet, sequence=seq) for seq in seqs]
+#         seqs = dataset.metadata.seq.values
+#         # Need to digitize the hits  so they work with the HMMs. 
+#         queries = [pyhmmer.easel.DigitalSequence(self.alphabet, sequence=seq) for seq in seqs]
 
-        for label, hmms in self.models.items():
-            # I think this is a list of TopHits objects, but not completely sure. 
-            tophits = pyhmmer.hmmer.hmmscan(queries, hmms)
+#         for label, hmms in self.models.items():
+#             # I think this is a list of TopHits objects, but not completely sure. 
+#             tophits = pyhmmer.hmmer.hmmscan(queries, hmms)
 
 
 class NN(torch.nn.Module):
@@ -271,7 +270,8 @@ class Classifier():
 
     def __init__(self, n_classes:int=2, model_type:str='nn', **kwargs):
         
-        self.model = HMM(n_classes=n_classes, **kwargs) if model_type == 'hmm' else NN(output_dim=n_classes, **kwargs)
+        self.model = NN(output_dim=n_classes, **kwargs)
+        # self.model = HMM(n_classes=n_classes, **kwargs) if model_type == 'hmm' else NN(output_dim=n_classes, **kwargs)
 
     def fit(self, train_dataset, val_dataset, **kwargs):
         self.model.fit(train_dataset, val_dataset, **kwargs)

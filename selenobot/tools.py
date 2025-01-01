@@ -32,7 +32,8 @@ class BLAST():
     def run(self, query_path:str, subject_path:str, overwrite:bool=False, verbose:bool=True, 
             max_high_scoring_pairs:int=1, 
             max_subject_sequences:int=1,
-            make_database:bool=True) -> str:
+            make_database:bool=True, 
+            num_threads:int=4) -> str:
         '''Run the blastp program on the query and subject files.
         
         :param query_path
@@ -52,7 +53,7 @@ class BLAST():
             cmd += f' -db {database_path}'
         else:
             cmd = f' -subject {subject_path}'
-        cmd += f' -max_hsps {max_high_scoring_pairs} -max_target_seqs {max_subject_sequences}' # Add a few more parameters. 
+        cmd += f' -max_hsps {max_high_scoring_pairs} -max_target_seqs {max_subject_sequences} -num_threads {num_threads}' # Add a few more parameters. 
 
         if verbose:
             print(cmd)
