@@ -130,6 +130,37 @@ class MMseqsFile(File):
         return df
 
 
+class BLASTFile(File):
+    '''Manages the parsing of an BLAST output file in tabular output format 6. See the following link
+    for more information on the format: https://www.metagenomics.wiki/tools/blast/blastn-output-format-6'''
+
+    fields = ['qseqid', 'sseqid', 'pident', 'length', 'mismatch', 'gapopen', 'qstart', 'qend', 'sstart', 'send', 'evalue', 'bitscore']
+    field_map = dict()
+    field_map['qseqid'] = 'query_id' # Query or source (gene) sequence id
+    field_map['sseqid'] = 'subject_id' # Subject or target (gene) sequence id
+    field_map['pident'] = 'sequence_identity' # Percentage of identical positions
+    field_map['length'] = 'alignment_length' # Alignment length (sequence overlap)
+    field_map['mismatch'] = 'mismatch' # Number of mismatches
+    field_map['gapopen'] = 'num_gap_openings' # The number of gap openings. 
+    # NOTE: Are the start and end indices zero- or one-indexed?
+    field_map['qstart'] = 'query_alignment_start' # Start of alignment in query.
+    field_map['qend'] = 'query_alignment_end' # End of alignment in query. 
+    field_map['sstart'] = 'subject_alignment_start' # Start of alignment in subject. 
+    field_map['send'] = 'subject_alignment_end' # End of alignment in subject. 
+    field_map['evalue'] = 'e_value' # E-value https://www.metagenomics.wiki/tools/blast/evalue
+    field_map['bitscore'] = 'bit_score' # Bit-score https://www.metagenomics.wiki/tools/blast/evalue 
+
+    def __init__(self, path:str):
+
+        self.df = pd.read_csv(path, delimiter='\t', names=BLASTFile.fields)
+        self.df = self.df.rename(columns=BLASTFile.field_map) # Rename the columns to more useful things. 
+        self.df['id'] = self.df.query_id # Use the query ID as the main ID. 
+        self.df = self.df.set_index('id')
+
+    def to_df(self) -> pd.DataFrame:
+        return self.df
+
+
 # TODO: Are the amino acids sequences listed in each cluster in any particular order?
 
 class CDHITFile(File):

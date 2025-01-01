@@ -4,31 +4,86 @@ from selenobot.files import CDHITFile, FASTAFile, MMseqsFile
 import pandas as pd
 import numpy as np 
 
-
-class MUSCLE():
-
-    def __init__(self, df:pd.DataFrame, name:str='untitled', cwd:str=os.getcwd()):
-        
+class BLAST():
+    # https://open.oregonstate.education/computationalbiology/chapter/command-line-blast/
+    # NOTE: HSP stands for High Scoring Pair.
+    
+    def __init__(self, cwd:str=os.getcwd()):
         self.cwd = cwd
-        self.df = df 
+        self.output_format = '6'
 
-        self.input_path = os.path.join(self.cwd, f'{name}.fa')
-        self.output_path = os.path.join(self.cwd, f'{name}.afa') # This is a FASTA file format. 
+    def make_database(self, path:str, overwrite:bool=False):
+        '''Make a database from the subject FASTA file to reduce the computational cost of searching.'''
+        
+        database_name = os.path.basename(path)
+        database_name, _ = os.path.splitext(database_name)
+        database_path = os.path.join(self.cwd, database_name)
 
-    def run(self):
+        if (not os.path.exists(database_path)) or (not overwrite):
+            cmd = f'makeblastdb -in {path} -out {database_path} -dbtype prot -title {database_name} -parse_seqids'
+            print(f'BLAST.make_database: Creating database using {path} at {database_path}.')
+            subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL) 
+        else:
+            print(f'BLAST.make_database: Using existing database at {database_path}.')
+        return database_path
 
-        # Write the DataFrame to a FASTA file so it can be used with MUSCLE. 
-        FASTAFile.from_df(self.df, add_description=False).write(self.input_path)
+    def run(self, query_path:str, subject_path:str, overwrite:bool=False, verbose:bool=True, 
+            max_high_scoring_pairs:int=1, 
+            max_subject_sequences:int=1,
+            make_database:bool=True) -> str:
+        '''Run the blastp program on the query and subject files.
+        
+        :param query_path
+        :param subject_path
+        :param overwrite 
+        :param verbose
+        :param max_subject_sequences: For each query sequence, only report HSPs for the first specified different subject sequences.
+        :param max_high_scoring_pairs: For each query/target pair, only report the best n HSPs.
+        '''
+        output_path = os.path.basename(query_path)
+        output_path, _ = os.path.splitext(output_path)
+        output_path = os.path.join(self.cwd, output_path + '.tsv') # Output should be a TSV file with the specified output format. 
 
-        subprocess.run(f'muscle -in {self.input_path} -out {self.output_path}') 
-        return self.output_path
+        cmd = f'blastp -query {query_path} -out {output_path} -outfmt {self.output_format}' 
+        if make_database:
+            database_path = self.make_database(subject_path, overwrite=overwrite)
+            cmd += f' -db {database_path}'
+        else:
+            cmd = f' -subject {subject_path}'
+        cmd += f' -max_hsps {max_high_scoring_pairs} -max_target_seqs {max_subject_sequences}' # Add a few more parameters. 
 
-    def cleanup(self):
-        os.remove(self.input_path)
+        if verbose:
+            print(cmd)
+
+        subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
+
+        return output_path
+
+
+# class MUSCLE():
+
+#     def __init__(self, df:pd.DataFrame, name:str='untitled', cwd:str=os.getcwd()):
+        
+#         self.cwd = cwd
+#         self.df = df 
+
+#         self.input_path = os.path.join(self.cwd, f'{name}.fa')
+#         self.output_path = os.path.join(self.cwd, f'{name}.afa') # This is a FASTA file format. 
+
+#     def run(self):
+
+#         # Write the DataFrame to a FASTA file so it can be used with MUSCLE. 
+#         FASTAFile.from_df(self.df, add_description=False).write(self.input_path)
+
+#         subprocess.run(f'muscle -in {self.input_path} -out {self.output_path}') 
+#         return self.output_path
+
+#     def cleanup(self):
+#         os.remove(self.input_path)
 
 
 class MMseqs():
-    def __init__(self, cwd=None):
+    def __init__(self, cwd:str=None):
 
         # Need a directory to store temporary files. If one does not already exist, create it in the working directory.
         self.tmp_dir = os.path.join(cwd, 'tmp')
