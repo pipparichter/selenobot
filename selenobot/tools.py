@@ -12,7 +12,7 @@ class BLAST():
         self.cwd = cwd
         self.output_format = '6'
 
-    def make_database(self, path:str, overwrite:bool=False):
+    def make_database(self, path:str, overwrite:bool=False, verbose:bool=True):
         '''Make a database from the subject FASTA file to reduce the computational cost of searching.'''
         
         database_name = os.path.basename(path)
@@ -22,6 +22,8 @@ class BLAST():
         if (not os.path.exists(database_path)) or (not overwrite):
             cmd = f'makeblastdb -in {path} -out {database_path} -dbtype prot -title {database_name} -parse_seqids'
             print(f'BLAST.make_database: Creating database using {path} at {database_path}.')
+            if verbose:
+                print(cmd)
             subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL) 
         else:
             print(f'BLAST.make_database: Using existing database at {database_path}.')
