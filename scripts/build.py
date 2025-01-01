@@ -15,12 +15,16 @@ import warnings
 from selenobot.tools import Clusterer
 from selenobot.utils import digitize, groupby, sample, seed
 
-# TODO: Figure out why there are two representative columns in the final dataset, which also have different values. Ah, it's 
-# probably from the two separate rounds of CD-HIT clustering... should clean this up. 
+# TODO: Bug related to the fact that the cluster labels are not unique, as I use MMSeqs multiple separate times. 
+# TODO: Why did I think it was a problem to have mixed clusters? I think there is a problem where truncated selenoproteins
+# strongly resemble their full-length counterparts. I really think I should be de-replicating and clustering after creating
+# the entire dataset, as long as I still end up with roughly even distributions. 
 
 # Label 0: Full-length proteins (both selenoproteins and non-selenoproteins). 
 # Label 1: Truncated selenoproteins. 
 # Label 2: Truncated non-selenoproteins. 
+
+TRUNCATED_SYMBOL = '-'
 
 warnings.simplefilter('ignore')
 seed(42)
@@ -74,14 +78,12 @@ def truncate_sec(df:pd.DataFrame, **kwargs) -> str:
         row['original_length'] = len(seq)
         row['seq'] = seq[:row['sec_index']] # Get the portion of the sequence prior to the U residue.
         df_truncated.append(row)
-    # print(f'truncate_sec: Creating DataFrame of {len(df_truncated)} truncated selenoproteins.')
-    df_truncated = pd.DataFrame(df_truncated, index=df.index)
+    df_truncated = pd.DataFrame(df_truncated, index=[id_ + TRUNCATED_SYMBOL for id_ in df.index])
     df_truncated.index.name = 'id'
-    # print(f'truncate_sec: Complete.')
     return df_truncated
 
 
-def truncate_non_sec(df:pd.DataFrame, sec_df:np.ndarray=None, n_bins:int=10, bandwidth:float=0.01, **kwargs) -> pd.DataFrame:
+def truncate_non_sec(df:pd.DataFrame, label_1_df:pd.DataFrame=None, n_bins:int=10, bandwidth:float=0.01, **kwargs) -> pd.DataFrame:
     '''Sub-sample the set of all full-length proteins such that the length distribution matches that of the full-length
     selenoproteins. Then, truncate the sampled sequences so that the truncated length distributions also match.
 
@@ -93,8 +95,8 @@ def truncate_non_sec(df:pd.DataFrame, sec_df:np.ndarray=None, n_bins:int=10, ban
         distributions for selecting truncation ratios. 
     :return: A pandas DataFrame containing the sub-sampled and randomly truncated SwissProt proteins. 
     '''
-    sec_lengths = sec_df.original_length.values
-    sec_truncation_ratios = sec_df.truncation_ratio.values
+    sec_lengths = label_1_df.original_length.values
+    sec_truncation_ratios = label_1_df.truncation_ratio.values
 
     # Group the lengths of the full-length selenoproteins into n_bins bins
     print(f'truncate_non_sec: Generating a selenoprotein length distribution with {n_bins} bins.')
@@ -127,7 +129,6 @@ def truncate_non_sec(df:pd.DataFrame, sec_df:np.ndarray=None, n_bins:int=10, ban
     # Use the KDE to sample truncation ratios for each length bin, and apply the truncation to the full-length sequence. 
     df_truncated = []
     pbar = tqdm(total=len(df), desc='truncate_non_sec: Sampling truncation sizes from KDEs...')
-    # print(f'truncate_non_sec: Sampling {len(df)} truncation sizes from KDE.')
     for bin_label, bin_df in df.groupby('bin_label'):
         # print(f'truncate_non_sec: Sampling {len(bin_df)} truncation sizes from KDE.')
         bin_df['truncation_size'] = kdes[bin_label].sample(n_samples=len(bin_df), random_state=42).ravel() * bin_df.seq.apply(len).values
@@ -139,30 +140,36 @@ def truncate_non_sec(df:pd.DataFrame, sec_df:np.ndarray=None, n_bins:int=10, ban
     print(f'truncate_non_sec: Creating DataFrame of truncated non-selenoproteins.')
     df_truncated = pd.concat(df_truncated).drop(columns=['bin_label'])
     df_truncated.index.name = 'id'
+    df_truncated.index = [id_ + TRUNCATED_SYMBOL for id_ in df_truncated.index]
     # print(f'truncate_non_sec: Complete.')
     return df_truncated
 
 
-def split(df:pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def split(df:pd.DataFrame, data_dir:str=None, overwrite:bool=False) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     '''Divide the uniprot data into training, testing, and validation datasets. The split is cluster-aware, and ensures that
     no CD-HIT-generated cluster is split between datasets. The data is first divided into a training set (80 percent) and test
     set (20 percent), and the training data is further divided into a training (80 percent) and validation (20 percent) set.'''
 
+    clusterer = Clusterer(tool='mmseqs', name='all_labels', cwd=data_dir)
+    df = clusterer.run(df, overwrite=overwrite)
+    
+    n = len(df) # Get the original number of sequences for checking stuff later. 
     groups = df['mmseqs_cluster'].values # Extract cluster labels. 
     gss = GroupShuffleSplit(n_splits=1, train_size=0.8)
 
     idxs, test_idxs = list(gss.split(df.values, groups=groups))[0]
-    # print(f'split: Completed initial split, holdout test set contains {len(test_idxs)} sequences.')
     test_df = df.iloc[test_idxs].copy()
-    # Now working only with the remaining sequence data, not in the test set. 
-    df, groups = df.iloc[idxs].copy(), groups[idxs]
-
+    df, groups = df.iloc[idxs].copy(), groups[idxs] # Now working only with the remaining sequence data, not in the test set. 
+    assert (len(df) + len(test_df)) == n, f'split: The size of the remaining dataset is incorrect. len(df) + len(test_df) is {len(df) + len(test_df)}, but should equal {n}.'
+    
     train_idxs, val_idxs = list(gss.split(df.values, groups=groups))[0]
-    # print(f'split: Completed second split, holdout validation set contains {len(val_idxs)} sequences.')
 
     train_df = df.iloc[train_idxs].copy()
     val_df = df.iloc[val_idxs].copy() 
-    # print('split: Split complete.')
+    
+    assert len(np.intersect1d(train_df.index, val_df.index)) == 0, 'split: There is leakage between the validation and training datasets.'
+    assert len(np.intersect1d(train_df.index, test_df.index)) == 0, 'split: There is leakage between the testing and training datasets.'
+    assert len(np.intersect1d(test_df.index, val_df.index)) == 0, 'split: There is leakage between the validation and testing datasets.'
     
     return train_df, test_df, val_df
 
@@ -184,7 +191,7 @@ def stats(df:pd.DataFrame, name:str=None):
 
 
 # NOTE: Should I dereplicate the selenoproteins before or after truncation? Seems like after would be a good idea.
-def process(path:str, datasets:Dict[str, List[pd.DataFrame]], data_dir:str=None, label:int=0, name:str=None, overwrite:bool=False, **kwargs):
+def process(path:str, data_dir:str=None, label:int=None, overwrite:bool=False, **kwargs):
 
     print(f'process: Processing dataset {path}...')
 
@@ -195,18 +202,9 @@ def process(path:str, datasets:Dict[str, List[pd.DataFrame]], data_dir:str=None,
     elif label == 2:
         df = truncate_non_sec(df, **kwargs)
 
-    clusterer = Clusterer(name=name, cwd=data_dir)
-    df = clusterer.run(df, overwrite=overwrite)
-
+    clusterer = Clusterer(name=f'label_{label}', cwd=data_dir, tool='mmseqs')
+    df = clusterer.dereplicate(df, overwrite=overwrite) # Don't cluster by homology just yet. 
     df['label'] = label # Add labels to the data marking the category. 
-    # Decided to split each data group independently to avoid the mixed clusters. 
-    print(f'process: Generating train-test-validation split for {name}...')
-    train_df, test_df, val_df = split(df) 
-
-    # Append the split DataFrames to the lists for concatenation later on. 
-    datasets['train'].append(train_df)
-    datasets['test'].append(test_df)
-    datasets['val'].append(val_df)
 
     return df
 
@@ -225,14 +223,13 @@ if __name__ == '__main__':
     uniprot_sprot_path = os.path.join(args.data_dir, 'uniprot_sprot.csv')
     uniprot_sec_path = os.path.join(args.data_dir, 'uniprot_sec.csv')
 
-    datasets = {'train':[], 'test':[], 'val':[]}
+    label_0_df = process(uniprot_sprot_path, label=0, data_dir=args.data_dir, overwrite=args.overwrite)
+    label_1_df = process(uniprot_sec_path, label=1, data_dir=args.data_dir, allow_c_terminal_fragments=True, overwrite=args.overwrite)
+    label_2_df = process(uniprot_sprot_path, label=2, data_dir=args.data_dir, allow_c_terminal_fragments=True, remove_selenoproteins=True, label_1_df=label_1_df, overwrite=args.overwrite)
+    df = pd.concat([label_0_df, label_1_df, label_2_df])
 
-    process(uniprot_sprot_path, datasets, name='full_length', label=0, data_dir=args.data_dir, overwrite=args.overwrite)
-    sec_df = process(uniprot_sec_path, datasets, name='truncated_selenoprotein', label=1, data_dir=args.data_dir, allow_c_terminal_fragments=True, overwrite=args.overwrite)
-    process(uniprot_sprot_path, datasets, name='truncated_non_selenoprotein', label=2, data_dir=args.data_dir, allow_c_terminal_fragments=True, remove_selenoproteins=True, sec_df=sec_df, overwrite=args.overwrite)
-
-    # Concatenate the accumulated datasets. 
-    datasets = {name:pd.concat(dfs) for name, dfs in datasets.items()}
+    train_df, test_df, val_df = split(df, data_dir=args.data_dir, overwrite=args.overwrite)
+    datasets = {'train':train_df, 'test':test_df, 'val':val_df}
 
     if args.print_stats:
         for file_name, df in datasets.items():

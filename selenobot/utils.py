@@ -68,7 +68,6 @@ def sample(values:np.ndarray, hist:np.ndarray, bin_edges:np.ndarray) -> Tuple[np
     :return: A tuple containing a subsample of the values, which should follow the distribution of the input histogram,
         as well as the indices of the sample. 
     '''
-
     bin_labels, _ = digitize(values, bin_edges)
     bin_idxs = groupby(np.arange(len(values)), bin_labels)
     
