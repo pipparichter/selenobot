@@ -164,11 +164,7 @@ class NN(torch.nn.Module):
 
     # TODO: Do I still need the batch size parameter here?
     def forward(self, inputs:torch.FloatTensor):
-        '''A forward pass of the Classifier.
-        
-        :param inputs:
-        :param low_memory
-        '''
+        '''A forward pass of the Classifier.'''
         self.to(device)
         return self.model(inputs) 
 

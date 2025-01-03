@@ -100,10 +100,10 @@ class Dataset(torch.utils.data.Dataset):
         labels = self.labels.numpy()
 
         N = len(labels) # Total number of things in the dataset. 
-        n = [(labels == i).sum() for i in range(self.n_classes)]
+        n = [(labels == i).sum() for i in range(self.n_classes)] # The number of elements in each class. 
         # Compute the minimum number of samples such that each training instance will probably be included at least once.
         s = int(max([np.log(1 - p) / np.log(1 - 1 / n_i) for n_i in n])) * self.n_classes
-        w = [(N / (n_i * self.n_classes)) for n_i in n]
+        w = [(1 / (n_i)) for n_i in n] # Proportional to the inverse frequency of each class. 
         
         print(f'Dataset.sampler: {s} samples required for dataset coverage.')
         return torch.utils.data.WeightedRandomSampler([w[i] for i in labels], s, replacement=True)
