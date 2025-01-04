@@ -118,6 +118,17 @@ class Dataset(torch.utils.data.Dataset):
             item['label_one_hot_encoded'] = self.labels_one_hot_encoded[idx]
         return item
 
+    def to_df(self) -> pd.DataFrame:
+        '''Convert the Dataset back into a DataFrame in the same format as the DataFrame that was used
+        to intitialize it.''' 
+        df = pd.DataFrame(self.embeddings.cpu().numpy(), index=self.ids)
+        df = pd.concat([df, self.metadata], axis=1, ignore_index=False)
+        return df
+
+    def subset(self, start_idx:int=0, end_index:int=-1):
+        df = self.to_df().iloc[start_idx:end_index].copy()
+        return Dataset(df, n_features=self.n_features, half_precision=self.half_precision, n_classes=self.n_classes)
+
     # def sort(self, idxs):
     #     assert len(idxs) == self.__len__(), f'Dataset.sort: List of indices has length {len(idxs)}, which does not match the length of the dataset {self.__len__()}.'
     #     self.embeddings = self.embeddings[idxs]
