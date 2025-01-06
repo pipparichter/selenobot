@@ -19,6 +19,7 @@ import copy
 import io
 import pickle
 import joblib
+import datetime 
 from sklearn.preprocessing import StandardScaler
 from Bio.Seq import Seq 
 from Bio.SeqRecord import SeqRecord
@@ -267,9 +268,11 @@ class Classifier():
     def __init__(self, n_classes:int=2, model_type:str='nn', **kwargs):
         
         self.model = NN(output_dim=n_classes, **kwargs)
+        self.time_stamp = None 
         # self.model = HMM(n_classes=n_classes, **kwargs) if model_type == 'hmm' else NN(output_dim=n_classes, **kwargs)
 
     def fit(self, train_dataset, val_dataset, **kwargs):
+        self.time_stamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
         self.model.fit(train_dataset, val_dataset, **kwargs)
 
     def predict(self, dataset) -> pd.DataFrame:

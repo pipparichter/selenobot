@@ -7,6 +7,9 @@ import numpy as np
 class BLAST():
     # https://open.oregonstate.education/computationalbiology/chapter/command-line-blast/
     # NOTE: HSP stands for High Scoring Pair.
+    fields = ['qseqid', 'sseqid','pident', 'length', 'mismatch', 'gapopen', 'qstart', 'qend', 'sstart', 'send', 'evalue', 'bitscore'] # This is the default. 
+    fields += ['qcovs', 'qcovhsp', 'qlen', 'slen'] # Some extra stuff which is helpful. 
+    outfmt = '6 ' + ' '.join(fields)
     
     def __init__(self, cwd:str=os.getcwd()):
         self.cwd = cwd
@@ -30,9 +33,10 @@ class BLAST():
         return database_path
 
     def run(self, query_path:str, subject_path:str, overwrite:bool=False, verbose:bool=True, 
-            max_high_scoring_pairs:int=1, 
-            max_subject_sequences:int=1,
-            make_database:bool=True, 
+            max_high_scoring_pairs:int=None, 
+            max_subject_sequences:int=None,
+            make_database:bool=True,
+            max_e_value:float=1e-5,
             num_threads:int=4) -> str:
         '''Run the blastp program on the query and subject files.
         
@@ -47,13 +51,21 @@ class BLAST():
         output_path, _ = os.path.splitext(output_path)
         output_path = os.path.join(self.cwd, output_path + '.tsv') # Output should be a TSV file with the specified output format. 
 
-        cmd = f'blastp -query {query_path} -out {output_path} -outfmt {self.output_format}' 
+        cmd = f'blastp -query {query_path} -out {output_path}' 
         if make_database:
             database_path = self.make_database(subject_path, overwrite=overwrite)
             cmd += f' -db {database_path}'
         else:
             cmd = f' -subject {subject_path}'
-        cmd += f' -max_hsps {max_high_scoring_pairs} -max_target_seqs {max_subject_sequences} -num_threads {num_threads}' # Add a few more parameters. 
+        
+        if max_high_scoring_pairs is not None:
+            cmd += f' -max_hsps {max_high_scoring_pairs}'
+        if max_subject_sequences is not None:
+            cmd += f' -max_target_seqs {max_subject_sequences}'
+        if max_e_value is not None:
+            cmd += f' -evalue {max_e_value}'
+        cmd += f' -num_threads {num_threads}' # Add a few more parameters. 
+        cmd += f' -outfmt \'{BLAST.outfmt}\'' # Use a custom output format. 
 
         if verbose:
             print(cmd)

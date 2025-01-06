@@ -134,7 +134,9 @@ class BLASTFile(File):
     '''Manages the parsing of an BLAST output file in tabular output format 6. See the following link
     for more information on the format: https://www.metagenomics.wiki/tools/blast/blastn-output-format-6'''
 
-    fields = ['qseqid', 'sseqid', 'pident', 'length', 'mismatch', 'gapopen', 'qstart', 'qend', 'sstart', 'send', 'evalue', 'bitscore']
+    fields = ['qseqid', 'sseqid','pident', 'length', 'mismatch', 'gapopen', 'qstart', 'qend', 'sstart', 'send', 'evalue', 'bitscore'] # This is the default. 
+    fields += ['qcovs', 'qcovhsp', 'qlen', 'slen'] # Some extra stuff which is helpful. 
+    
     field_map = dict()
     field_map['qseqid'] = 'query_id' # Query or source (gene) sequence id
     field_map['sseqid'] = 'subject_id' # Subject or target (gene) sequence id
@@ -149,6 +151,11 @@ class BLASTFile(File):
     field_map['send'] = 'subject_alignment_end' # End of alignment in subject. 
     field_map['evalue'] = 'e_value' # E-value https://www.metagenomics.wiki/tools/blast/evalue
     field_map['bitscore'] = 'bit_score' # Bit-score https://www.metagenomics.wiki/tools/blast/evalue 
+    field_map['qlen'] = 'query_sequence_length' 
+    field_map['slen'] = 'subject_sequence_length' 
+    # https://www.biostars.org/p/121972/
+    field_map['qcovs'] = 'query_coverage_per_subject' 
+    field_map['qcovhsp'] = 'query_coverage_per_pair' 
 
     def __init__(self, path:str):
 
@@ -156,6 +163,16 @@ class BLASTFile(File):
         self.df = self.df.rename(columns=BLASTFile.field_map) # Rename the columns to more useful things. 
         self.df['id'] = self.df.query_id # Use the query ID as the main ID. 
         self.df = self.df.set_index('id')
+        
+        # Adjust the sequence identity to account for alignment length. 
+
+
+
+    # def drop_duplicates(self, keep_highest:str=''):
+    #     ''''''
+    #     fields = ['query_id', 'subject_id']
+    #     for query_id, query_df in self.df.groupby('query_id'):
+
 
     def to_df(self) -> pd.DataFrame:
         return self.df
