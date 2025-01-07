@@ -21,8 +21,8 @@ if __name__ == '__main__':
 
     model_name = f'ternary_model_{args.type}.pkl' if (args.n_classes == 3) else f'binary_model_{args.type}.pkl' 
     model_path = os.path.join(args.models_dir, model_name)
-
     model = Classifier.load(model_path)
+    print(f'Predicting using {model_name} trained on {model.time_stamp}.')
     
     dataset = Dataset.from_hdf(args.input_path, feature_type=args.type, n_classes=args.n_classes)
 

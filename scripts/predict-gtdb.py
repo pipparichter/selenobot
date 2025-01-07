@@ -11,13 +11,6 @@ import pandas as pd
 from selenobot.datasets import Dataset 
 from typing import List 
 
-# Define some important directories...
-ROOT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
-RESULTS_DIR = os.path.join(ROOT_DIR, 'results') # Get the path where results are stored.
-MODELS_DIR = os.path.join(ROOT_DIR, 'models')
-DATA_DIR = os.path.join(ROOT_DIR, 'data') # Get the path where results are stored. 
-SCRIPTS_DIR = os.path.join(ROOT_DIR, 'scripts') # Get the path where results are stored.
-
 EMBEDDINGS_DIR = '/central/groups/fischergroup/prichter/gtdb/embeddings'
 
 # Count queries are kind of slow, so just storing the table sizes as variables. 
@@ -35,46 +28,7 @@ ANNOTATIONS_KEGG_TABLE_SIZE = 98265928
 #       The selenocysteine-specific elongation factor, SelB, recognizes an in-frame stop codon followed by a selenocysteine insertion 
 #       sequence (SECIS).
 
-SELD_KO = 'K01008' 
-SELA_KO = 'K01042' 
-SELB_KO = 'K03833' 
 
-# sbatch --mem 100GB --time 100:00:00 --wrap "python predict-gtdb.py --results-dir /central/groups/fischergroup/prichter/selenobot/results/"
-def get_copy_numbers(output_path:str=None):
-    '''Take what is probably a faster approach to finding copy numbers, which is to grab every annotation which matches one of the 
-    selenoprotein genes, and then group the result by genome.'''
-    query = Query('annotations_kegg')
-    query.equal_to('ko', [SELA_KO, SELB_KO, SELD_KO])
-    results_dir, _ = os.path.split(output_path)
-
-    total = query.count() 
-    print(f'get_copy_numbers: {total} genes annotated as selA, selB, or selD.')
-
-    page_df = query.next()
-    selabd_annotations_df = []
-    pbar = tqdm(total=total, desc='get_copy_numbers: Retrieving selenoprotein gene copy numbers... (page 0)')
-    while page_df is not None:
-        selabd_annotations_df.append(page_df)
-        pbar.update(len(page_df))
-        pbar.set_description(f'get_copy_numbers: Retrieving selenoprotein gene copy numbers... (page {len(selabd_annotations_df)})')
-        page_df = query.next() 
-    selabd_annotations_df = pd.concat(selabd_annotations_df)
-    # Save the annotation results as an intermediate. 
-    selabd_annotations_df.set_index('id').to_csv(os.path.join(results_dir, 'gtdb_selabd_annotations.csv'))
-
-    copy_nums_df = []
-    for genome_id, genome_id_df in selabd_annotations_df.groupby('genome_id'):
-        row = dict()
-        row['seld_copy_num'] = np.sum(genome_id_df.ko == SELD_KO).item()
-        row['sela_copy_num'] = np.sum(genome_id_df.ko == SELA_KO).item()
-        row['selb_copy_num'] = np.sum(genome_id_df.ko == SELB_KO).item()
-        row['genome_id'] = genome_id
-        copy_nums_df.append(row)
-    copy_nums_df = pd.DataFrame(copy_nums_df)
-
-    copy_nums_df = pd.DataFrame(copy_nums_df).set_index('genome_id')
-    copy_nums_df.to_csv(os.path.join(RESULTS_DIR, 'gtdb_copy_nums.csv'))
-    print(f"get_copy_numbers: Copy number information written to {output_path}")
 
 
 def get_genome_data(genome_ids:List[str], batch_size=50, output_path:str=None):

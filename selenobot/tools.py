@@ -36,7 +36,7 @@ class BLAST():
             max_high_scoring_pairs:int=None, 
             max_subject_sequences:int=None,
             make_database:bool=True,
-            max_e_value:float=1e-5,
+            max_e_value:float=None,
             num_threads:int=4) -> str:
         '''Run the blastp program on the query and subject files.
         

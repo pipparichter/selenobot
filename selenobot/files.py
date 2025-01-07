@@ -136,7 +136,7 @@ class BLASTFile(File):
 
     fields = ['qseqid', 'sseqid','pident', 'length', 'mismatch', 'gapopen', 'qstart', 'qend', 'sstart', 'send', 'evalue', 'bitscore'] # This is the default. 
     fields += ['qcovs', 'qcovhsp', 'qlen', 'slen'] # Some extra stuff which is helpful. 
-    
+
     field_map = dict()
     field_map['qseqid'] = 'query_id' # Query or source (gene) sequence id
     field_map['sseqid'] = 'subject_id' # Subject or target (gene) sequence id
@@ -155,7 +155,21 @@ class BLASTFile(File):
     field_map['slen'] = 'subject_sequence_length' 
     # https://www.biostars.org/p/121972/
     field_map['qcovs'] = 'query_coverage_per_subject' 
-    field_map['qcovhsp'] = 'query_coverage_per_pair' 
+    field_map['qcovhsp'] = 'query_coverage_per_pair' # This seems to be a percentage, equal to alignment_length / query_sequence_length.
+
+    @staticmethod
+    def remove_swissprot_tag(id_:str):
+        '''I am not sure why the BLAST tool has started doing this, but it is appending a sp|{id_}| tag to some
+        of the subject sequences, which is not present in the original FASTA file.'''
+        match = re.match(r'sp\|([A-Za-z0-9]+)\|', id_)
+        return match.group(1) if (match is not None) else id_
+
+    @staticmethod
+    def adjust_sequence_identity(row):
+
+        adjusted_sequence_identity = (row.alignment_length - row.mismatch)
+        adjusted_sequence_identity = adjusted_sequence_identity / max(row.query_sequence_length, row.subject_sequence_length)
+        return adjusted_sequence_identity
 
     def __init__(self, path:str):
 
@@ -164,16 +178,29 @@ class BLASTFile(File):
         self.df['id'] = self.df.query_id # Use the query ID as the main ID. 
         self.df = self.df.set_index('id')
         
+        self.df['subject_id'] = self.df.subject_id.apply(lambda id_ : BLASTFile.remove_swissprot_tag(id_))
         # Adjust the sequence identity to account for alignment length. 
+        self.df['adjusted_sequence_identity'] = df.apply(BLASTFile.adjust_sequence_identity, axis=1)
 
+    # NOTE: There can be alignments for different portions of the query and target sequences, which this does not account for. 
+    # I am counting on the fact that this will not effect things much. 
 
+    def drop_duplicate_hsps(self, col:str='adjusted_sequence_identity', how:str='highest'):
+        '''A BLAST result can have multiple alignments for the same query-subject pair (each of these alignments is called
+        an HSP). If you specify that you only want one HSP per query-target pair, BLAST will just select the alignment with
+        the lowest E-value. However, I care more about sequence identity, so I am selecting best HSPs manually.'''
 
-    # def drop_duplicates(self, keep_highest:str=''):
-    #     ''''''
-    #     fields = ['query_id', 'subject_id']
-    #     for query_id, query_df in self.df.groupby('query_id'):
-
-
+        # There are two relevant parameters per HSP: sequence_identity and length (the length of the aligned region)
+        if how == 'lowest':
+            ascending = True 
+        elif how == 'highest':
+            ascending = False
+        else:
+            print('BLASTFile: Specified selection method must be one of \'highest\', \'lowest\'.')
+        
+        self.df = self.df.sort_values(col, ascending=ascending)
+        self.df.drop_duplicates(subset=['query_id', 'subject_id'], keep='first', inplace=True)
+   
     def to_df(self) -> pd.DataFrame:
         return self.df
 
