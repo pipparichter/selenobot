@@ -8,4 +8,3 @@ data.zip
 selenobot-local.cfg
 results/*
 **/tmp/
-**/out/*tsv
