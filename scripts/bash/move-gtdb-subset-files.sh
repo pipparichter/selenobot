@@ -1,174 +1,174 @@
-grep -l GCF_001457615.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_000009045.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_000195955.2 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_003697165.2 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_016464335.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_000012145.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_900637845.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_903645355.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_000307955.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_907164905.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_002813575.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_900142465.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_900129075.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_001655195.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_012521675.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_012728835.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_003574095.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_002761955.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016290995.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016214855.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_003148465.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_018820855.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_905215645.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_014803405.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_000014905.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_000183545.2 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_000429345.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_000213785.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_010894405.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_000875975.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_014360335.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_002410505.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_002069605.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_000021645.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_000516515.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_000165465.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_000020945.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016182605.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_001777915.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_003139695.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_008501735.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016214895.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_017999435.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_013177805.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_015493745.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_002842095.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_001797615.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016208975.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_000218625.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_002345205.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_003244105.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_012727955.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_001780165.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016938275.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_002923375.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_018658715.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_018814885.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016930695.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_002839855.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_018435605.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_002898015.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_002709695.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_003697105.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_002428325.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_011329495.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016934315.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_013151915.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_012517325.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_003327425.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_900142275.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_003057965.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_002729515.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_012517765.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_001547735.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_018669005.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_014728245.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_005223075.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_011388275.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_012270975.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_014728225.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_009778325.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_011048995.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_011047125.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_003598085.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_002714465.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_001730085.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_002410925.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_001443495.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_013151235.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_003152075.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_003574315.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_003697085.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_002787155.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_004376575.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_003554945.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_009840385.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_003242895.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_002869225.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_011330975.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_005239945.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_014931565.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_014728175.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016196885.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_003551625.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_017302875.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_001873295.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016930435.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016927185.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_002423385.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_903861835.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_002418985.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_011056185.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016934675.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016931415.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_012839755.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_015233135.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_018725175.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016219965.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_000177635.2 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_018812485.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCF_000284315.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_001304015.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_001784175.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_002070645.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_014360495.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_017405875.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_011620345.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_011337885.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_012729785.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_018812925.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_011389435.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_013151555.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_015231825.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_003553445.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_007132905.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_004195045.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016713535.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_002375935.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_017538635.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_000522425.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_011338205.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016186995.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_002069885.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_014859225.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_017997825.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_011388315.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016213885.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_002441095.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_002747975.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_002686955.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_002716355.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016180645.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_000989185.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016932385.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_002440765.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_017999075.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016209155.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_011364105.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016192455.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016932965.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016929465.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016202395.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_900321865.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_003695505.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016193065.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_001803565.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_011047235.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_003644825.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_003554345.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016926495.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_002478245.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016783345.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_016783505.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
-grep -l GCA_002686915.1 ./gtdb_genomes/* | while read file_name; do mv "$file_name" ./gtdb_subset_genomes/; done
+mv ./gtdb_genomes/RS_GCF_001457615.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_000009045.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_000195955.2_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_003697165.2_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_016464335.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_000012145.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_900637845.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_903645355.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_000307955.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_907164905.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_002813575.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_900142465.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_900129075.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_001655195.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_012521675.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_012728835.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_003574095.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_002761955.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016290995.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016214855.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_003148465.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_018820855.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_905215645.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_014803405.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_000014905.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_000183545.2_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_000429345.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_000213785.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_010894405.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_000875975.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_014360335.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_002410505.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_002069605.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_000021645.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_000516515.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_000165465.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_000020945.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016182605.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_001777915.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_003139695.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_008501735.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016214895.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_017999435.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_013177805.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_015493745.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_002842095.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_001797615.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016208975.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_000218625.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_002345205.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_003244105.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_012727955.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_001780165.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016938275.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_002923375.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_018658715.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_018814885.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016930695.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_002839855.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_018435605.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_002898015.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_002709695.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_003697105.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_002428325.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_011329495.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016934315.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_013151915.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_012517325.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_003327425.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_900142275.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_003057965.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_002729515.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_012517765.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_001547735.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_018669005.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_014728245.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_005223075.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_011388275.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_012270975.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_014728225.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_009778325.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_011048995.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_011047125.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_003598085.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_002714465.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_001730085.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_002410925.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_001443495.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_013151235.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_003152075.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_003574315.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_003697085.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_002787155.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_004376575.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_003554945.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_009840385.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_003242895.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_002869225.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_011330975.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_005239945.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_014931565.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_014728175.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016196885.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_003551625.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_017302875.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_001873295.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016930435.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016927185.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_002423385.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_903861835.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_002418985.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_011056185.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016934675.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016931415.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_012839755.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_015233135.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_018725175.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016219965.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_000177635.2_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_018812485.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/RS_GCF_000284315.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_001304015.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_001784175.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_002070645.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_014360495.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_017405875.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_011620345.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_011337885.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_012729785.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_018812925.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_011389435.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_013151555.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_015231825.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_003553445.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_007132905.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_004195045.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016713535.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_002375935.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_017538635.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_000522425.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_011338205.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016186995.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_002069885.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_014859225.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_017997825.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_011388315.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016213885.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_002441095.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_002747975.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_002686955.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_002716355.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016180645.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_000989185.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016932385.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_002440765.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_017999075.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016209155.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_011364105.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016192455.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016932965.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016929465.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016202395.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_900321865.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_003695505.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016193065.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_001803565.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_011047235.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_003644825.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_003554345.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016926495.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_002478245.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016783345.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_016783505.1_genomic.fna.gz -t ./gtdb_subset_genomes/
+mv ./gtdb_genomes/GB_GCA_002686915.1_genomic.fna.gz -t ./gtdb_subset_genomes/
