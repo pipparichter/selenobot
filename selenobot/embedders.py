@@ -192,7 +192,6 @@ def embed(df:pd.DataFrame, path:str=None, overwrite:bool=False, embedders:List=[
 
     store = pd.HDFStore(path, mode='a' if (not overwrite) else 'w') # Should confirm that the file already exists. 
     existing_keys = [key.replace('/', '') for key in store.keys()]
-    print(existing_keys)
     df = df.sort_index() # Sort the index of the DataFrame to ensure consistent ordering. 
     seq_is_nan = df.seq.isnull()
     print(f'embed: Removing {np.sum(seq_is_nan)} null entries from the sequence DataFrame. {len(df) - np.sum(seq_is_nan)} sequences remaining.', flush=True)
