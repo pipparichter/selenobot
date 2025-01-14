@@ -24,7 +24,7 @@ class EmbeddingsFile():
         for unique_id in self.unique_ids:
             key = self.unique_id_to_key_map[unique_id]
             emb = np.empty(file[key].shape, dtype=np.float32)
-            data[key].read_direct(emb) # read_direct avoids the copying step involved when accessing the dataset with slices. 
+            file[key].read_direct(emb) # read_direct avoids the copying step involved when accessing the dataset with slices. 
             embeddings.append(np.expand_dims(emb, axis=0)) # Expand dimensions so concatenation works correctly. 
         self.embeddings = np.concatenate(embeddings, axis=0)
 
