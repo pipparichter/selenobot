@@ -63,7 +63,7 @@ def load_embeddings(genome_id:str, prefix:str, proteins_dir:str=None, file_name_
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--genome-metadata-path', default='../data/gtdb_bacteria_metadata.csv')
+    parser.add_argument('--genome-metadata-path', default='../data/gtdb_bacteria_genome_metadata.csv')
     parser.add_argument('--embeddings-dir', default='/central/groups/fischergroup/goldford/gtdb/embedding/')
     parser.add_argument('--proteins-dir', default='/central/groups/fischergroup/prichter/selenobot/data/gtdb_proteins/')
     parser.add_argument('--proteins-file-name-format', default='{prefix}_{genome_id}_protein.faa')
