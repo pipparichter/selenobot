@@ -13,7 +13,6 @@ class BLAST():
     
     def __init__(self, cwd:str=os.getcwd()):
         self.cwd = cwd
-        self.output_format = '6'
 
     def make_database(self, path:str, overwrite:bool=False, verbose:bool=True):
         '''Make a database from the subject FASTA file to reduce the computational cost of searching.'''
@@ -56,7 +55,7 @@ class BLAST():
             database_path = self.make_database(subject_path, overwrite=overwrite)
             cmd += f' -db {database_path}'
         else:
-            cmd = f' -subject {subject_path}'
+            cmd += f' -subject {subject_path}'
         
         if max_high_scoring_pairs is not None:
             cmd += f' -max_hsps {max_high_scoring_pairs}'
