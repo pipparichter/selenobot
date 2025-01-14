@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np 
 import os 
 import re 
+import h5py
 from tqdm import tqdm
 import argparse
 
