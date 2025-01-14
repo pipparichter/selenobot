@@ -53,7 +53,7 @@ def load_proteins(genome_id:str, prefix:str, dir_:str=None, file_name_format:str
     return df
 
 
-def load_embeddings(genome_id:str, prefix:str, proteins_dir:str=None, file_name_format:str='{prefix}_{genome_id}_protein.faa') -> pd.DataFrame:
+def load_embeddings(genome_id:str, prefix:str, dir_:str=None, file_name_format:str='{prefix}_{genome_id}_protein.faa') -> pd.DataFrame:
 
     file_name = file_name_format.format(genome_id=genome_id, prefix=prefix)
     path = os.path.join(dir_, file_name)
