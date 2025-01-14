@@ -34,7 +34,7 @@ class EmbeddingsFile():
         return df
 
 
-def read_proteins_file(genome_id:str, prefix:str, dir_:str=None, file_name_format:str='{prefix}_{genome_id}_protein.faa') -> pd.DataFrame:
+def load_proteins(genome_id:str, prefix:str, dir_:str=None, file_name_format:str='{prefix}_{genome_id}_protein.faa') -> pd.DataFrame:
 
     file_name = file_name_format.format(genome_id=genome_id, prefix=prefix)
     path = os.path.join(dir_, file_name)
@@ -52,7 +52,7 @@ def read_proteins_file(genome_id:str, prefix:str, dir_:str=None, file_name_forma
     return df
 
 
-def read_embeddings_file(genome_id:str, prefix:str, proteins_dir:str=None, file_name_format:str='{prefix}_{genome_id}_protein.faa') -> pd.DataFrame:
+def load_embeddings(genome_id:str, prefix:str, proteins_dir:str=None, file_name_format:str='{prefix}_{genome_id}_protein.faa') -> pd.DataFrame:
 
     file_name = file_name_format.format(genome_id=genome_id, prefix=prefix)
     path = os.path.join(dir_, file_name)
@@ -78,8 +78,8 @@ if __name__ == '__main__':
     pbar = tqdm(total=len(genome_metadata_df), desc='Reading genome data...')
     for row in genome_metadata_df.itertuples():
         genome_id, prefix = row.Index, row.prefix
-        proteins_df = read_proteins_file(genome_id, prefix, dir_=args.proteins_dir, file_name_format=args.proteins_file_name_format)
-        proteins_df = read_proteins_file(genome_id, prefix, dir_=args.embeddings_dir, file_name_format=args.embeddings_file_name_format)
+        proteins_df = load_proteins(genome_id, prefix, dir_=args.proteins_dir, file_name_format=args.proteins_file_name_format)
+        embeddings_df = load_embeddings(genome_id, prefix, dir_=args.embeddings_dir, file_name_format=args.embeddings_file_name_format)
 
         # Remove sequences which exceed the maximum length specification. 
         length_filter = proteins_df.seq.apply(len) < 2000
