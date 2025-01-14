@@ -4,6 +4,9 @@ from selenobot.files import CDHITFile, FASTAFile, MMseqsFile
 import pandas as pd
 import numpy as np 
 
+
+
+# NOTE: Useful resource for submitting slurm jobs: https://docs.icer.msu.edu/BLAST_BLAST%2B_with_Multiple_Processors/
 class BLAST():
     # https://open.oregonstate.education/computationalbiology/chapter/command-line-blast/
     # NOTE: HSP stands for High Scoring Pair.
