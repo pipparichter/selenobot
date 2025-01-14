@@ -39,7 +39,7 @@ def read_proteins_file(genome_id:str, prefix:str, dir_:str=None, file_name_forma
     file_name = file_name_format.format(genome_id=genome_id, prefix=prefix)
     path = os.path.join(dir_, file_name)
 
-    def parse_description(header:str):
+    def parse_description(description:str):
         pattern = r'# ([\d]+) # ([\d]+) # ([-1]+) # ID=([^;]+);partial=([^;]+);start_type=([^;]+);rbs_motif=([^;]+);rbs_spacer=([^;]+);gc_cont=([\.\w]+)'
         columns = ['start', 'stop', 'strand', 'ID', 'partial', 'start_type', 'rbs_motif', 'rbs_spacer', 'gc_content']
         match = re.search(pattern, description)
@@ -72,7 +72,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    genome_metadata_df = pd.read_csv(args.genome_metadata_df, index_col=0)
+    genome_metadata_df = pd.read_csv(args.genome_metadata_path, index_col=0)
     genome_metadata_columns = genome_metadata_df.columns
 
     pbar = tqdm(total=len(genome_metadata_df), desc='Reading genome data...')
