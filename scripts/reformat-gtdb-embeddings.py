@@ -1,13 +1,13 @@
 
 
-from selenobot.files import FASTAFile, File
+from selenobot.files import FASTAFile
 import pandas as pd
 import numpy as np 
 import os 
 import re 
+import argparse
 
-
-class EmbeddingsFile(File):
+class EmbeddingsFile():
     '''Handles reading files containing Prot-T5 embeddings, which are stored on HPC as HDF files'''
 
     def __init__(self, path:str):
