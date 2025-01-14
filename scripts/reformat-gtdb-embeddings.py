@@ -16,7 +16,7 @@ class EmbeddingsFile():
         
         file = h5py.File(path, 'r') # For whatever reason, using pandas HDFStore doesn't work. 
         self.unique_id_to_key_map = {re.search('ID=([^;]+)', key).group(1):key for key in file.keys()} # Map the unique IDs to the HDF file key. 
-        self.unique_ids = sorted(list(unique_id_to_key_map.keys())) # Order the IDs so I can easily match them with metadata later. 
+        self.unique_ids = sorted(list(self.unique_id_to_key_map.keys())) # Order the IDs so I can easily match them with metadata later. 
         # Josh modified the gene IDs in a way which makes them annoying to match with the gene metadata I have. It is easier to extract the
         # Prodigal-assigned unique identifiers (ID={unique_id}), which are of the form {ith_contig}_{nth_gene_on_contig}. 
         
