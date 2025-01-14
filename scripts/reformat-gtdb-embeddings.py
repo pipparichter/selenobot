@@ -1,6 +1,6 @@
 
 
-from selenobot.files import FASTAFile
+from selenobot.files import FASTAFile, File
 import pandas as pd
 import numpy as np 
 import os 
@@ -99,6 +99,8 @@ if __name__ == '__main__':
         store.put('metadata', metadata_df)
         store.put('plm', embeddings_df)
         store.close()
+
+        pbar.update(1)
     
 
 
