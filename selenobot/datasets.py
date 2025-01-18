@@ -17,7 +17,7 @@ from torch.utils.data import DataLoader
 class Dataset(torch.utils.data.Dataset):
     '''A map-style dataset which  Dataset objects which provide extra functionality for producing sequence embeddings
     and accessing information about selenoprotein content.'''
-    categories = {0:'full_length', 1:'truncated_selenoprotein', 2:'truncated_non_selenoprotein'}
+    categories = {0:'label_0', 1:'label_1', 2:'label_2'}
 
     def __init__(self, df:pd.DataFrame, n_features:int=1024, half_precision:bool=False, n_classes:int=2):
         '''Initializes a Dataset from a pandas DataFrame containing embeddings and labels.

@@ -3,7 +3,7 @@ import re
 from tqdm import tqdm 
 from fabapi import * 
 from selenobot.files import EmbeddingsFile
-# from selenobot.utils import MODELS_DIR
+
 from selenobot.classifiers import Classifier
 import argparse
 import numpy as np 

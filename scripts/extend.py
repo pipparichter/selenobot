@@ -3,6 +3,7 @@ import argparse
 import pandas as pd
 import os
 from tqdm import tqdm
+from selenobot.utils import default_output_path
 
 
 # The information I need to extend the sequence is... 
@@ -13,7 +14,7 @@ from tqdm import tqdm
 # NOTE: Do the start and stop positions refer to the contig, or entire genome? 
 # NOTE: Does the "partial" flag always mean the gene runs off the boundary? Or can there be other reasons?
 
-required_cols = ['start', 'stop', 'genome_id', 'strand', 'id', 'partial', 'translation_table']
+required_cols = ['start', 'stop', 'genome_id', 'strand', 'id', 'partial', 'ncbi_translation_table']
 
 if __name__ == '__main__':
 
@@ -25,12 +26,8 @@ if __name__ == '__main__':
     parser.add_argument('--genome-file-name-format', default='{genome_id}_genomic.fna')
     args = parser.parse_args()
 
-    if args.output_path is None:
-        input_file_name = os.path.basename(args.input_path)
-        input_file_name, _ = os.path.splitext(input_file_name)
-        input_dir = os.path.dirname(args.input_path)
-        output_file_name = input_file_name + f'.{args.output_format}'
-        output_path = os.path.join(input_dir, 'extend_' + output_file_name)
+    if output_path is None:
+        output_path = default_output_path(input_path, operation='extend', extension=args.output_formmat)
     else:
         output_path = args.output_path
     
@@ -57,15 +54,15 @@ if __name__ == '__main__':
             gene.check() # Make sure the gene has valid start and stop codons. 
 
             extended_gene = gene.extend(error='ignore')
-            extended_row = extended_gene.info(translation_table=row.translation_table)
+            extended_row = extended_gene.info(translation_table=row.ncbi_translation_table)
             extended_row['genome_id'] = genome_id # Add the genome ID to the information in the new DataFrame. 
             extended_df.append(extended_row)
 
             if extended_gene.extension_size == 0:
                 n_failures += 1
-            success_rate = 100 * (n_failures / len(extended_df))
+            failure_rate = 100 * (n_failures / len(extended_df))
             pbar.update(1)
-            pbar.set_description(f'Extending sequences in {args.input_path}. Success rate {success_rate:.2f}%')
+            pbar.set_description(f'Extending sequences in {args.input_path}. Failure rate {failure_rate:.2f}%')
 
     
     extended_df = pd.DataFrame(extended_df).set_index('gene_id')

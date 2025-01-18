@@ -10,7 +10,7 @@ class Genome():
 
     def __init__(self, path:str):
 
-        fasta_df = FASTAFile(path).to_df(parse_description=False)
+        fasta_df = FASTAFile(path).to_df()
         self.n_contigs = len(fasta_df)
         self.contigs = {id_:contig for id_, contig in zip(fasta_df.index, fasta_df.seq)}
         self.contig_ids = fasta_df.index.values
@@ -29,6 +29,8 @@ class Gene():
         return str(Seq(seq).reverse_complement())
 
     def __init__(self, gene_id:str, genome:Genome, stop:int=None, start:int=None, strand:int=None):
+
+        assert (stop - start) % 3 == 0, f'Gene.__init__: The input sequence {gene_id} is not divisible by three.' 
         
         self.gene_id = gene_id 
         self.genome = genome

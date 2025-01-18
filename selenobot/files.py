@@ -10,6 +10,16 @@ from tqdm import tqdm
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
+import subprocess
+
+
+def count_lines(path:str) -> int:
+    cmd = f'cat {path} | wc -l'
+    result = subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
+    try:
+        return int(result.stdout)
+    except TypeError:
+        raise TypeError(f'count_lines: The function did not return an integer. Returned {result.stdout}')
 
 
 def get_converter(dtype):
@@ -31,6 +41,23 @@ def get_converter(dtype):
                 return float(val)
     return converter
 
+
+def fasta_file_parser_gtdb(description:str):
+    pattern = r'# ([\d]+) # ([\d]+) # ([-1]+) # ID=([^;]+);partial=([^;]+);start_type=([^;]+);rbs_motif=([^;]+);rbs_spacer=([^;]+);gc_cont=([\.\w]+)'
+    columns = ['start', 'stop', 'strand', 'ID', 'partial', 'start_type', 'rbs_motif', 'rbs_spacer', 'gc_content']
+    match = re.search(pattern, description)
+    return {col:match.group(i + 1) for i, col in enumerate(columns)}
+
+
+def fasta_file_parser_none(description:str):
+    return {'description':description}
+
+
+def fasta_file_parser(description:str) -> dict:
+    '''Descriptions should be of the form >col=val;col=val. '''
+    # Headers are of the form >col=value;...;col=value
+    return dict([entry.split('=') for entry in description.split(';')])
+        
 
 class File():
 
@@ -85,18 +112,13 @@ class FASTAFile(File):
 
         return cls(ids=ids, seqs=seqs, descriptions=descriptions)
             
-    def to_df(self, parse_description:bool=True) -> pd.DataFrame:
+    def to_df(self, parser=fasta_file_parser_none) -> pd.DataFrame:
         '''Load a FASTA file in as a pandas DataFrame. If the FASTA file is for a particular genome, then 
         add the genome ID as an additional column.'''
 
-        def parse(description:str) -> dict:
-            '''Descriptions should be of the form >col=val;col=val. '''
-            # Headers are of the form >col=value;...;col=value
-            return dict([entry.split('=') for entry in description.split(';')])
-        
         df = []
         for id_, seq, description in zip(self.ids, self.seqs, self.descriptions):
-            row = {'description':description} if (not parse_description) else parse(description)
+            row = parser(description)
             row['id'] = id_
             row['seq'] = seq 
             df.append(row)
@@ -165,22 +187,56 @@ class BLASTFile(File):
         return match.group(1) if (match is not None) else id_
 
     @staticmethod
-    def adjust_sequence_identity(row):
+    def adjust_sequence_identity(row) -> float:
 
         adjusted_sequence_identity = (row.alignment_length - row.mismatch)
         adjusted_sequence_identity = adjusted_sequence_identity / max(row.query_sequence_length, row.subject_sequence_length)
         return adjusted_sequence_identity
 
-    def __init__(self, path:str):
+    @staticmethod
+    def load(path:str, max_e_value:float=None, n_lines:int=None) -> pd.DataFrame:
+        df = pd.read_csv(path, delimiter='\t', names=BLASTFile.fields, header=None)
+        df = df[df.evalue <= max_e_value] 
+        print(f'BLASTFile.load: Loaded {len(df)} out of {n_lines} entries which met the E-value threshold <= {max_e_value:.3f}.')
+        return df
 
-        self.df = pd.read_csv(path, delimiter='\t', names=BLASTFile.fields)
+
+    @staticmethod
+    def load_chunks(path:str, chunk_size:int=500, max_e_value:float=None, n_lines:int=None) -> pd.DataFrame:
+        
+        chunk_dfs = pd.read_csv(path, delimiter='\t', names=BLASTFile.fields, header=None, chunksize=chunk_size)
+        n_chunks = int(np.ceil(n_lines / chunk_size))
+        
+        df = []
+        pbar = tqdm(total=n_chunks, desc='BLASTFile.load_chunks: Loading BLAST output in batches...')
+        for chunk_df in chunk_dfs:
+            chunk_df = chunk_df[chunk_df.evalue <= max_e_value]
+            df.append(chunk_df)
+            pbar.update(1)
+        df = pd.concat(df)
+        print(f'BLASTFile.load_chunks: Loaded {len(df)} out of {n_lines} entries which met the E-value threshold <= {max_e_value:.3e}.')
+        pbar.close()
+        return df 
+
+    def __init__(self, path:str, max_e_value:float=1e-5):
+        '''Initialize a BLASTFile object.
+
+        :param path: The path to the BLAST output file, which is in TSV format. 
+        :param max_e_value. For more notes on E-values, see https://resources.qiagenbioinformatics.com/manuals/clcgenomicsworkbench/650/_E_value.html.
+        '''
+
+        n_lines = count_lines(path)
+        if n_lines > 10000:
+            self.df = BLASTFile.load_chunks(path, max_e_value=max_e_value, n_lines=n_lines)
+        else:
+            self.df = BLASTFile.load(path, max_e_value=max_e_value, n_lines=n_lines)
+
         self.df = self.df.rename(columns=BLASTFile.field_map) # Rename the columns to more useful things. 
         self.df['id'] = self.df.query_id # Use the query ID as the main ID. 
         self.df = self.df.set_index('id')
-        
         self.df['subject_id'] = self.df.subject_id.apply(lambda id_ : BLASTFile.remove_swissprot_tag(id_))
         # Adjust the sequence identity to account for alignment length. 
-        self.df['adjusted_sequence_identity'] = df.apply(BLASTFile.adjust_sequence_identity, axis=1)
+        self.df['adjusted_sequence_identity'] = self.df.apply(BLASTFile.adjust_sequence_identity, axis=1)
 
     # NOTE: There can be alignments for different portions of the query and target sequences, which this does not account for. 
     # I am counting on the fact that this will not effect things much. 
@@ -368,6 +424,103 @@ class XMLFile(File):
 
     def fasta(self, path:str) -> NoReturn:
         pass
+
+
+class GBFFFile(File):
+    '''Class for parsing GenBank flat files, obtained from NCBI.'''
+
+    field_pattern = re.compile(r'/([a-zA-Z_]+)="([^"]+)"')
+    coordinate_pattern = re.compile(r'complement\([\<\d]+\.\.[\>\d]+\)|[\<\d]+\.\.[\>\d]+')
+
+    @staticmethod
+    def parse_coordinate(coordinate:str):
+        '''Parse a string indicating gene boundaries. These strings contain information about the start codon location, 
+        stop codon location, and strand.'''
+        parsed_coordinate = dict()
+        parsed_coordinate['strand'] = -1 if ('complement' in coordinate) else 1
+        # NOTE: Details about coordinate format: https://www.ncbi.nlm.nih.gov/genbank/samplerecord/
+        start, stop = re.findall(r'[\>\<0-9]+', coordinate)
+        partial = ('1' if ('<' in start) else '0') + ('1' if ('>' in stop) else '0')
+        start = int(start.replace('<', ''))
+        stop = int(stop.replace('>', ''))
+
+        parsed_coordinate['start'] = start
+        parsed_coordinate['stop'] = stop
+        parsed_coordinate['partial'] = partial
+
+        return parsed_coordinate
+
+
+    @staticmethod
+    def parse_entry(entry:str) -> dict:
+
+        # Extract the gene coordinates, which do not follow the typical field pattern. 
+        coordinate = re.search(GBFFFile.coordinate_pattern, entry).group(0)
+        pseudo = ('/pseudo' in entry)
+        entry = re.sub(GBFFFile.coordinate_pattern, '', entry)
+
+        entry = re.sub(r'[\s]{2,}|\n', '', entry) # Remove all newlines or any more than one consecutive whitespace character.
+
+        entry = re.findall(GBFFFile.field_pattern, entry) # Returns a list of matches. 
+        parsed_entry = dict()
+        # Need to account for the fact that a single entry can have multiple GO functions, processes, components, etc.
+        for field, value in entry:
+            if (field not in parsed_entry):
+                parsed_entry[field] = value
+            else:
+                parsed_entry[field] += ', ' + value
+        parsed_entry['coordinate'] = coordinate
+        parsed_entry['pseudo'] = pseudo
+        parsed_entry.update(GBFFFile.parse_coordinate(coordinate))
+       
+        return parsed_entry 
+
+    @staticmethod
+    def remove_duplicates(df):
+        '''Some proteins have duplicate entries due to the presence of multiple isoforms, see https://www.biostars.org/p/410326/. 
+        One way to handle this is to keep the longest isoform.'''
+        df['length'] = df.stop - df.start 
+        df = df.sort_values(by='length', ascending=False) # Sort so that the longest isoforms are first. 
+        print(f'GBFFFile.remove_duplicates: Removing {df.duplicated(subset='protein_id').sum()} duplicate entries from the GBFF file.')
+        df = df.drop_duplicates(subset='protein_id', keep='first') # Keep the longest isoform. 
+        return df.drop(columns=['length']) # Don't need this column anymore. 
+
+
+    def __init__(self, path:str):
+        
+        with open(path, 'r') as f:
+            content = f.read()
+        # Because I use parentheses around (gene|CDS), this is a "capturing group", and the label is contained in the output. 
+        content = re.split(r'[\s]{2,}(gene|CDS)[\s]{2,}', content, flags=re.MULTILINE)
+        content = content[1:] # The first entry in the content is genome metadata. 
+        assert len(content) % 2 == 0, 'GBFFFile.__init__: The number of entries in the split content list should be even.'
+        
+        entries = [(content[i], content[i + 1]) for i in range(0, len(content), 2)]
+        assert np.all(np.isin([entry[0] for entry in entries], ['gene', 'CDS'])), 'GBFFFile.__init__: Something went wrong while parsing the file.'
+        
+        entries = [entry[-1] for entry in entries if entry[0] == 'CDS'] # Remove the non-CDS entries.
+        print(f'GBFFFile.__init__: Found {len(entries)} coding sequences in the GBFF file.')
+
+        df = []
+        for entry in tqdm(entries, desc=f'GBFFFile.__init__: Parsing GBFF file entries.'):
+            df.append(GBFFFile.parse_entry(entry))
+        df = pd.DataFrame(df)
+        df = df.rename(columns={col:col.lower() for col in df.columns}) # Make sure all column names are lower-case.
+        df = df.rename(columns={'translation':'seq'}) 
+
+        no_protein_id = df.protein_id.isnull() # These entries also do not have sequences. 
+        print(f'GBFFFile.__init__: Removing {no_protein_id.sum()} entries with no protein ID.')
+        df = df[~no_protein_id].sort_values(by='protein_id')
+        df.index = df.protein_id
+        df.index.name = 'id'
+
+        self.df = df
+
+    def to_df(self, remove_duplicates:bool=True):
+        if remove_duplicates:
+            return GBFFFile.remove_duplicates(self.df)
+        else:
+            return self.df
 
 
 

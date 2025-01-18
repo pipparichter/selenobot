@@ -2,8 +2,34 @@ import os
 import subprocess
 from selenobot.files import CDHITFile, FASTAFile, MMseqsFile
 import pandas as pd
-import numpy as np 
+import numpy as np
+from selenobot.utils import default_output_path
 
+class Kofamscan():
+
+    def __init__(self, cmd_dir:str='/home/prichter/kofamscan/', tmp_dir:str='../data/tmp'):
+        ''' 
+        :param cmd_dir 
+        :param tmp_dir: The temporary directory where hmmsearch results are. 
+        '''
+        self.cmd_dir = cmd_dir 
+        # Need a directory to store temporary files. If one does not already exist, create it in the working directory.
+        self.tmp_dir = tmp_dir 
+        if not os.path.exists(self.tmp_dir):
+            os.mkdir(self.tmp_dir)
+
+    def run(self, input_path:str, output_path:str, prokaryote_only:bool=True, max_e_value:float=None) -> str:
+
+        cmd = os.path.join(self.cmd_dir, 'bin', 'exec_annotation')
+        cmd += f' {input_path} -o {output_path} --tmp-dir {self.tmp_dir}'
+
+        if max_e_value is not None:
+            cmd += f' --e-value {max_e_value}'
+
+        if prokaryote_only:
+            prokaryote_profiles_path = os.path.join(self.cmd_dir, 'db', 'profiles', 'prokaryote.hal')
+            cmd += f' --profile {prokaryote_profiles_path}'
+        subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
 
 
 # NOTE: Useful resource for submitting slurm jobs: https://docs.icer.msu.edu/BLAST_BLAST%2B_with_Multiple_Processors/
@@ -13,7 +39,7 @@ class BLAST():
     fields = ['qseqid', 'sseqid','pident', 'length', 'mismatch', 'gapopen', 'qstart', 'qend', 'sstart', 'send', 'evalue', 'bitscore'] # This is the default. 
     fields += ['qcovs', 'qcovhsp', 'qlen', 'slen'] # Some extra stuff which is helpful. 
     outfmt = '6 ' + ' '.join(fields)
-    
+
     def __init__(self, cwd:str=os.getcwd()):
         self.cwd = cwd
 
@@ -34,7 +60,7 @@ class BLAST():
             print(f'BLAST.make_database: Using existing database at {database_path}.')
         return database_path
 
-    def run(self, query_path:str, subject_path:str, overwrite:bool=False, verbose:bool=True, 
+    def run(self, query_path:str, subject_path:str, output_path:str, overwrite:bool=False, 
             max_high_scoring_pairs:int=None, 
             max_subject_sequences:int=None,
             make_database:bool=True,
@@ -45,18 +71,15 @@ class BLAST():
         :param query_path
         :param subject_path
         :param overwrite 
-        :param verbose
         :param max_subject_sequences: For each query sequence, only report HSPs for the first specified different subject sequences.
-        :param max_high_scoring_pairs: For each query/target pair, only report the best n HSPs.
+        :param max_high_scoring_pairs: For each query-subject pair, only report the best n HSPs. In other words, this is the number of alignments for each 
+            "hit", i.e. query-subject pair. 
         '''
-        output_path = os.path.basename(query_path)
-        output_path, _ = os.path.splitext(output_path)
-        output_path = os.path.join(self.cwd, output_path + '.tsv') # Output should be a TSV file with the specified output format. 
-
         cmd = f'blastp -query {query_path} -out {output_path}' 
         if make_database:
             database_path = self.make_database(subject_path, overwrite=overwrite)
             cmd += f' -db {database_path}'
+            cmd += f' -num_threads {num_threads}' # This is only relevant when searching against a database.  
         else:
             cmd += f' -subject {subject_path}'
         
@@ -66,58 +89,40 @@ class BLAST():
             cmd += f' -max_target_seqs {max_subject_sequences}'
         if max_e_value is not None:
             cmd += f' -evalue {max_e_value}'
-        cmd += f' -num_threads {num_threads}' # Add a few more parameters. 
         cmd += f' -outfmt \'{BLAST.outfmt}\'' # Use a custom output format. 
-
-        if verbose:
-            print(cmd)
 
         subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
 
         return output_path
 
 
-# class MUSCLE():
-
-#     def __init__(self, df:pd.DataFrame, name:str='untitled', cwd:str=os.getcwd()):
-        
-#         self.cwd = cwd
-#         self.df = df 
-
-#         self.input_path = os.path.join(self.cwd, f'{name}.fa')
-#         self.output_path = os.path.join(self.cwd, f'{name}.afa') # This is a FASTA file format. 
-
-#     def run(self):
-
-#         # Write the DataFrame to a FASTA file so it can be used with MUSCLE. 
-#         FASTAFile.from_df(self.df, add_description=False).write(self.input_path)
-
-#         subprocess.run(f'muscle -in {self.input_path} -out {self.output_path}') 
-#         return self.output_path
-
-#     def cleanup(self):
-#         os.remove(self.input_path)
-
 
 class MMseqs():
-    def __init__(self, cwd:str=None):
+
+    cleanup_paths = list()
+    cleanup_paths += ['{base_path}_rep_seq.fasta']
+    cleanup_paths += ['{base_path}_all_seqs.fasta']
+
+
+    def __init__(self, tmp_dir:str='../data/tmp'):
 
         # Need a directory to store temporary files. If one does not already exist, create it in the working directory.
-        self.tmp_dir = os.path.join(cwd, 'tmp')
+        self.tmp_dir = tmp_dir 
         if not os.path.exists(self.tmp_dir):
             os.mkdir(self.tmp_dir)
 
-    def run(self, input_path:str, output_path:str, sequence_identity:float=0.2, overwrite:bool=False, verbose:bool=True) -> str:
+    def run(self, input_path:str, output_path:str, sequence_identity:float=0.2, overwrite:bool=False) -> str:
 
-        if (not os.path.exists(output_path + '_cluster.tsv')) or overwrite:
+        cluster_path = output_path + '.tsv'
+
+        if (not os.path.exists(cluster_path)) or overwrite:
             cmd = f'mmseqs easy-cluster {input_path} {output_path} {self.tmp_dir} --min-seq-id {sequence_identity}'
-            if verbose:
-                print(cmd)
             subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
+            subprocess.run(f'mv {output_path}_cluster.tsv {cluster_path}', shell=True, check=True)
         else:
-            print(f'MMseqs.run: Using pre-saved clustering results at {output_path}')
+            print(f'MMseqs.run: Using pre-saved clustering results at {cluster_path}')
 
-        return output_path + '_cluster.tsv'
+        return cluster_path
             
 
 
@@ -126,6 +131,8 @@ class CDHIT():
     the clustering and depreplication of a single FASTA file.
     
     CD-HIT user guide can be found here: http://www.bioinformatics.org/cd-hit/cd-hit-user-guide.pdf'''
+
+    cleanup_files = list() # TODO
 
     @staticmethod
     def get_word_length(c:float):
@@ -144,7 +151,7 @@ class CDHIT():
     def __init__(self, cwd:str=None):
         pass
 
-    def run(self, input_path:str, output_path:str, sequence_identity:float=0.8, overwrite:bool=False, verbose:bool=True) -> str:
+    def run(self, input_path:str, output_path:str, sequence_identity:float=0.8, overwrite:bool=False) -> str:
         '''Run the CD-HIT clustering tool on the data stored in the path attribute. CD-HIT prints out two files: output and output.clstr. 
         output contains the final clustered non-redundant sequences in FASTA format, while output.clstr has an information about the clusters 
         with its associated sequences.'''
@@ -153,17 +160,17 @@ class CDHIT():
         c = sequence_identity 
         n = CDHIT.get_word_length(c)
 
-        if (not os.path.exists(output_path)) or overwrite:
+        cluster_path = output_path + '.clstr'
+
+        if (not os.path.exists(cluster_path)) or overwrite:
             # Run the CD-HIT command with the specified cluster parameters. 
             # CD-HIT can be installed using conda. conda install bioconda::cd-hit
             cmd = f'cd-hit -i {input_path} -o {output_path} -n {n} -c {c} -l {l}'
-            if verbose:
-                print(cmd)
             subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
         else:
             print(f'CDHIT.run: Using pre-saved clustering results at {output_path}')
         
-        return output_path + '.clstr'
+        return cluster_path
 
 
 class Clusterer():
@@ -173,9 +180,19 @@ class Clusterer():
         self.cwd = cwd
         self.name = name
         self.tool_name = tool
-        self.tool = MMseqs(cwd=cwd) if (tool == 'mmseqs') else CDHIT()
+        self.tool = MMseqs() if (tool == 'mmseqs') else CDHIT()
         self.file_type = MMseqsFile if (tool == 'mmseqs') else CDHITFile
         self.input_path = os.path.join(self.cwd, self.name + '.fa')   
+        self.base_path = os.path.join(self.cwd, self.name)   
+
+    def cleanup(self):
+        cleanup_paths = [path.format(base_path=self.base_path + f'.cluster') for path in self.tool.cleanup_paths]
+        cleanup_paths += [path.format(base_path=self.base_path + f'.derep') for path in self.tool.cleanup_paths]
+        cleanup_paths += [self.input_path]
+        for path in cleanup_paths:
+            if os.path.exists(path):
+                print(f'Clusterer.cleanup: Removing output file at {path}')
+                os.remove(path)
 
 
     def dereplicate(self, df:pd.DataFrame, overwrite:bool=False, sequence_identity:float=0.95) -> pd.DataFrame:
@@ -189,16 +206,16 @@ class Clusterer():
         # Don't include the descriptions with the FASTA file, because CD-HIT output files remove them anyway. 
         FASTAFile.from_df(df, add_description=False).write(self.input_path)
 
-        output_path = os.path.join(self.cwd, f'dereplicate_{self.name}')
-        cluster_file_path = self.tool.run(self.input_path, output_path, sequence_identity=sequence_identity, overwrite=overwrite)
-        cluster_df = self.file_type(cluster_file_path).to_df(reps_only=True) # Load in the cluster file and convert to a DataFrame.
+        output_path = default_output_path(self.base_path, op='derep')
+        cluster_path = self.tool.run(self.input_path, output_path, sequence_identity=sequence_identity, overwrite=overwrite)
+        cluster_df = self.file_type(cluster_path).to_df(reps_only=True) # Load in the cluster file and convert to a DataFrame.
 
         # Because CD-HIT filters out short sequences, the clstr_df might be smaller than the fasta_df. 
         df = cluster_df.merge(df, left_index=True, right_index=True, how='inner')
         print(f'Clusterer.dereplicate: Dereplication of clusters with {sequence_identity} similarity eliminated {n - len(df)} sequences from {self.name}. {len(df)} sequences remaining.')
 
         df = df.drop(columns=[f'{self.tool_name}_cluster', f'{self.tool_name}_representative']) # Don't need the cluster column after dereplication. 
-        # os.remove(self.input_path) # Remove the temporary FASTA file. 
+        self.cleanup()
         return df 
 
 
@@ -211,16 +228,15 @@ class Clusterer():
 
         FASTAFile.from_df(df, add_description=False).write(self.input_path)
  
-        output_path = os.path.join(self.cwd, f'cluster_{self.name}')
-        cluster_file_path = self.tool.run(self.input_path, output_path, sequence_identity=sequence_identity, overwrite=overwrite)
-        cluster_df = self.file_type(cluster_file_path).to_df(reps_only=False) # Load in the cluster file and convert to a DataFrame. Don't load only the representatives. 
+        output_path = default_output_path(self.base_path, op='cluster') 
+        cluster_path = self.tool.run(self.input_path, output_path, sequence_identity=sequence_identity, overwrite=overwrite)
+        cluster_df = self.file_type(cluster_path).to_df(reps_only=False) # Load in the cluster file and convert to a DataFrame. Don't load only the representatives. 
 
         assert len(cluster_df) == len(df), f'Clusterer.cluster: There should be a cluster assigned to each sequence. len(clustr_df) = {len(cluster_df)} and len(df) = {len(df)}'
 
         # The DataFrame should now contain the clustering information. 
         df = cluster_df.merge(df, left_index=True, right_index=True, how='inner')
-
-        # os.remove(self.input_path) # Remove the temporary FASTA file. 
+        self.cleanup()
         return df 
 
 
