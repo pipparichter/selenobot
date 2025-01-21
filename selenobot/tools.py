@@ -18,13 +18,15 @@ class Kofamscan():
         if not os.path.exists(self.tmp_dir):
             os.mkdir(self.tmp_dir)
 
-    def run(self, input_path:str, output_path:str, prokaryote_only:bool=True, max_e_value:float=None) -> str:
+    def run(self, input_path:str, output_path:str, prokaryote_only:bool=True, max_e_value:float=None, n_cpus:int=None) -> str:
 
         cmd = os.path.join(self.cmd_dir, 'bin', 'exec_annotation')
         cmd += f' {input_path} -o {output_path} --tmp-dir {self.tmp_dir}'
 
         if max_e_value is not None:
             cmd += f' --e-value {max_e_value}'
+        if n_cpus is not None:
+            cmd += f' --cpu {cpu_count}'
 
         if prokaryote_only:
             prokaryote_profiles_path = os.path.join(self.cmd_dir, 'db', 'profiles', 'prokaryote.hal')

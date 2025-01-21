@@ -83,7 +83,9 @@ class KmerEmbedder():
 
         return embs.values, embs.index.values
 
+# Using the logits instead of the CLS token. 
 
+# NOTE: How does the tokenizer behave on terminal '*' characters? Josh did not remove them from the GTDB sequences when embedding.
 class PLMEmbedder():
     '''Adapted from Josh's code, which he adapted from https://github.com/agemagician/ProtTrans/blob/master/Embedding/prott5_embedder.py'''
     name = 'plm'
@@ -115,7 +117,7 @@ class PLMEmbedder():
         :param max_seq_length: The maximum length of a single sequence, past which we switch to single-sequence processing
         :return: A Tensor object containing all of the embedding data. 
         '''
-        seqs = [s.replace('U', 'X').replace('Z', 'X').replace('O', 'X') for s in seqs] # Replace non-standard amino acids with X token.
+        seqs = [s.replace('U', 'X').replace('Z', 'X').replace('O', 'X').replace('*', '') for s in seqs] # Replace non-standard amino acids with X token.
         seqs = list(zip(ids, seqs)) # Store the IDs with the sequences as tuples in a list. 
         # Order the sequences in ascending order according to sequence length to avoid unnecessary padding. 
         seqs = sorted(seqs, key=lambda t : len(t[1]))

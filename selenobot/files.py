@@ -187,22 +187,12 @@ class BLASTFile(File):
         return match.group(1) if (match is not None) else id_
 
     @staticmethod
-    def adjust_sequence_identity(row) -> float:
-
-        adjusted_sequence_identity = (row.alignment_length - row.mismatch)
-        adjusted_sequence_identity = adjusted_sequence_identity / max(row.query_sequence_length, row.subject_sequence_length)
-        return adjusted_sequence_identity
-
-    @staticmethod
-    def load(path:str, max_e_value:float=None, n_lines:int=None) -> pd.DataFrame:
+    def load(path:str, n_lines:int=None) -> pd.DataFrame:
         df = pd.read_csv(path, delimiter='\t', names=BLASTFile.fields, header=None)
-        df = df[df.evalue <= max_e_value] 
-        print(f'BLASTFile.load: Loaded {len(df)} out of {n_lines} entries which met the E-value threshold <= {max_e_value:.3f}.')
         return df
 
-
     @staticmethod
-    def load_chunks(path:str, chunk_size:int=500, max_e_value:float=None, n_lines:int=None) -> pd.DataFrame:
+    def load_chunks(path:str, chunk_size:int=500, n_lines:int=None) -> pd.DataFrame:
         
         chunk_dfs = pd.read_csv(path, delimiter='\t', names=BLASTFile.fields, header=None, chunksize=chunk_size)
         n_chunks = int(np.ceil(n_lines / chunk_size))
@@ -210,15 +200,13 @@ class BLASTFile(File):
         df = []
         pbar = tqdm(total=n_chunks, desc='BLASTFile.load_chunks: Loading BLAST output in batches...')
         for chunk_df in chunk_dfs:
-            chunk_df = chunk_df[chunk_df.evalue <= max_e_value]
             df.append(chunk_df)
             pbar.update(1)
         df = pd.concat(df)
-        print(f'BLASTFile.load_chunks: Loaded {len(df)} out of {n_lines} entries which met the E-value threshold <= {max_e_value:.3e}.')
         pbar.close()
         return df 
 
-    def __init__(self, path:str, max_e_value:float=1e-5):
+    def __init__(self, path:str):
         '''Initialize a BLASTFile object.
 
         :param path: The path to the BLAST output file, which is in TSV format. 
@@ -227,34 +215,24 @@ class BLASTFile(File):
 
         n_lines = count_lines(path)
         if n_lines > 10000:
-            self.df = BLASTFile.load_chunks(path, max_e_value=max_e_value, n_lines=n_lines)
+            self.df = BLASTFile.load_chunks(path, n_lines=n_lines)
         else:
-            self.df = BLASTFile.load(path, max_e_value=max_e_value, n_lines=n_lines)
+            self.df = BLASTFile.load(path, n_lines=n_lines)
 
         self.df = self.df.rename(columns=BLASTFile.field_map) # Rename the columns to more useful things. 
         self.df['id'] = self.df.query_id # Use the query ID as the main ID. 
         self.df = self.df.set_index('id')
         self.df['subject_id'] = self.df.subject_id.apply(lambda id_ : BLASTFile.remove_swissprot_tag(id_))
-        # Adjust the sequence identity to account for alignment length. 
-        self.df['adjusted_sequence_identity'] = self.df.apply(BLASTFile.adjust_sequence_identity, axis=1)
 
     # NOTE: There can be alignments for different portions of the query and target sequences, which this does not account for. 
     # I am counting on the fact that this will not effect things much. 
 
-    def drop_duplicate_hsps(self, col:str='adjusted_sequence_identity', how:str='highest'):
+    def drop_duplicate_hsps(self, col:str='alignment_length', how:str='highest'):
         '''A BLAST result can have multiple alignments for the same query-subject pair (each of these alignments is called
         an HSP). If you specify that you only want one HSP per query-target pair, BLAST will just select the alignment with
         the lowest E-value. However, I care more about sequence identity, so I am selecting best HSPs manually.'''
-
         # There are two relevant parameters per HSP: sequence_identity and length (the length of the aligned region)
-        if how == 'lowest':
-            ascending = True 
-        elif how == 'highest':
-            ascending = False
-        else:
-            print('BLASTFile: Specified selection method must be one of \'highest\', \'lowest\'.')
-        
-        self.df = self.df.sort_values(col, ascending=ascending)
+        self.df = self.df.sort_values(col, ascending=True if (how == 'lowest') else False)
         self.df.drop_duplicates(subset=['query_id', 'subject_id'], keep='first', inplace=True)
    
     def to_df(self) -> pd.DataFrame:
@@ -429,6 +407,8 @@ class XMLFile(File):
 class GBFFFile(File):
     '''Class for parsing GenBank flat files, obtained from NCBI.'''
 
+    fields = ['strand', 'start', 'stop', 'partial', 'product', 'frameshifted', 'incomplete', 'internal_stop', 'protein_id', 'seq', 'pseudo']
+
     field_pattern = re.compile(r'/([a-zA-Z_]+)="([^"]+)"')
     coordinate_pattern = re.compile(r'complement\([\<\d]+\.\.[\>\d]+\)|[\<\d]+\.\.[\>\d]+')
 
@@ -450,7 +430,16 @@ class GBFFFile(File):
 
         return parsed_coordinate
 
+    @staticmethod
+    def parse_note(note:str):
+        parsed_note = dict()
+        parsed_note['frameshifted'] = 'frameshifted' in note
+        parsed_note['internal_stop'] = 'internal stop' in note
+        parsed_note['incomplete'] = 'incomplete' in note
+        return parsed_note 
 
+
+    # NOTE: PGAP annotations can include pogrammed frameshift sequences (is this where the duplicates come in?)
     @staticmethod
     def parse_entry(entry:str) -> dict:
 
@@ -472,18 +461,28 @@ class GBFFFile(File):
         parsed_entry['coordinate'] = coordinate
         parsed_entry['pseudo'] = pseudo
         parsed_entry.update(GBFFFile.parse_coordinate(coordinate))
+        parsed_entry.update(GBFFFile.parse_note(parsed_entry['note']))
        
         return parsed_entry 
 
     @staticmethod
-    def remove_duplicates(df):
-        '''Some proteins have duplicate entries due to the presence of multiple isoforms, see https://www.biostars.org/p/410326/. 
-        One way to handle this is to keep the longest isoform.'''
-        df['length'] = df.stop - df.start 
-        df = df.sort_values(by='length', ascending=False) # Sort so that the longest isoforms are first. 
-        print(f'GBFFFile.remove_duplicates: Removing {df.duplicated(subset='protein_id').sum()} duplicate entries from the GBFF file.')
-        df = df.drop_duplicates(subset='protein_id', keep='first') # Keep the longest isoform. 
-        return df.drop(columns=['length']) # Don't need this column anymore. 
+    def drop_duplicates(df:pd.DataFrame):
+        '''Some proteins have duplicate entries, I think because multiple copies of proteins are present in some genomes. This 
+        function removes the duplicates, and flags them as having multiple copies.'''
+        pseudo_df = df.copy()[df.pseudo] # Keep the pseudogenes to add back in later. 
+        df = df.copy()[~df.pseudo] # Remove the pseudogenes, which don't have protein IDs. 
+
+        copy_numbers = df.protein_id.value_counts().rename('copy_number')
+        duplicate_protein_ids = df.protein_id[df.protein_id.duplicated()]
+        # Double check to make sure all sequences are equal before removing. 
+        for protein_id, protein_df in df[df.protein_id.isin(duplicate_protein_ids)].groupby('protein_id'): 
+            assert (protein_df.seq.nunique() == 1), f'GBFFFile.remove_duplicates: Not all sequences with protein ID {protein_id} are equal.'
+        
+        print(f'GBFFFile.remove_duplicates: Removing duplicate entries for {len(duplicate_protein_ids)} sequences from the GBFF file.')
+        df = df.drop_duplicates(subset='protein_id')
+        df = df.merge(copy_numbers, left_on='protein_id', right_index=True)
+        df = pd.concat([df, pseudo_df]) # Add the pseudogenes back in. 
+        return df
 
 
     def __init__(self, path:str):
@@ -508,19 +507,23 @@ class GBFFFile(File):
         df = df.rename(columns={col:col.lower() for col in df.columns}) # Make sure all column names are lower-case.
         df = df.rename(columns={'translation':'seq'}) 
 
-        no_protein_id = df.protein_id.isnull() # These entries also do not have sequences. 
-        print(f'GBFFFile.__init__: Removing {no_protein_id.sum()} entries with no protein ID.')
-        df = df[~no_protein_id].sort_values(by='protein_id')
-        df.index = df.protein_id
-        df.index.name = 'id'
+        df.index = df.locus_tag
+        df.index.name = 'locus_tag' # Need to use the locus tag as the index, as not everything has a protein ID. 
 
         self.df = df
 
-    def to_df(self, remove_duplicates:bool=True):
-        if remove_duplicates:
-            return GBFFFile.remove_duplicates(self.df)
-        else:
-            return self.df
+    def to_df(self, drop_pseudogenes:bool=False, drop_duplicates:bool=False):
+        df = self.df[GBFFFile.fields]
+
+        if drop_pseudogenes:
+            print(f'GBFFFile.to_df: Removing {df.pseudo.sum()} pseudogenes from the GBFF file.')
+            df = df[~df.pseudo]
+            df = df.drop(columns=['pseudo'])
+        
+        if drop_duplicates:
+            df = GBFFFile.drop_duplicates(df)
+
+        return df
 
 
 
