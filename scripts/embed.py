@@ -19,8 +19,8 @@ if __name__ == '__main__':
         if re.match('aa_([0-9]+)mer', feature_type) is not None:
             k = int(re.match('aa_([0-9]+)mer', feature_type).group(1))
             embedders.append(KmerEmbedder(k=k))
-        if re.match('plm_([a-z]+)', feature_type) is not None:
-            model_name = re.match('plm_([a-z]+)', feature_type).group(1) 
+        if re.match('plm_([a-z0-9]+)', feature_type) is not None:
+            model_name = re.match('plm_([a-z0-9]+)', feature_type).group(1) 
             embedders.append(PLMEmbedder(model_name=model_name))
         if feature_type == 'len':
             embedders.append(LengthEmbedder())
