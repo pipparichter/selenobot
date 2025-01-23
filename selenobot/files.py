@@ -120,7 +120,7 @@ class FASTAFile(File):
         for id_, seq, description in zip(self.ids, self.seqs, self.descriptions):
             row = parser(description)
             row['id'] = id_
-            row['seq'] = seq 
+            row['seq'] = seq.replace('*', '')
             df.append(row)
 
         return pd.DataFrame(df).set_index('id')
@@ -461,7 +461,8 @@ class GBFFFile(File):
         parsed_entry['coordinate'] = coordinate
         parsed_entry['pseudo'] = pseudo
         parsed_entry.update(GBFFFile.parse_coordinate(coordinate))
-        parsed_entry.update(GBFFFile.parse_note(parsed_entry['note']))
+        if 'note' in parsed_entry:
+            parsed_entry.update(GBFFFile.parse_note(parsed_entry['note']))
        
         return parsed_entry 
 
@@ -478,7 +479,7 @@ class GBFFFile(File):
         for protein_id, protein_df in df[df.protein_id.isin(duplicate_protein_ids)].groupby('protein_id'): 
             assert (protein_df.seq.nunique() == 1), f'GBFFFile.remove_duplicates: Not all sequences with protein ID {protein_id} are equal.'
         
-        print(f'GBFFFile.remove_duplicates: Removing duplicate entries for {len(duplicate_protein_ids)} sequences from the GBFF file.')
+        # print(f'GBFFFile.remove_duplicates: Removing duplicate entries for {len(duplicate_protein_ids)} sequences from the GBFF file.')
         df = df.drop_duplicates(subset='protein_id')
         df = df.merge(copy_numbers, left_on='protein_id', right_index=True)
         df = pd.concat([df, pseudo_df]) # Add the pseudogenes back in. 
@@ -512,16 +513,19 @@ class GBFFFile(File):
 
         self.df = df
 
-    def to_df(self, drop_pseudogenes:bool=False, drop_duplicates:bool=False):
+    def to_df(self, pseudo:bool=None, drop_duplicates:bool=False):
         df = self.df[GBFFFile.fields]
 
-        if drop_pseudogenes:
-            print(f'GBFFFile.to_df: Removing {df.pseudo.sum()} pseudogenes from the GBFF file.')
-            df = df[~df.pseudo]
-            df = df.drop(columns=['pseudo'])
-        
         if drop_duplicates:
             df = GBFFFile.drop_duplicates(df)
+        if pseudo is False:
+            # print(f'GBFFFile.to_df: Removing {df.pseudo.sum()} pseudogenes from the GBFF file.')
+            df = df[~df.pseudo]
+            df = df.drop(columns=['pseudo', 'frameshifted', 'internal_stop', 'incomplete'])
+        if pseudo is True:
+            # print(f'GBFFFile.to_df: Removing {(~df.pseudo).sum()} non-pseudogenes from the GBFF file.')
+            df = df[df.pseudo]
+            df = df.drop(columns=['protein_id', 'seq'])  
 
         return df
 

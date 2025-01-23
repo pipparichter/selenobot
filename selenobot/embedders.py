@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import sys
 from transformers import T5Tokenizer, T5EncoderModel
+from transformers import EsmTokenizer, EsmModel, AutoTokenizer
 import itertools
 import re   
 from typing import List, Tuple
@@ -88,23 +89,47 @@ class KmerEmbedder():
 # NOTE: How does the tokenizer behave on terminal '*' characters? Josh did not remove them from the GTDB sequences when embedding.
 class PLMEmbedder():
     '''Adapted from Josh's code, which he adapted from https://github.com/agemagician/ProtTrans/blob/master/Embedding/prott5_embedder.py'''
-    name = 'plm'
 
-    def __init__(self, model_name:str='Rostlab/prot_t5_xl_half_uniref50-enc', mean_pool:bool=True, half_precision:bool=True):
+    checkpoints = {'esm':'facebook/esm2_t36_3B_UR50D', 'pt5':'Rostlab/prot_t5_xl_half_uniref50-enc'}
+    tokenizers = {'esm':AutoTokenizer, 'pt5':T5Tokenizer}
+    models = {'esm':EsmModel, 'pt5':T5EncoderModel}
+    # esm2_t36_3B_UR50D https://huggingface.co/facebook/esm1b_t33_650M_UR50S 
+    # Rostlab/prot_t5_xl_half_uniref50-enc
+    def __init__(self, model_name:str='esm', mean_pool:bool=True):
         '''Initializes a PLM embedder object.'''
-        self.type = 'plm'
-        self.dtype = torch.float16 if half_precision else torch.float32
+        self.model_name = model_name
+        self.type = 'plm_' + model_name
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.mean_pool = mean_pool
-        print(f'PLMEmbedder.__init__: Loading pre-trained model {model_name}.', flush=True)
-        self.model = T5EncoderModel.from_pretrained(model_name, torch_dtype=self.dtype)
-        # print(f'PLMEmbedder.__init__: Model loaded successfully.', flush=True)
+        self.checkpoint = PLMEmbedder.checkpoints[model_name]
+        
+        self.model = PLMEmbedder.models[model_name].from_pretrained(self.checkpoint)
         self.model.to(self.device) # Move model to GPU.
         self.model.eval() # Set model to evaluation model.
-        # Should be a T5Tokenizer object. 
-        self.tokenizer = T5Tokenizer.from_pretrained(model_name, do_lower_case=False, legacy=True, clean_up_tokenization_spaces=True) 
+        
+        self.tokenizer = PLMEmbedder.tokenizers[model_name].from_pretrained(self.checkpoint, do_lower_case=False, legacy=True, clean_up_tokenization_spaces=True) 
+
+    def preprocess(self, seqs:List[str]):
+        seqs = [s.replace('U', 'X').replace('Z', 'X').replace('O', 'X').replace('*', '') for s in seqs] # Replace non-standard amino acids with X token.
+        if self.model_name == 'pt5':
+            # Characters in the sequence need to be space-separated, apparently. 
+            seqs = [' '.join(list(seq)) for seq in seqs]
+        return seqs
+
+    def postprocess(self, outputs:torch.FloatTensor, batch:List[Tuple[str, str]]=None):
+
+        outputs = outputs.last_hidden_state if (self.model_name == 'pt5') else outputs.pooler_output
+        embs = list()
+        for (i, s), e in zip(batch, outputs): # Should iterate over each batch output, or the first dimension. 
+            if self.model_name == 'pt5':
+                e = e[:len(s)] # Remove the padding. 
+                e = e.mean(dim=0) # If mean pooling is specified, average over sequence length. 
+            embs.append((i, e)) # Append the ID and embedding to the list. 
+        print(e.shape)
+        return embs
 
 
+        
     def __call__(self, seqs:List[str], ids:List[str], max_aa_per_batch:int=10000, max_seq_per_batch:int=100, max_seq_length:int=1000):
         '''
         Embeds the input data using the PLM stored in the model attribute. Note that this embedding
@@ -117,7 +142,7 @@ class PLMEmbedder():
         :param max_seq_length: The maximum length of a single sequence, past which we switch to single-sequence processing
         :return: A Tensor object containing all of the embedding data. 
         '''
-        seqs = [s.replace('U', 'X').replace('Z', 'X').replace('O', 'X').replace('*', '') for s in seqs] # Replace non-standard amino acids with X token.
+        seqs = self.preprocess(seqs)
         seqs = list(zip(ids, seqs)) # Store the IDs with the sequences as tuples in a list. 
         # Order the sequences in ascending order according to sequence length to avoid unnecessary padding. 
         seqs = sorted(seqs, key=lambda t : len(t[1]))
@@ -126,21 +151,11 @@ class PLMEmbedder():
         curr_aa_count = 0
         curr_batch = []
 
-        def add(outputs, batch:List[Tuple[int, str]]=None):
-            '''Extract the embeddings from model output and mean-pool across the length
-            of the sequence. Add the embeddings to the embeddings list.'''
-            if outputs is not None:
-                for (i, s), e in zip(batch, outputs.last_hidden_state): # Should iterate over each batch output, or the first dimension. 
-                    e = e[:len(s)] # Remove the padding. 
-                    if self.mean_pool:
-                        e = e.mean(dim=0) # If mean pooling is specified, average over sequence length. 
-                    embs.append((i, e)) # Append the ID and embedding to the list. 
-
         for i, s in tqdm(seqs, desc='PLMEmbedder.__call__', file=sys.stdout):
             # Switch to single-sequence processing if length limit is exceeded.
             if len(s) > max_seq_length:
                 outputs = self.embed_batch([s])
-                add(outputs, batch=[(i, s)])
+                embs += self.postprocess(outputs, batch=[(i, s)])
                 continue
 
             # Add the sequence to the batch, and keep track of total amino acids in the batch. 
@@ -151,21 +166,23 @@ class PLMEmbedder():
                 # If any of the presepecified limits are exceeded, go ahead and embed the batch. 
                 # Make sure to only pass in the sequence. 
                 outputs = self.embed_batch([s for _, s in curr_batch])
-                add(outputs, batch=curr_batch)
-
+                embs += self.postprocess(outputs, batch=curr_batch)
                 # Reset the current batch and amino acid count. 
                 curr_batch = []
                 curr_aa_count = 0
 
         # Handles the case in which the minimum batch size is not reached.
         if len(curr_batch) > 0:
+            print('here')
             outputs = self.embed_batch([s for _, s in curr_batch])
-            add(outputs, batch=curr_batch)
+            embs += self.postprocess(outputs, batch=curr_batch)
 
         # Separate the IDs and embeddings in the list of tuples. 
         ids = [i for i, _ in embs]
+        print('here')
         embs = [torch.unsqueeze(e, 0) for _, e in embs]
         embs = torch.cat(embs).float()
+        print(embs.shape)
         return embs.cpu().numpy(), np.array(ids)
 
     def embed_batch(self, batch:List[str]) -> torch.FloatTensor:
@@ -174,8 +191,6 @@ class PLMEmbedder():
         :param batch: A list of strings, each string being a tokenized sequence. 
         :return: A PyTorch tensor containing PLM embeddings for the batch. 
         '''
-        # Characters in the sequence need to be space-separated, apparently. 
-        batch = [' '.join(list(s)) for s in batch]
         # Should contain input_ids and attention_mask. Make sure everything's on the GPU. 
         # The tokenizer defaults mean that add_special_tokens=True and padding=True is equivalent to padding='longest'
         inputs = {k:torch.tensor(v).to(self.device) for k, v in self.tokenizer(batch, padding=True).items()} 
