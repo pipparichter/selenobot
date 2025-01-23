@@ -125,7 +125,6 @@ class PLMEmbedder():
                 e = e[:len(s)] # Remove the padding. 
                 e = e.mean(dim=0) # If mean pooling is specified, average over sequence length. 
             embs.append((i, e)) # Append the ID and embedding to the list. 
-        print(e.shape)
         return embs
 
 
@@ -173,7 +172,6 @@ class PLMEmbedder():
 
         # Handles the case in which the minimum batch size is not reached.
         if len(curr_batch) > 0:
-            print('here')
             outputs = self.embed_batch([s for _, s in curr_batch])
             embs += self.postprocess(outputs, batch=curr_batch)
 
@@ -182,7 +180,6 @@ class PLMEmbedder():
         print('here')
         embs = [torch.unsqueeze(e, 0) for _, e in embs]
         embs = torch.cat(embs).float()
-        print(embs.shape)
         return embs.cpu().numpy(), np.array(ids)
 
     def embed_batch(self, batch:List[str]) -> torch.FloatTensor:
