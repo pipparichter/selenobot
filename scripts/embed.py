@@ -11,7 +11,7 @@ if __name__ == '__main__':
     parser.add_argument('--output-path', type=str, default=None)
     parser.add_argument('--input-path', type=str, default=None)
     parser.add_argument('--overwrite', action='store_true')
-    parser.add_argument('--feature-types', nargs='+', default=['plm_esm', 'plm_pt5','len', 'aa_1mer', 'aa_2mer', 'aa_3mer'])
+    parser.add_argument('--feature-types', nargs='+', default=['plm_esm', 'plm_pt5','len', 'aa_1mer'])
     args = parser.parse_args()
 
     embedders = []
