@@ -126,9 +126,9 @@ class PLMEmbedder():
         for (i, s), e in zip(batch, outputs): # Should iterate over each batch output, or the first dimension. 
             if self.model_name == 'pt5':
                 e = e[:len(s)] # Remove the padding. 
-                e = e.mean(dim=0) # If mean pooling is specified, average over sequence length. 
+                e = e.mean(dim=0) # Average over sequence length. 
             else:
-                e = e[:, 0, :]
+                e = e[0]
             embs.append((i, e)) # Append the ID and embedding to the list. 
         return embs
 
