@@ -9,7 +9,7 @@ TIME=10:00:00
 
 # directory="../data/model_organisms/"
 directory="../data/"
-feature_types="plm_pt5 plm_esm aa_1mer len"
+feature_types="plm_esm plm_pt5 aa_1mer len"
 # file_names=("gtdb_ecol_metadata.csv" "gtdb_bsub_metadata.csv" "gtdb_mtub_metadata.csv")
 file_names=("test_metadata.csv")
 
