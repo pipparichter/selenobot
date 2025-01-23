@@ -16,6 +16,7 @@ output_dim=2
 # It means "expand all elements of the array" when used in a loop. It iterates over each element in the array
 
 for feature_type in "${feature_types[@]}"; do
+    echo "$feature_type"
     job_name="train_${feature_type}_${output_dim}"
     cmd="python train.py --feature-type \"$feature_type\" --epochs $epochs --output-dim $output_dim"
     sbatch --mem="$MEM" --time="$TIME" --partition="$PARTITION" --job-name "$job_name" --gres="$GRES" --mail-user="$MAILUSER" --mail-type="$MAILTYPE" --wrap "$cmd"
