@@ -24,6 +24,10 @@ from sklearn.preprocessing import StandardScaler
 from Bio.Seq import Seq 
 from Bio.SeqRecord import SeqRecord
 
+# NOTE: I wonder if the issue with the ESM classifier is due to differences in how things are normalized.
+# It seems as though the error is due to the model predicting everything to be full-length. 
+# As the model keeps training, this effect becomes more extreme, and because it exists at epoch 0, I 
+# think it is a problem with how the embeddings are being generated.
 
 # warnings.simplefilter('ignore')
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -121,13 +125,14 @@ class NN(torch.nn.Module):
             # Apply sigmoid activation, which is usually applied as a part of the loss function. 
             outputs = torch.nn.functional.softmax(outputs, 1)
             outputs = outputs.cpu().numpy()
+            print(outputs)
 
             # Organize the predictions into a DataFrame.
             predictions = pd.DataFrame(index=dataset.ids)
             for i in range(outputs.shape[-1]):
                 predictions[f'probability_{i}'] = outputs[:, i].ravel()
             predictions['prediction'] = np.argmax(outputs, axis=1).ravel() # Convert out of one-hot encodings.
-
+            print(predictions)
             return predictions
 
 

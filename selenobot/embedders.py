@@ -16,7 +16,8 @@ from typing import List, Tuple
 
 # NOTE: tqdm progress bars print to standard error for reasons which are not relevant to me... 
 # https://stackoverflow.com/questions/75580592/why-is-tqdm-output-directed-to-sys-stderr-and-not-to-sys-stdout 
-# I think I want to print to stdout. 
+# I think I want to print to stdout. Instead of using the pooler_ouput layer, I could try manually extracting
+# the CLS token from the last hidden state. 
 
 # NOTE: The model I am using is apparently usable on 8GB of RAM, so I am not sure why it is failing. 
 
@@ -118,12 +119,16 @@ class PLMEmbedder():
 
     def postprocess(self, outputs:torch.FloatTensor, batch:List[Tuple[str, str]]=None):
 
-        outputs = outputs.last_hidden_state if (self.model_name == 'pt5') else outputs.pooler_output
+        # NOTE: It is unclear to me if I should be using the pooler output, or the encoder state. 
+        # Nevermind, ESM-2 is encoder-only, so not a problem!
+        outputs = outputs.last_hidden_state # if (self.model_name == 'pt5') else outputs.pooler_output
         embs = list()
         for (i, s), e in zip(batch, outputs): # Should iterate over each batch output, or the first dimension. 
             if self.model_name == 'pt5':
                 e = e[:len(s)] # Remove the padding. 
                 e = e.mean(dim=0) # If mean pooling is specified, average over sequence length. 
+            else:
+                e = e[:, 0, :]
             embs.append((i, e)) # Append the ID and embedding to the list. 
         return embs
 
@@ -177,7 +182,6 @@ class PLMEmbedder():
 
         # Separate the IDs and embeddings in the list of tuples. 
         ids = [i for i, _ in embs]
-        print('here')
         embs = [torch.unsqueeze(e, 0) for _, e in embs]
         embs = torch.cat(embs).float()
         return embs.cpu().numpy(), np.array(ids)

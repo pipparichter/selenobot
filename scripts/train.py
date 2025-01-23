@@ -21,9 +21,7 @@ if __name__ == '__main__':
     parser.add_argument('--models-dir', default='../models', type=str)
     args = parser.parse_args()
 
-    # input_dims = {'plm':1024, 'aac':21, 'len':1} # Dimension of the input embeddings for each feature type. 
     model_name = f'ternary_model_{args.feature_type}.pkl' if (args.output_dim == 3) else f'binary_model_{args.feature_type}.pkl' 
-
 
     train_dataset = Dataset.from_hdf(os.path.join(args.data_dir, 'train.h5'), feature_type=args.feature_type, n_classes=args.output_dim)
     val_dataset = Dataset.from_hdf(os.path.join(args.data_dir, 'val.h5'), feature_type=args.feature_type, n_classes=args.output_dim)
@@ -33,8 +31,8 @@ if __name__ == '__main__':
     kwargs = dict()
     kwargs['balance_batches'] = False if args.weighted_loss else True
     kwargs['weighted_loss'] = args.weighted_loss 
-    kwargs['lr'] = 1e-8 
-    # kwargs['lr'] = 1e-6 
+    # kwargs['lr'] = 1e-8 
+    kwargs['lr'] = 1e-4
     kwargs['batch_size'] = 16
     kwargs['epochs'] = args.epochs
 
