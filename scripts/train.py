@@ -13,7 +13,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--epochs', default=1000, type=int)
-    parser.add_argument('--type', default='plm', type=str)
+    parser.add_argument('--feature-type', default='plm_pt5', type=str)
     parser.add_argument('--hidden-dim', default=512, type=int)
     parser.add_argument('--output-dim', default=2, type=int, choices=[2, 3])
     parser.add_argument('--weighted-loss', action='store_true')
