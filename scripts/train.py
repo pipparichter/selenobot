@@ -22,11 +22,11 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # input_dims = {'plm':1024, 'aac':21, 'len':1} # Dimension of the input embeddings for each feature type. 
-    model_name = f'ternary_model_{args.type}.pkl' if (args.output_dim == 3) else f'binary_model_{args.type}.pkl' 
+    model_name = f'ternary_model_{args.feature_type}.pkl' if (args.output_dim == 3) else f'binary_model_{args.feature_type}.pkl' 
 
 
-    train_dataset = Dataset.from_hdf(os.path.join(args.data_dir, 'train.h5'), feature_type=args.type, n_classes=args.output_dim)
-    val_dataset = Dataset.from_hdf(os.path.join(args.data_dir, 'val.h5'), feature_type=args.type, n_classes=args.output_dim)
+    train_dataset = Dataset.from_hdf(os.path.join(args.data_dir, 'train.h5'), feature_type=args.feature_type, n_classes=args.output_dim)
+    val_dataset = Dataset.from_hdf(os.path.join(args.data_dir, 'val.h5'), feature_type=args.feature_type, n_classes=args.output_dim)
     model = Classifier(n_classes=args.output_dim, input_dim=train_dataset.shape()[-1])
     print('Loaded training and validation datasets.')
 
