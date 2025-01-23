@@ -8,7 +8,7 @@ MEM=300GB
 TIME=100:00:00
 
 directory="../data/model_organisms/"
-feature_types=("plm_pt5 plm_esm")
+feature_types=("plm_pt5" "plm_esm")
 epochs=200
 output_dim=2
 
