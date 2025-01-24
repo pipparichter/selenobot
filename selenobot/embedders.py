@@ -18,6 +18,10 @@ from typing import List, Tuple
 # https://stackoverflow.com/questions/75580592/why-is-tqdm-output-directed-to-sys-stderr-and-not-to-sys-stdout 
 # I think I want to print to stdout. Instead of using the pooler_ouput layer, I could try manually extracting
 # the CLS token from the last hidden state. 
+# Maybe it is also related to this error? 
+    # Some weights of EsmModel were not initialized from the model checkpoint at facebook/esm2_t36_3B_UR50D and are newly initialized: 
+    # ['esm.pooler.dense.bias', 'esm.pooler.dense.weight']
+    # You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
 
 # NOTE: The model I am using is apparently usable on 8GB of RAM, so I am not sure why it is failing. 
 
@@ -118,6 +122,9 @@ class PLMEmbedder():
         return seqs
 
     def postprocess(self, outputs:torch.FloatTensor, batch:List[Tuple[str, str]]=None):
+        
+        if outputs is None:
+            return list() 
 
         # NOTE: It is unclear to me if I should be using the pooler output, or the encoder state. 
         # Nevermind, ESM-2 is encoder-only, so not a problem!
@@ -130,6 +137,7 @@ class PLMEmbedder():
             else:
                 e = e[0]
             embs.append((i, e)) # Append the ID and embedding to the list. 
+
         return embs
 
 
