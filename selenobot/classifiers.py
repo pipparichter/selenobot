@@ -125,14 +125,12 @@ class NN(torch.nn.Module):
             # Apply sigmoid activation, which is usually applied as a part of the loss function. 
             outputs = torch.nn.functional.softmax(outputs, 1)
             outputs = outputs.cpu().numpy()
-            print(outputs)
 
             # Organize the predictions into a DataFrame.
             predictions = pd.DataFrame(index=dataset.ids)
             for i in range(outputs.shape[-1]):
                 predictions[f'probability_{i}'] = outputs[:, i].ravel()
             predictions['prediction'] = np.argmax(outputs, axis=1).ravel() # Convert out of one-hot encodings.
-            print(predictions)
             return predictions
 
 
