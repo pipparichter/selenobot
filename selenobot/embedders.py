@@ -122,7 +122,7 @@ class PLMEmbedder():
         '''Log the error sequences to a file.'''
         seqs = [s for _, s in self.errors]
         ids = [i for i, _ in self.errors]
-        errors_df = pd.DataFrame({'seqs':seqs, 'id':ids}).set_index('id')
+        errors_df = pd.DataFrame({'seq':seqs, 'id':ids}).set_index('id')
         errors_df['length'] = errors_df.seq.apply(len)
         errors_df = errors_df[['length', 'seq']] # Reorder the columns so the length is easier to see. 
         errors_df.to_csv(self.error_file_path)
@@ -179,6 +179,7 @@ class PLMEmbedder():
 
         pbar = tqdm(seqs, desc='PLMEmbedder.__call__', file=sys.stdout)
         for i, s in pbar:
+            self.log_errors()
             pbar.set_description(f'PLMEmbedder.__call__: {len(self.errors)} sequences skipped.')
 
             # Switch to single-sequence processing if length limit is exceeded.
@@ -209,7 +210,7 @@ class PLMEmbedder():
         ids = [i for i, _ in embs]
         embs = [torch.unsqueeze(e, 0) for _, e in embs]
         embs = torch.cat(embs).float()
-        
+
         self.log_errors()
         return embs.cpu().numpy(), np.array(ids)
 
