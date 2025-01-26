@@ -114,6 +114,20 @@ class PLMEmbedder():
         
         self.tokenizer = PLMEmbedder.tokenizers[model_name].from_pretrained(self.checkpoint, do_lower_case=False, legacy=True, clean_up_tokenization_spaces=True) 
 
+        # Keep track of the failures. 
+        self.errors = []
+        self.error_file_path = f'{self.type}_errors.csv'
+
+    def log_errors(self):
+        '''Log the error sequences to a file.'''
+        seqs = [s for _, s in self.errors]
+        ids = [i for i, _ in self.errors]
+        errors_df = pd.DataFrame({'seqs':seqs, 'id':ids}).set_index('id')
+        errors_df['length'] = errors_df.seq.apply(len)
+        errors_df = errors_df[['length', 'seq']] # Reorder the columns so the length is easier to see. 
+        errors_df.to_csv(self.error_file_path)
+
+
     def preprocess(self, seqs:List[str]):
         seqs = [s.replace('U', 'X').replace('Z', 'X').replace('O', 'X').replace('*', '') for s in seqs] # Replace non-standard amino acids with X token.
         if self.model_name == 'pt5':
@@ -142,7 +156,7 @@ class PLMEmbedder():
 
 
         
-    def __call__(self, seqs:List[str], ids:List[str], max_aa_per_batch:int=10000, max_seq_per_batch:int=100, max_seq_length:int=1000):
+    def __call__(self, seqs:List[str], ids:List[str], max_aa_per_batch:int=2500, max_seq_per_batch:int=10, max_seq_length:int=1000):
         '''
         Embeds the input data using the PLM stored in the model attribute. Note that this embedding
         algorithm does not preserve the order of the input sequences, so IDs must be included for each sequence.
@@ -163,7 +177,10 @@ class PLMEmbedder():
         curr_aa_count = 0
         curr_batch = []
 
-        for i, s in tqdm(seqs, desc='PLMEmbedder.__call__', file=sys.stdout):
+        pbar = tqdm(seqs, desc='PLMEmbedder.__call__', file=sys.stdout)
+        for i, s in pbar:
+            pbar.set_description(f'PLMEmbedder.__call__: {len(self.errors)} sequences skipped.')
+
             # Switch to single-sequence processing if length limit is exceeded.
             if len(s) > max_seq_length:
                 outputs = self.embed_batch([s])
@@ -192,6 +209,8 @@ class PLMEmbedder():
         ids = [i for i, _ in embs]
         embs = [torch.unsqueeze(e, 0) for _, e in embs]
         embs = torch.cat(embs).float()
+        
+        self.log_errors()
         return embs.cpu().numpy(), np.array(ids)
 
     def embed_batch(self, batch:List[str]) -> torch.FloatTensor:
@@ -208,7 +227,8 @@ class PLMEmbedder():
                 outputs = self.model(**inputs)
                 return outputs
         except RuntimeError:
-            print('PLMEmbedder.embed_batch: RuntimeError during embedding. Try lowering batch size.', flush=True)
+            # print('PLMEmbedder.embed_batch: RuntimeError during embedding. Try lowering batch size.', flush=True)
+            self.errors += batch # Keep track of which sequences the model failed to embed
             return None
 
 
