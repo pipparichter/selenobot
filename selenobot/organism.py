@@ -209,16 +209,21 @@ class Organism():
         '''
 
         def is_intergenic(hit:dict, start:int=None, stop:int=None) -> (bool, dict):
+            intergenic = False
             if hit['overlap'] is None:
-                return True, hit
-            if hit['percent_overlap'] > 50:
-                return False, hit
-            if hit['overlap'] > allowed_overlap:
-                return False, hit
-            hit['overlap'] = None # Make sure to mark the hit as invalid by setting the overlap to None. 
-            return True, hit
+                intergenic = True
+            elif hit['pseudo']:
+                intergenic = True
+            elif hit['percent_overlap'] > 50:
+                intergenic = False
+            elif hit['overlap'] > allowed_overlap:
+                intergenic = False
+            hit['intergenic'] = intergenic
+            # hit['overlap'] = 0 # Make sure to mark the hit as invalid by setting the overlap to None. 
+            return intergenic, hit
 
-        mask, info_df = self.search_gbff_file(df, is_intergenic, psuedo=False)  
+        # Thi
+        mask, info_df = self.search_gbff_file(df, is_intergenic, psuedo=None)  
         self.label_info['inter'] = info_df
         return df[mask], df[~mask]
 
