@@ -185,7 +185,7 @@ class PLMEmbedder():
 
             # Switch to single-sequence processing if length limit is exceeded.
             if len(s) > max_seq_length:
-                outputs = self.embed_batch([s])
+                outputs = self.embed_batch([(i, s)])
                 embs += self.postprocess(outputs, batch=[(i, s)])
                 continue
 
@@ -196,7 +196,7 @@ class PLMEmbedder():
             if len(curr_batch) > max_seq_per_batch or curr_aa_count > max_aa_per_batch:
                 # If any of the presepecified limits are exceeded, go ahead and embed the batch. 
                 # Make sure to only pass in the sequence. 
-                outputs = self.embed_batch([s for _, s in curr_batch])
+                outputs = self.embed_batch(curr_batch)
                 embs += self.postprocess(outputs, batch=curr_batch)
                 # Reset the current batch and amino acid count. 
                 curr_batch = []
@@ -204,7 +204,7 @@ class PLMEmbedder():
 
         # Handles the case in which the minimum batch size is not reached.
         if len(curr_batch) > 0:
-            outputs = self.embed_batch([s for _, s in curr_batch])
+            outputs = self.embed_batch(curr_batch)
             embs += self.postprocess(outputs, batch=curr_batch)
 
         # Separate the IDs and embeddings in the list of tuples. 
@@ -215,7 +215,7 @@ class PLMEmbedder():
         self.log_errors()
         return embs.cpu().numpy(), np.array(ids)
 
-    def embed_batch(self, batch:List[str]) -> torch.FloatTensor:
+    def embed_batch(self, batch:List[Tuple[str, str]]) -> torch.FloatTensor:
         '''Embed a single batch, catching any exceptions.
         
         :param batch: A list of strings, each string being a tokenized sequence. 
@@ -223,7 +223,8 @@ class PLMEmbedder():
         '''
         # Should contain input_ids and attention_mask. Make sure everything's on the GPU. 
         # The tokenizer defaults mean that add_special_tokens=True and padding=True is equivalent to padding='longest'
-        inputs = {k:torch.tensor(v).to(self.device) for k, v in self.tokenizer(batch, padding=True).items()} 
+        seqs = [s for _, s in batch]
+        inputs = {k:torch.tensor(v).to(self.device) for k, v in self.tokenizer(seqs, padding=True).items()} 
         try:
             with torch.no_grad():
                 outputs = self.model(**inputs)
