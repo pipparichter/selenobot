@@ -120,7 +120,6 @@ class PLMEmbedder():
 
     def log_errors(self):
         '''Log the error sequences to a file.'''
-        print(self.errors)
         seqs = [s for _, s in self.errors]
         ids = [i for i, _ in self.errors]
         errors_df = pd.DataFrame({'seq':seqs, 'id':ids}).set_index('id')
