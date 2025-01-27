@@ -212,6 +212,7 @@ class PLMEmbedder():
         embs = torch.cat(embs).float()
 
         self.log_errors()
+        pbar.close()
         return embs.cpu().numpy(), np.array(ids)
 
     def embed_batch(self, batch:List[Tuple[str, str]]) -> torch.FloatTensor:
