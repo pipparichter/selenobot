@@ -46,7 +46,9 @@ def fasta_file_parser_gtdb(description:str):
     pattern = r'# ([\d]+) # ([\d]+) # ([-1]+) # ID=([^;]+);partial=([^;]+);start_type=([^;]+);rbs_motif=([^;]+);rbs_spacer=([^;]+);gc_cont=([\.\w]+)'
     columns = ['start', 'stop', 'strand', 'ID', 'partial', 'start_type', 'rbs_motif', 'rbs_spacer', 'gc_content']
     match = re.search(pattern, description)
-    return {col:match.group(i + 1) for i, col in enumerate(columns)}
+    parsed_header = {col:match.group(i + 1) for i, col in enumerate(columns)}
+    parsed_header['contig_number'] = int(parsed_header['ID'].split('_')[0])
+    return parsed_header
 
 
 def fasta_file_parser_none(description:str):
@@ -407,10 +409,13 @@ class XMLFile(File):
 class GBFFFile(File):
     '''Class for parsing GenBank flat files, obtained from NCBI.'''
 
-    fields = ['strand', 'start', 'stop', 'partial', 'product', 'frameshifted', 'incomplete', 'internal_stop', 'protein_id', 'seq', 'pseudo']
+    fields = ['feature', 'contig_number', 'strand', 'start', 'stop', 'partial', 'product', 'frameshifted', 'incomplete', 'internal_stop', 'protein_id', 'seq', 'pseudo']
+    features = ['gene', 'CDS', 'tRNA', 'ncRNA', 'rRNA', 'misc_RNA','repeat_region']
 
     field_pattern = re.compile(r'/([a-zA-Z_]+)="([^"]+)"')
     coordinate_pattern = re.compile(r'complement\([\<\d]+\.\.[\>\d]+\)|[\<\d]+\.\.[\>\d]+')
+    feature_pattern = r'[\s]{2,}(' + '|'.join(features) + r')[\s]{2,}'
+
 
     @staticmethod
     def parse_coordinate(coordinate:str):
@@ -441,7 +446,7 @@ class GBFFFile(File):
 
     # NOTE: PGAP annotations can include pogrammed frameshift sequences (is this where the duplicates come in?)
     @staticmethod
-    def parse_entry(entry:str) -> dict:
+    def parse_entry(feature:str, entry:str) -> dict:
 
         # Extract the gene coordinates, which do not follow the typical field pattern. 
         coordinate = re.search(GBFFFile.coordinate_pattern, entry).group(0)
@@ -451,7 +456,7 @@ class GBFFFile(File):
         entry = re.sub(r'[\s]{2,}|\n', '', entry) # Remove all newlines or any more than one consecutive whitespace character.
 
         entry = re.findall(GBFFFile.field_pattern, entry) # Returns a list of matches. 
-        parsed_entry = dict()
+        parsed_entry = {'feature':feature}
         # Need to account for the fact that a single entry can have multiple GO functions, processes, components, etc.
         for field, value in entry:
             if (field not in parsed_entry):
@@ -465,6 +470,53 @@ class GBFFFile(File):
             parsed_entry.update(GBFFFile.parse_note(parsed_entry['note']))
        
         return parsed_entry 
+
+    @staticmethod
+    def parse_contig(contig:str) -> pd.DataFrame:
+        # Because I use parentheses around the features in the pattern, this is a "capturing group", and the label is contained in the output. 
+        contig = re.split(GBFFFile.feature_pattern, contig, flags=re.MULTILINE)
+        contig_metadata, contig = contig[0], contig[1:] # The first entry in the content is contig metadata. 
+        contig_id = re.search(r'VERSION[\s]+([^\n]+)', contig_metadata).group(1)
+
+        if len(contig) == 0:
+            return contig_id, None
+
+        entries = [(contig[i], contig[i + 1]) for i in range(0, len(contig), 2)]
+        assert np.all(np.isin([entry[0] for entry in entries], GBFFFile.features)), 'GBFFFile.__init__: Something went wrong while parsing the file.'
+        entries = [entry for entry in entries if entry[0] != 'gene'] # Remove the gene entries, which I think are kind of redundant with the products. 
+
+        df = []
+        for entry in entries:
+            df.append(GBFFFile.parse_entry(*entry))
+        df = pd.DataFrame(df)
+        df = df.rename(columns={col:col.lower() for col in df.columns}) # Make sure all column names are lower-case.
+        df = df.rename(columns={'translation':'seq'}) 
+        df.index = df.locus_tag
+        df.index.name = 'locus_tag' # Need to use the locus tag as the index, as not everything has a protein ID. 
+        df['contig_id'] = contig_id
+
+        return contig_id, df 
+
+    def __init__(self, path:str):
+        
+        with open(path, 'r') as f:
+            content = f.read()
+
+        # If there are multiple contigs in the file, the set of features corresponding to the contig is marked by 
+        # a "contig" feature.
+        # NOTE: I used the lookahead match here because it is not treated as a capturing group. 
+        contigs = re.findall(r'LOCUS(.*?)(?=LOCUS|$)', content, flags=re.DOTALL) # DOTALL flag means the dot character also matches newlines.
+
+        self.df, self.contig_ids = [], []
+        for i, contig in enumerate(contigs):
+            contig_id, df = GBFFFile.parse_contig(contig)
+            self.contig_ids.append(contig_id)
+            if (df is not None):
+                df['contig_number'] = i + 1
+                self.df.append(df)
+        self.df = pd.concat(self.df)
+        self.n_contigs = len(contigs)
+
 
     @staticmethod
     def drop_duplicates(df:pd.DataFrame):
@@ -486,48 +538,14 @@ class GBFFFile(File):
         return df
 
 
-    def __init__(self, path:str):
-        
-        with open(path, 'r') as f:
-            content = f.read()
-        # Because I use parentheses around (gene|CDS), this is a "capturing group", and the label is contained in the output. 
-        content = re.split(r'[\s]{2,}(gene|CDS)[\s]{2,}', content, flags=re.MULTILINE)
-        content = content[1:] # The first entry in the content is genome metadata. 
-        assert len(content) % 2 == 0, 'GBFFFile.__init__: The number of entries in the split content list should be even.'
-        
-        entries = [(content[i], content[i + 1]) for i in range(0, len(content), 2)]
-        assert np.all(np.isin([entry[0] for entry in entries], ['gene', 'CDS'])), 'GBFFFile.__init__: Something went wrong while parsing the file.'
-        
-        entries = [entry[-1] for entry in entries if entry[0] == 'CDS'] # Remove the non-CDS entries.
-        print(f'GBFFFile.__init__: Found {len(entries)} coding sequences in the GBFF file.')
-
-        df = []
-        for entry in tqdm(entries, desc=f'GBFFFile.__init__: Parsing GBFF file entries.'):
-            df.append(GBFFFile.parse_entry(entry))
-        df = pd.DataFrame(df)
-        df = df.rename(columns={col:col.lower() for col in df.columns}) # Make sure all column names are lower-case.
-        df = df.rename(columns={'translation':'seq'}) 
-
-        df.index = df.locus_tag
-        df.index.name = 'locus_tag' # Need to use the locus tag as the index, as not everything has a protein ID. 
-
-        self.df = df
-
-    def to_df(self, pseudo:bool=None, drop_duplicates:bool=False):
+    def to_df(self, drop_duplicates:bool=False, **filters):
         df = self.df[GBFFFile.fields]
-
         if drop_duplicates:
             df = GBFFFile.drop_duplicates(df)
-        if pseudo is False:
-            # print(f'GBFFFile.to_df: Removing {df.pseudo.sum()} pseudogenes from the GBFF file.')
-            df = df[~df.pseudo]
-            df = df.drop(columns=['pseudo', 'frameshifted', 'internal_stop', 'incomplete'])
-        if pseudo is True:
-            # print(f'GBFFFile.to_df: Removing {(~df.pseudo).sum()} non-pseudogenes from the GBFF file.')
-            df = df[df.pseudo]
-            df = df.drop(columns=['protein_id', 'seq'])  
+        for col, val in filters.items():
+            df = df[df[col] == val]
 
-        return df
+        return df.dropna(axis=1, how='all')
 
 
 

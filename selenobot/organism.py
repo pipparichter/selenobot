@@ -39,6 +39,8 @@ class Organism():
             self.blast_file = BLASTFile(self.blast_path)
         else: 
             self.blast_file = self.blast()
+
+        self.gbff_search_results = dict()
     
     def size(self, source:str='gtdb', pseudo:bool=None):
         if source == 'gtdb':
@@ -112,35 +114,61 @@ class Organism():
         blast.run(self.gtdb_proteins_path, self.ncbi_proteins_path, output_path=self.blast_path, max_high_scoring_pairs=max_high_scoring_pairs, max_subject_sequences=max_subject_sequences, make_database=False)
         return BLASTFile(self.blast_path)
 
+    @staticmethod
+    def is_valid_hit(hit:dict, start:int=None, stop:int=None, strand:int=None):
+        '''Returns whether or not a hit is "valid", i.e. the starts and stops match, or the amount 
+        of overlap with the GBFF file entry is greater than 50 percent.'''
+        if (hit.strand != strand):
+            return False
+        if (hit.start == start) or (hit.stop == stop):
+            return True
+        if hit.percent_overlap > 50:
+            return True
+        return False
 
-    def search_gbff_file(self, df:pd.DataFrame, func, **kwargs):
-        '''Look for sequences in the input GBFF file which overlap somewhere in the specified range.'''
-        gbff_df = self.gbff_file.to_df(pseudo=kwargs.get('psuedo', None))
+    def get_top_hit(self, query):
+        '''
+        '''
+        df = self.gbff_file.to_df(contig_number=int(query.contig_number))
+        start, stop, strand = int(query.start), int(query.stop), int(query.strand)
+        if len(df) == 0: # Case where there are no detected genes on a contig in the GBFF file, but Prodigal found one.
+            return {'overlap':None}, None
+
+        overlap = lambda row : len(np.intersect1d(np.arange(start, stop), np.arange(row.start, row.stop)))
+        df['overlap'] = df.apply(overlap, axis=1)
+        df['percent_overlap'] = 100 * (df.overlap / (stop - start))
+        df = df.sort_values('overlap', ascending=False)
+        # Generate a mask to filter the valid hits. 
+        mask = df.apply(lambda hit: Organism.is_valid_hit(hit, start=start, stop=stop, strand=strand), axis=1)
+
+        hit = dict()
+        hit['n_hits_same_strand'] = (df[df.strand == strand].overlap > 0).sum().item()
+        hit['n_hits_opposite_strand'] = (df[df.strand != strand].overlap > 0).sum().item()
+        hit['n_valid_hits'] = mask.sum().item()
+        hit['n_hits'] = (df.overlap > 0).sum().item()
+
+        if hit['n_valid_hits'] > 0:
+            hit['overlap'] = None
+            hit.update(df[mask].to_dict(orient='records')[0])
+
+        search_results_df = df[mask] if (len(df[mask]) > 0) else None
+        return hit, search_results_df # Return the top hit, as well as all other valid hits.
+
+
+    def search_gbff_file(self, df:pd.DataFrame, **kwargs):
+        '''Look for sequences in the input GBFF file which overlap somewhere in the specified range.'''  
         
-        def get_top_hit(start:int=None, stop:int=None, strand:int=None):
-            overlap = lambda row : len(np.intersect1d(np.arange(start, stop), np.arange(row.start, row.stop)))
-            df = gbff_df[gbff_df.strand == strand] if (strand is not None) else gbff_df
-            if len(df) == 0:
-                return {'overlap':None}
-            df = df.copy() # Copy so it doesn't get mad about the slicing. 
-            df['overlap'] = df.apply(overlap, axis=1)
-            df['percent_overlap'] = 100 * (df.overlap / (stop - start))
-            df = df[df['overlap'] > 0]
-            df = df.sort_values('overlap', ascending=False)
-            return {'overlap':None} if (len(df) == 0) else df.to_dict(orient='records')[0]
-
         info_df, mask = list(), list()
-        for row in tqdm(list(df.itertuples()), desc='search_gbff_file'):
-            hit = get_top_hit(start=int(row.start), stop=int(row.stop))
-            val, hit = func(hit, start=int(row.start), stop=int(row.stop))
-            hit['id'] = row.Index
+        for query in tqdm(list(df.itertuples()), desc='search_gbff_file'):
+            hit, self.gbff_search_results[query.Index] = self.get_top_hit(query)
+            hit['id'] = query.Index
             info_df.append(hit)
-            mask.append(val)
-        mask = np.array(mask)
         info_df = pd.DataFrame(info_df).set_index('id')
-        info_df = info_df[~info_df.overlap.isnull()] # This will be null if the provided function returned an emptry dictionary. 
-        return mask, info_df
+        mask = ~info_df.overlap.isnull() # This will be null if there are no hits. 
+        return info_df[mask], df[~mask]
 
+    def get_gbff_search_result(self, id_:str) -> pd.DataFrame:
+        return self.gbff_search_results.get(id_, None)
 
     def find_matches(self, df:pd.DataFrame):
         blast_df = self.blast_file.to_df()
@@ -153,13 +181,12 @@ class Organism():
             if not math.isclose(hit.subject_sequence_length, hit.query_sequence_length, abs_tol=5):
                 return False
             return True
-
+        
         df, blast_df = df.align(blast_df, axis=0, join='left')
         mask = blast_df.apply(is_match, axis=1)
+        info_df = blast_df.copy()
 
-        self.label_info['match'] = blast_df.copy()[mask]
-
-        return df[mask], df[~mask]
+        return info_df[mask], df[~mask]
 
 
     def find_errors(self, df:pd.DataFrame, code_name:str='ecol'):
@@ -177,70 +204,60 @@ class Organism():
         df, blast_df = df.align(blast_df, axis=0, join='left')
         mask = blast_df.apply(is_error, axis=1)
 
-        info_df = blast_df.copy()[mask]
+        info_df = blast_df.copy()
         info_df['left_aligned'] = (info_df.query_alignment_start == 1) & (info_df.subject_alignment_start == 1)
         info_df['right_aligned'] = (info_df.query_alignment_end == info_df.query_sequence_length - 1) & (info_df.subject_alignment_end == info_df.subject_sequence_length)
-        self.label_info['error'] = info_df
 
-        return df[mask], df[~mask]
-
-
-    def find_pseudogenes(self, df:pd.DataFrame):
-        ''''''
-        def is_psuedogene(hit:dict, start:int=None, stop:int=None):
-            if hit['overlap'] is None:
-                return False, hit
-            if (hit['start'] == start) or (hit['stop'] == stop):
-                return True, hit
-            if hit['percent_overlap'] > 50:
-                return True, hit
-            return False, dict()
-
-        mask, info_df = self.search_gbff_file(df, is_psuedogene, psuedo=True)
-        self.label_info['pseudo'] = info_df   
-        return df[mask], df[~mask]
-
-
-    def find_intergenic(self, df:pd.DataFrame, allowed_overlap:int=30):
-        '''A GTDB ORF is intergenic if it either (1) does not overlap with any other nCDS element in the NCBI reference or (2) the overlap with a 
-        protein (non-ppseudo) in the reference genome is no greater than the specified margin. 
-        https://bmcgenomics.biomedcentral.com/articles/10.1186/1471-2164-15-721
-        https://pmc.ncbi.nlm.nih.gov/articles/PMC525685/
-        '''
-
-        def is_intergenic(hit:dict, start:int=None, stop:int=None) -> (bool, dict):
-            intergenic = False
-            if hit['overlap'] is None:
-                intergenic = True
-            elif hit['pseudo']:
-                intergenic = True
-            elif hit['percent_overlap'] > 50:
-                intergenic = False
-            elif hit['overlap'] > allowed_overlap:
-                intergenic = False
-            hit['intergenic'] = intergenic
-            # hit['overlap'] = 0 # Make sure to mark the hit as invalid by setting the overlap to None. 
-            return intergenic, hit
-
-        # Thi
-        mask, info_df = self.search_gbff_file(df, is_intergenic, psuedo=None)  
-        self.label_info['inter'] = info_df
-        return df[mask], df[~mask]
+        return info_df[mask], df[~mask]
 
 
     def label(self):
+        rna_features = [feature for feature in GBFFFile.features if 'RNA' in feature]
 
-        label_dfs = dict()
-        label_dfs['match'], proteins_df = self.find_matches(self.proteins_df)
-        label_dfs['error'], proteins_df = self.find_errors(proteins_df)
-        label_dfs['pseudo'], proteins_df = self.find_pseudogenes(proteins_df)
-        label_dfs['inter'], proteins_df = self.find_intergenic(proteins_df)
+        label_info = dict()
+        label_info['match'], proteins_df = self.find_matches(self.proteins_df)
+        label_info['error'], proteins_df = self.find_errors(proteins_df)
+
+        gbff_search_info_df, label_info['inter'] = self.search_gbff_file(proteins_df)
+        label_info['pseudo'] = gbff_search_info_df[gbff_search_info_df.pseudo].dropna(axis=1, how='all')
+        label_info['rna'] = gbff_search_info_df[gbff_search_info_df.feature.isin(rna_features)].dropna(axis=1, how='all')
 
         labels = dict()
-        for label, label_df in label_dfs.items():
-            labels.update({id_:label for id_ in label_df.index})
-            print(f'Organism.label: Found {len(label_df)} sequences in the input genome with the "{label}" label.')
+        for label, info_df in label_info.items():
+            labels.update({id_:label for id_ in info_df.index})
+            print(f'Organism.label: Found {len(info_df)} sequences in the input genome with the "{label}" label.')
         print(f'Organism.label: Successfully labeled {len(labels)} of the {len(self.proteins_df)} proteins.')
-        labels.update({id_:None for id_ in proteins_df.index}) # Account for the remaining sequences. 
-        self.labels = labels
 
+        unlabeled_ids = [id_ for id_ in proteins_df.index if (id_ not in labels)]
+        labels.update({id_:'none' for id_ in unlabeled_ids}) # Account for the remaining sequences.
+        label_info['none'] = gbff_search_info_df[gbff_search_info_df.index.isin(unlabeled_ids)]
+
+        self.labels = labels
+        self.label_info = label_info
+
+
+    # def find_intergenic(self, df:pd.DataFrame, allowed_overlap:int=30):
+    #     '''A GTDB ORF is intergenic if it either (1) does not overlap with any other nCDS element in the NCBI reference or (2) the overlap with a 
+    #     protein (non-ppseudo) in the reference genome is no greater than the specified margin. 
+    #     https://bmcgenomics.biomedcentral.com/articles/10.1186/1471-2164-15-721
+    #     https://pmc.ncbi.nlm.nih.gov/articles/PMC525685/
+    #     '''
+
+    #     def is_intergenic(hit:dict, start:int=None, stop:int=None) -> (bool, dict):
+    #         intergenic = True
+    #         if hit['overlap'] is None:
+    #             intergenic = True
+    #         # elif hit['pseudo']:
+    #         #     intergenic = True
+    #         elif hit['percent_overlap'] > 50:
+    #             intergenic = False
+    #         elif hit['overlap'] > allowed_overlap:
+    #             intergenic = False
+    #         hit['intergenic'] = intergenic
+    #         # hit['overlap'] = 0 # Make sure to mark the hit as invalid by setting the overlap to None. 
+    #         return intergenic, hit
+
+    #     # Thi
+    #     mask, info_df = self.search_gbff_file(df, is_intergenic, psuedo=None)  
+    #     self.label_info['inter'] = info_df
+    #     return df[mask], df[~mask]
