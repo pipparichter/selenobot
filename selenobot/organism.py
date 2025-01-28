@@ -148,10 +148,15 @@ class Organism():
         hit['n_hits'] = (df.overlap > 0).sum().item()
 
         if hit['n_valid_hits'] > 0:
-            hit['overlap'] = None
             hit.update(df[mask].to_dict(orient='records')[0])
+        else: # If there are no valid hits, set the overlap to be None so it is filtered out.
+            hit['overlap'] = None
 
-        search_results_df = df[mask] if (len(df[mask]) > 0) else None
+        search_results_df = df.copy()
+        search_results_df['is_valid_hit'] = mask
+        search_results_df = search_results_df[search_results_df.overlap > 0]
+        search_results_df = search_results_df if (len(search_results_df) > 0) else None
+        
         return hit, search_results_df # Return the top hit, as well as all other valid hits.
 
 
@@ -211,16 +216,32 @@ class Organism():
         return info_df[mask], df[~mask]
 
 
+    def is_intergenic(self, row):
+        overlaps_df = self.gbff_search_results[row.name]
+        if overlaps_df is None:
+            return True
+        overlaps_df = overlaps_df.sort_values(by='overlap', ascending=False)
+        biggest_overlap = overlaps_df.iloc[0].overlap
+        if biggest_overlap > 30:
+            return False 
+        else:
+            return True
+
+
     def label(self):
         rna_features = [feature for feature in GBFFFile.features if 'RNA' in feature]
+        misc_features = ['misc_feature', 'mobile_element', 'repeat_region']
 
         label_info = dict()
         label_info['match'], proteins_df = self.find_matches(self.proteins_df)
         label_info['error'], proteins_df = self.find_errors(proteins_df)
 
-        gbff_search_info_df, label_info['inter'] = self.search_gbff_file(proteins_df)
+        gbff_search_info_df, proteins_df = self.search_gbff_file(proteins_df)
         label_info['pseudo'] = gbff_search_info_df[gbff_search_info_df.pseudo].dropna(axis=1, how='all')
         label_info['rna'] = gbff_search_info_df[gbff_search_info_df.feature.isin(rna_features)].dropna(axis=1, how='all')
+        label_info['misc'] = gbff_search_info_df[gbff_search_info_df.feature.isin(misc_features)].dropna(axis=1, how='all') 
+
+        label_info['inter'] = proteins_df[proteins_df.apply(self.is_intergenic, axis=1)]
 
         labels = dict()
         for label, info_df in label_info.items():
@@ -235,29 +256,3 @@ class Organism():
         self.labels = labels
         self.label_info = label_info
 
-
-    # def find_intergenic(self, df:pd.DataFrame, allowed_overlap:int=30):
-    #     '''A GTDB ORF is intergenic if it either (1) does not overlap with any other nCDS element in the NCBI reference or (2) the overlap with a 
-    #     protein (non-ppseudo) in the reference genome is no greater than the specified margin. 
-    #     https://bmcgenomics.biomedcentral.com/articles/10.1186/1471-2164-15-721
-    #     https://pmc.ncbi.nlm.nih.gov/articles/PMC525685/
-    #     '''
-
-    #     def is_intergenic(hit:dict, start:int=None, stop:int=None) -> (bool, dict):
-    #         intergenic = True
-    #         if hit['overlap'] is None:
-    #             intergenic = True
-    #         # elif hit['pseudo']:
-    #         #     intergenic = True
-    #         elif hit['percent_overlap'] > 50:
-    #             intergenic = False
-    #         elif hit['overlap'] > allowed_overlap:
-    #             intergenic = False
-    #         hit['intergenic'] = intergenic
-    #         # hit['overlap'] = 0 # Make sure to mark the hit as invalid by setting the overlap to None. 
-    #         return intergenic, hit
-
-    #     # Thi
-    #     mask, info_df = self.search_gbff_file(df, is_intergenic, psuedo=None)  
-    #     self.label_info['inter'] = info_df
-    #     return df[mask], df[~mask]

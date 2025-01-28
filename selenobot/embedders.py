@@ -253,6 +253,7 @@ def embed(df:pd.DataFrame, path:str=None, overwrite:bool=False, embedders:List=[
         store.put('metadata', df, format=format_, data_columns=None)
 
     for embedder in embedders:
+        print(f'embed: Generating embeddings for {embedder.type}')
         if (embedder.type in existing_keys) and (not overwrite):
             print(f'Embeddings of type {embedder.type} are already present in {path}')
         else:

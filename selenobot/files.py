@@ -410,7 +410,8 @@ class GBFFFile(File):
     '''Class for parsing GenBank flat files, obtained from NCBI.'''
 
     fields = ['feature', 'contig_number', 'strand', 'start', 'stop', 'partial', 'product', 'frameshifted', 'incomplete', 'internal_stop', 'protein_id', 'seq', 'pseudo']
-    features = ['gene', 'CDS', 'tRNA', 'ncRNA', 'rRNA', 'misc_RNA','repeat_region']
+    # TODO: I should automatically detect the features...
+    features = ['gene', 'CDS', 'tRNA', 'ncRNA', 'rRNA', 'misc_RNA','repeat_region', 'misc_feature', 'mobile_element']
 
     field_pattern = re.compile(r'/([a-zA-Z_]+)="([^"]+)"')
     coordinate_pattern = re.compile(r'complement\([\<\d]+\.\.[\>\d]+\)|[\<\d]+\.\.[\>\d]+')
