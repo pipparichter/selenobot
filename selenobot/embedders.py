@@ -14,6 +14,10 @@ import itertools
 import re   
 from typing import List, Tuple
 
+# Might need to make the batch allocations vary less. 
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = 'expandable_segments:True'
+
+
 # NOTE: tqdm progress bars print to standard error for reasons which are not relevant to me... 
 # https://stackoverflow.com/questions/75580592/why-is-tqdm-output-directed-to-sys-stderr-and-not-to-sys-stdout 
 # I think I want to print to stdout. Instead of using the pooler_ouput layer, I could try manually extracting
