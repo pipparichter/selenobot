@@ -14,13 +14,14 @@ import itertools
 import re   
 from typing import List, Tuple
 
-# Might need to make the batch allocations vary less. 
+# Might need to make the batch allocations vary less. Maybe divide sequences into equal-sized blocks. 
 # https://pytorch.org/docs/stable/notes/cuda.html#environment-variables
 # https://discuss.pytorch.org/t/unable-to-allocate-cuda-memory-when-there-is-enough-of-cached-memory/33296 
 # https://alexdremov.me/simple-ways-to-speedup-your-pytorch-model-training/ 
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = 'expandable_segments:True'
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = 'max_split_size_mb:50'
+# os.environ["PYTORCH_CUDA_ALLOC_CONF"] = 'max_split_size_mb:50'
 
+# TODO: Check on tokenizer behavior... are sequences ever truncated?
 
 # NOTE: tqdm progress bars print to standard error for reasons which are not relevant to me... 
 # https://stackoverflow.com/questions/75580592/why-is-tqdm-output-directed-to-sys-stderr-and-not-to-sys-stdout 
@@ -164,7 +165,7 @@ class PLMEmbedder():
 
 
         
-    def __call__(self, seqs:List[str], ids:List[str], max_aa_per_batch:int=1000, max_seq_per_batch:int=2, max_seq_length:int=800):
+    def __call__(self, seqs:List[str], ids:List[str], max_aa_per_batch:int=1000, max_seq_per_batch:int=1, max_seq_length:int=800):
         '''
         Embeds the input data using the PLM stored in the model attribute. Note that this embedding
         algorithm does not preserve the order of the input sequences, so IDs must be included for each sequence.
@@ -179,7 +180,7 @@ class PLMEmbedder():
         seqs = self.preprocess(seqs)
         seqs = list(zip(ids, seqs)) # Store the IDs with the sequences as tuples in a list. 
         # Order the sequences in ascending order according to sequence length to avoid unnecessary padding. 
-        seqs = sorted(seqs, key=lambda t : len(t[1]))
+        seqs = sorted(seqs, key=lambda t : len(t[1]))[::-1]
 
         embs = []
         curr_aa_count = 0
