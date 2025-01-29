@@ -156,7 +156,7 @@ class Organism():
         search_results_df['is_valid_hit'] = mask
         search_results_df = search_results_df[search_results_df.overlap > 0]
         search_results_df = search_results_df if (len(search_results_df) > 0) else None
-        
+
         return hit, search_results_df # Return the top hit, as well as all other valid hits.
 
 
@@ -216,16 +216,34 @@ class Organism():
         return info_df[mask], df[~mask]
 
 
-    def is_intergenic(self, row):
-        overlaps_df = self.gbff_search_results[row.name]
-        if overlaps_df is None:
-            return True
-        overlaps_df = overlaps_df.sort_values(by='overlap', ascending=False)
-        biggest_overlap = overlaps_df.iloc[0].overlap
-        if biggest_overlap > 30:
-            return False 
-        else:
-            return True
+    # def is_intergenic(self, row):
+    #     overlaps_df = self.gbff_search_results[row.name]
+    #     if overlaps_df is None:
+    #         return True
+    #     overlaps_df = overlaps_df.sort_values(by='overlap', ascending=False)
+    #     biggest_overlap = overlaps_df.iloc[0].overlap
+    #     if biggest_overlap > 30:
+    #         return False 
+    #     else:
+    #         return True
+
+    def find_inter(self, df:pd.DataFrame, allowed_overlap:int=30):
+        gaps = self.gbff_file.gaps()
+        # Sort so that the concatenated contig masks work. 
+        df = df.sort_values(by='contig_number')
+
+        mask = list()
+        for contig_number, contig_df in df.groupby('contig_number'):
+            contig_mask = np.array([False] * len(contig_df))
+            if contig_number in gaps:
+                contig_gaps = gaps[int(contig_number)]
+                for (gap_start, gap_stop) in contig_gaps:
+                    is_in_gap = lambda row : (int(row.start) >= (gap_start - allowed_overlap)) and (int(row.stop) <= (gap_stop + allowed_overlap))
+                    contig_mask = np.logical_or(contig_mask, contig_df.apply(is_in_gap, axis=1))
+            mask += contig_mask.tolist()
+        mask = np.array(mask)
+        
+        return df[mask], df[~mask]
 
 
     def label(self):
@@ -235,13 +253,14 @@ class Organism():
         label_info = dict()
         label_info['match'], proteins_df = self.find_matches(self.proteins_df)
         label_info['error'], proteins_df = self.find_errors(proteins_df)
+        label_info['inter'], proteins_df = self.find_inter(proteins_df)
 
         gbff_search_info_df, proteins_df = self.search_gbff_file(proteins_df)
         label_info['pseudo'] = gbff_search_info_df[gbff_search_info_df.pseudo].dropna(axis=1, how='all')
         label_info['rna'] = gbff_search_info_df[gbff_search_info_df.feature.isin(rna_features)].dropna(axis=1, how='all')
         label_info['misc'] = gbff_search_info_df[gbff_search_info_df.feature.isin(misc_features)].dropna(axis=1, how='all') 
 
-        label_info['inter'] = proteins_df[proteins_df.apply(self.is_intergenic, axis=1)]
+        # label_info['inter'] = proteins_df[proteins_df.apply(self.is_intergenic, axis=1)]
 
         labels = dict()
         for label, info_df in label_info.items():

@@ -4,6 +4,7 @@ from typing import Dict, List, NoReturn
 import pandas as pd 
 import numpy as np
 import h5py 
+from typing import List, Dict, Tuple
 # from bs4 import BeautifulSoup, SoupStrainer
 from lxml import etree
 from tqdm import tqdm
@@ -548,41 +549,27 @@ class GBFFFile(File):
 
         return df.dropna(axis=1, how='all')
 
+    def gaps(self) -> Dict[int, List[tuple]]:
+        '''Figure out the regions of the genome which do not have any annotations in the GBFF file.''' 
+        gaps, n = dict(), 0
+        for contig_number, contig_df in self.df.groupby('contig_number'):
+            contig_df = contig_df.sort_values('start')
 
+            curr_start, curr_stop = contig_df.iloc[0].start, contig_df.iloc[0].start  
+            contig_gaps = list()
+            
+            for row in contig_df.iloc[1:].itertuples():
+                if row.start < curr_stop:
+                    curr_stop = row.stop 
+                else:
+                    contig_gaps.append((curr_stop, row.start))
+                    n += (row.start - curr_stop)
+                    curr_start = row.start 
+                    curr_stop = row.stop 
 
+            gaps[contig_number] = contig_gaps
 
-# class NcbiTsvFile(File):
-#     '''These files are obtained through the UniProt web interface, either via the API link or directly downloading from the browser.'''
-#     fields = {'Entry':'id', 'Reviewed':'reviewed', 'Entry Name':'name', 'Organism':'organism', 'Date of creation':'date', 'Entry version':'version', 'Taxonomic lineage':'taxonomy', 'RefSeq':'refseq_id', 'KEGG':'kegg_id'}
-    
-#     @staticmethod
-#     def parse_taxonomy(df:pd.Series) -> pd.DataFrame:
-#         levels = ['superkingdom', 'kingdom', 'phylum', 'class', 'order', 'family', 'genus', 'species']
-#         taxonomy_df = []
-#         for entry in df.itertuples():
-#             row, taxonomy = {'id':entry.id}, entry.taxonomy
-#             for level in range(levels):
-#                 if f'({level})' in taxonomy:
-#                     row[level] = re.match(f', ([A-Za-z0-9\\w]+) \\({level}\\),', entry).group(1)
-#                 else:
-#                     row[level] = None
-#             taxonomy_df.append(row)
-#         taxonomy_df = pd.DataFrame(taxonomy_df).rename(columns={'superkingdom':'domain'})
-#         df = df.drop(columns=['taxonomy']).merge(taxonomy_df, how='left', left_on='id', right_on='id')
-#         return df
-
-#     def __init__(self, path:str):
-#         super().__init__(path)
-#         df = pd.read_csv(path, delimiter='\t')
-#         df = df.rename(columns=UniProtTsvFile.fields)
-
-#         if 'taxonomy' in df.columns:
-#             df = NcbiTsvFile.parse_taxonomy(df)
-#         self.df = df.set_index('id')
-
-#     def to_df()(self):
-#         return self.df
-
-
+        print(f'gaps: Found {n} total unannotated base pairs in the GBFF file.')
+        return gaps 
 
 

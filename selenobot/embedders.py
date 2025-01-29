@@ -156,7 +156,7 @@ class PLMEmbedder():
 
 
         
-    def __call__(self, seqs:List[str], ids:List[str], max_aa_per_batch:int=2500, max_seq_per_batch:int=10, max_seq_length:int=1000):
+    def __call__(self, seqs:List[str], ids:List[str], max_aa_per_batch:int=1000, max_seq_per_batch:int=10, max_seq_length:int=800):
         '''
         Embeds the input data using the PLM stored in the model attribute. Note that this embedding
         algorithm does not preserve the order of the input sequences, so IDs must be included for each sequence.
@@ -224,15 +224,18 @@ class PLMEmbedder():
         # Should contain input_ids and attention_mask. Make sure everything's on the GPU. 
         # The tokenizer defaults mean that add_special_tokens=True and padding=True is equivalent to padding='longest'
         seqs = [s for _, s in batch]
-        inputs = {k:torch.tensor(v).to(self.device) for k, v in self.tokenizer(seqs, padding=True).items()} 
-        try:
-            with torch.no_grad():
-                outputs = self.model(**inputs)
-                return outputs
-        except RuntimeError:
-            # print('PLMEmbedder.embed_batch: RuntimeError during embedding. Try lowering batch size.', flush=True)
-            self.errors += batch # Keep track of which sequences the model failed to embed
-            return None
+        inputs = {k:torch.tensor(v).to(self.device) for k, v in self.tokenizer(seqs, padding=True).items()}
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+            return outputs 
+        # try:
+        #     with torch.no_grad():
+        #         outputs = self.model(**inputs)
+        #         return outputs
+        # except RuntimeError:
+        #     # print('PLMEmbedder.embed_batch: RuntimeError during embedding. Try lowering batch size.', flush=True)
+        #     self.errors += batch # Keep track of which sequences the model failed to embed
+        #     return None
 
 
 def embed(df:pd.DataFrame, path:str=None, overwrite:bool=False, embedders:List=[], format_='table'): 
