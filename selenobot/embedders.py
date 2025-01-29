@@ -149,8 +149,9 @@ class PLMEmbedder():
         if outputs is None:
             return list() 
 
-        # NOTE: It is unclear to me if I should be using the pooler output, or the encoder state. 
-        # Nevermind, ESM-2 is encoder-only, so not a problem!
+        # Transferring the outputs to CPU and reassigning should free up space on the GPU. 
+        # https://discuss.pytorch.org/t/is-the-cuda-operation-performed-in-place/84961/6 
+        outputs = outputs.cpu()
         outputs = outputs.last_hidden_state # if (self.model_name == 'pt5') else outputs.pooler_output
         embs = list()
         for (i, s), e in zip(batch, outputs): # Should iterate over each batch output, or the first dimension. 
@@ -165,7 +166,7 @@ class PLMEmbedder():
 
 
         
-    def __call__(self, seqs:List[str], ids:List[str], max_aa_per_batch:int=1000, max_seq_per_batch:int=1, max_seq_length:int=800):
+    def __call__(self, seqs:List[str], ids:List[str], max_aa_per_batch:int=1000, max_seq_per_batch:int=10, max_seq_length:int=800):
         '''
         Embeds the input data using the PLM stored in the model attribute. Note that this embedding
         algorithm does not preserve the order of the input sequences, so IDs must be included for each sequence.
@@ -179,7 +180,7 @@ class PLMEmbedder():
         '''
         seqs = self.preprocess(seqs)
         seqs = list(zip(ids, seqs)) # Store the IDs with the sequences as tuples in a list. 
-        # Order the sequences in ascending order according to sequence length to avoid unnecessary padding. 
+        # Order the sequences in by sequence length to avoid unnecessary padding. 
         seqs = sorted(seqs, key=lambda t : len(t[1]))[::-1]
 
         embs = []
@@ -222,7 +223,7 @@ class PLMEmbedder():
 
         self.log_errors()
         pbar.close()
-        return embs.cpu().numpy(), np.array(ids)
+        return embs.numpy(), np.array(ids)
 
     def embed_batch(self, batch:List[Tuple[str, str]]) -> torch.FloatTensor:
         '''Embed a single batch, catching any exceptions.
