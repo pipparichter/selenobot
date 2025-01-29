@@ -4,8 +4,8 @@ MAILUSER=prichter@caltech.edu
 MAILTYPE=END
 GRES=gpu:1
 PARTITION=gpu
-MEM=600GB
-TIME=100:00:00
+MEM=500GB
+TIME=15:00:00
 
 # directory="../data/model_organisms/"
 directory="../data/"
@@ -18,6 +18,7 @@ file_names=("test_metadata.csv" "train_metadata.csv" "val_metadata.csv")
 for file_name in "${file_names[@]}"; do
     output_path=$(echo "$directory$file_name" | sed "s/_metadata\.csv/.h5/")
     job_name="embed_$file_name"
-    cmd="python embed.py --input-path \"$directory$file_name\" --feature-types \"$feature_types\" --output-path \"$output_path\""
+    # cmd="python embed.py --input-path \"$directory$file_name\" --feature-types \"$feature_types\" --output-path \"$output_path\""
+    cmd="python embed.py --input-path \"$directory$file_name\" --overwrite --feature-types plm_esm --output-path \"$output_path\""
     sbatch --mem="$MEM" --time="$TIME" --partition="$PARTITION" --gres="$GRES" --job-name "$job_name" --mail-user="$MAILUSER" --mail-type="$MAILTYPE" --wrap "$cmd"
 done
