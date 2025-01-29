@@ -151,8 +151,7 @@ class PLMEmbedder():
 
         # Transferring the outputs to CPU and reassigning should free up space on the GPU. 
         # https://discuss.pytorch.org/t/is-the-cuda-operation-performed-in-place/84961/6 
-        outputs = outputs.cpu()
-        outputs = outputs.last_hidden_state # if (self.model_name == 'pt5') else outputs.pooler_output
+        outputs = outputs.last_hidden_state.cpu() # if (self.model_name == 'pt5') else outputs.pooler_output
         embs = list()
         for (i, s), e in zip(batch, outputs): # Should iterate over each batch output, or the first dimension. 
             if self.model_name == 'pt5':
@@ -248,16 +247,18 @@ class PLMEmbedder():
         #     return None
 
 
-def embed(df:pd.DataFrame, path:str=None, overwrite:bool=False, embedders:List=[], format_='table'): 
+def embed(df:pd.DataFrame, path:str=None, overwrite:bool=False, embedders:List=[], format_='table', max_length:int=None): 
     '''Embed the sequences in the input DataFrame (using all three embedding methods), and store the embeddings and metadata in an HDF5
     file at the specified path.'''
 
     store = pd.HDFStore(path, mode='a' if (not overwrite) else 'w') # Should confirm that the file already exists. 
     existing_keys = [key.replace('/', '') for key in store.keys()]
     df = df.sort_index() # Sort the index of the DataFrame to ensure consistent ordering. 
-    seq_is_nan = df.seq.isnull()
-    print(f'embed: Removing {np.sum(seq_is_nan)} null entries from the sequence DataFrame. {len(df) - np.sum(seq_is_nan)} sequences remaining.', flush=True)
-    df = df[~seq_is_nan]
+
+    mask = df.seq.isnull()
+    if mask.sum() > 0:
+        print(f'embed: Removing {np.sum(mask)} null entries from the sequence DataFrame. {len(df) - np.sum(seq_is_nan)} sequences remaining.', flush=True)
+        df = df[~mask]
 
     if 'metadata' not in existing_keys:
         # Avoid mixed column data types. 
