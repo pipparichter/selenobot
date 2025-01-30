@@ -12,9 +12,11 @@ import os
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--epochs', default=1000, type=int)
+    parser.add_argument('--train-data-path', default='../data/train.h5')
+    parser.add_argument('--val-data-path', default='../data/val.h5')
+
+    parser.add_argument('--epochs', default=100, type=int)
     parser.add_argument('--feature-type', default='plm_pt5', type=str)
-    parser.add_argument('--hidden-dim', default=512, type=int)
     parser.add_argument('--output-dim', default=2, type=int, choices=[2, 3])
     parser.add_argument('--weighted-loss', action='store_true')
     parser.add_argument('--data-dir', default='../data', type=str)
@@ -23,8 +25,8 @@ if __name__ == '__main__':
 
     model_name = f'ternary_model_{args.feature_type}.pkl' if (args.output_dim == 3) else f'binary_model_{args.feature_type}.pkl' 
 
-    train_dataset = Dataset.from_hdf(os.path.join(args.data_dir, 'train.h5'), feature_type=args.feature_type, n_classes=args.output_dim)
-    val_dataset = Dataset.from_hdf(os.path.join(args.data_dir, 'val.h5'), feature_type=args.feature_type, n_classes=args.output_dim)
+    train_dataset = Dataset.from_hdf(args.train_data_path, feature_type=args.feature_type, n_classes=args.output_dim)
+    val_dataset = Dataset.from_hdf(args.val_data_path, feature_type=args.feature_type, n_classes=args.output_dim)
     model = Classifier(n_classes=args.output_dim, input_dim=train_dataset.shape()[-1])
     print('Loaded training and validation datasets.')
 

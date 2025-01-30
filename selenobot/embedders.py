@@ -247,7 +247,7 @@ class PLMEmbedder():
         #     return None
 
 
-def embed(df:pd.DataFrame, path:str=None, overwrite:bool=False, embedders:List=[], format_='table', max_length:int=None): 
+def embed(df:pd.DataFrame, path:str=None, overwrite:bool=False, embedders:List=[], format_='table'): 
     '''Embed the sequences in the input DataFrame (using all three embedding methods), and store the embeddings and metadata in an HDF5
     file at the specified path.'''
 

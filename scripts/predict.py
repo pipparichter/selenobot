@@ -19,8 +19,8 @@ def predict(model_type:str, feature_type:str, model_name_format='{model_type}_mo
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--feature-types', nargs='+', default=['plm', 'aa_1mer', 'aa_2mer', 'len'])
-    parser.add_argument('--model-types', nargs='+', default=['ternary', 'binary'])
+    parser.add_argument('--feature-types', nargs='+', default=['plm_esm', 'plm_pt5', 'aa_1mer', 'len'])
+    parser.add_argument('--model-types', nargs='+', default=['binary'])
     parser.add_argument('--input-path', type=str, default=None)
     parser.add_argument('--models-dir', default='../models', type=str)
     parser.add_argument('--results-dir', default='../data/results/', type=str)
