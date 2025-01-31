@@ -18,12 +18,12 @@ for file_name in "${file_names[@]}"; do
     sbatch --mem="$MEM" --time="$TIME" --partition="$PARTITION" --gres="$GRES" -o "$job_name.out" --job-name "$job_name" --mail-user="$MAILUSER" --mail-type="$MAILTYPE" --wrap "$cmd"
 done
 
-directory="../data/"
-file_names=("test_metadata.csv" "train_metadata.csv" "val_metadata.csv")
+# directory="../data/"
+# file_names=("test_metadata.csv" "train_metadata.csv" "val_metadata.csv")
 
-for file_name in "${file_names[@]}"; do
-    output_path=$(echo "$directory$file_name" | sed "s/_metadata\.csv/.h5/")
-    job_name="embed_$file_name"
-    cmd="python embed.py --input-path \"$directory$file_name\" --output-path \"$output_path\""
-    sbatch --mem="$MEM" --time="$TIME" --partition="$PARTITION" --gres="$GRES" -o "$job_name.out" --job-name "$job_name" --mail-user="$MAILUSER" --mail-type="$MAILTYPE" --wrap "$cmd"
-done
+# for file_name in "${file_names[@]}"; do
+#     output_path=$(echo "$directory$file_name" | sed "s/_metadata\.csv/.h5/")
+#     job_name="embed_$file_name"
+#     cmd="python embed.py --input-path \"$directory$file_name\" --output-path \"$output_path\""
+#     sbatch --mem="$MEM" --time="$TIME" --partition="$PARTITION" --gres="$GRES" -o "$job_name.out" --job-name "$job_name" --mail-user="$MAILUSER" --mail-type="$MAILTYPE" --wrap "$cmd"
+# done

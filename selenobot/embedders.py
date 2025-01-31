@@ -278,7 +278,7 @@ def embed(df:pd.DataFrame, path:str=None, overwrite:bool=False, feature_types:Li
 
     mask = df.seq.isnull()
     if mask.sum() > 0:
-        print(f'embed: Removing {np.sum(mask)} null entries from the sequence DataFrame. {len(df) - np.sum(seq_is_nan)} sequences remaining.', flush=True)
+        print(f'embed: Removing {np.sum(mask)} null entries from the sequence DataFrame. {len(df) - np.sum(mask)} sequences remaining.', flush=True)
         df = df[~mask]
 
     if 'metadata' not in existing_keys:
