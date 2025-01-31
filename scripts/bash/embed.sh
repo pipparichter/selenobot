@@ -8,7 +8,7 @@ MEM=500GB
 TIME=24:00:00
 
 directory="../data/model_organisms/"
-file_names=("gtdb_ecol_metadata.csv" "gtdb_bsub_metadata.csv" "gtdb_mtub_metadata.csv" "gtdb_afis_metadata.csv" "gtdb_paer_metadata.csv")
+file_names=("gtdb_ecol_metadata.csv") "gtdb_bsub_metadata.csv" "gtdb_mtub_metadata.csv" "gtdb_afis_metadata.csv" "gtdb_paer_metadata.csv")
 
 
 for file_name in "${file_names[@]}"; do

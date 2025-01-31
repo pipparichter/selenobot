@@ -244,6 +244,7 @@ class ESMEmbedder(PLMEmbedder):
         elif self.method in ['log']: 
             # Logits have shape (batch_size, seq_length, vocab_size), so this output should be a list of vocab_size tensors.
             # outputs = list(outputs.logits.cpu()[:, -1, :])
+            outputs = outputs.logits.cpu()
             outputs = [emb[len(seq) + 1] for emb, seq in zip(outputs, seqs)]
         return outputs        
 
