@@ -191,6 +191,7 @@ class ProtT5Embedder(PLMEmbedder):
 
     def _postprocess(self, outputs, seqs:List[str]=None) -> List[torch.FloatTensor]:
         ''''''
+        seqs = [''.join(seq.split()) for seq in seqs] # Remove the added whitespace so length is correct. 
         outputs = [emb[:len(seq)] for emb, seq in zip(outputs, seqs)]
         print(outputs)
         outputs = [emb.mean(dim=0) for emb in outputs] # Take the average over the sequence length. 
