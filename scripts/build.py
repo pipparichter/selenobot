@@ -17,6 +17,7 @@ from selenobot.utils import digitize, groupby, sample, seed
 
 # Label 0: Full-length proteins (both selenoproteins and non-selenoproteins). 
 # Label 1: Truncated selenoproteins. 
+# Label 2: Truncated non-selenoproteins (mimicking pseudogenes)
 
 TRUNCATED_SYMBOL = '-'
 MAX_LENGTH = 1000
@@ -117,6 +118,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data-dir', default='../data', type=str)
     parser.add_argument('--overwrite', action='store_true')
+    parser.add_argument('--binary', action='store_true')
+    parser.add_argument('--ternary', action='store_true')
+    parser.add_argument('--quaternary', action='store_true')
     args = parser.parse_args()
 
     uniprot_sprot_path = os.path.join(args.data_dir, 'uniprot_sprot.csv')

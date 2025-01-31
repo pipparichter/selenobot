@@ -278,8 +278,8 @@ def embed(df:pd.DataFrame, path:str=None, overwrite:bool=False, feature_types:Li
         df[string_cols] = df[string_cols].fillna('none') # Avoid mixed column data types. 
         store.put('metadata', df, format=format_, data_columns=None)
 
-    for feature_type in feature_type:
-        if (embedder.type in existing_keys) and (not overwrite):
+    for feature_type in feature_types:
+        if (feature_type in existing_keys) and (not overwrite):
             print(f'Embeddings of type {feature_type} are already present in {path}')
         else:
             print(f'embed: Generating embeddings for {feature_type}.')
