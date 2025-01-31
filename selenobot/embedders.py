@@ -288,7 +288,7 @@ def embed(df:pd.DataFrame, path:str=None, overwrite:bool=False, feature_types:Li
             sort_idxs = np.argsort(ids)
             embs, ids = embs[sort_idxs, :], ids[sort_idxs]
             emb_df = pd.DataFrame(embs, index=ids)
-            store.put(embedder.type, emb_df, format=format_, data_columns=None) 
+            store.put(feature_type, emb_df, format=format_, data_columns=None) 
 
     store.close()
 
