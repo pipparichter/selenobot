@@ -189,9 +189,10 @@ class ProtT5Embedder(PLMEmbedder):
         seqs = [' '.join(list(seq)) for seq in seqs] # Characters in the sequence need to be space-separated, apparently. 
         return seqs  
 
-    def _postprocess(self, outputs, seqs:List[str]) -> List[torch.FloatTensor]:
+    def _postprocess(self, outputs, seqs:List[str]=None) -> List[torch.FloatTensor]:
         ''''''
         outputs = [emb[:len(seq)] for emb, seq in zip(outputs, seqs)]
+        print(outputs)
         outputs = [emb.mean(dim=0) for emb in outputs] # Take the average over the sequence length. 
         return outputs 
 
@@ -237,7 +238,8 @@ class ESMEmbedder(PLMEmbedder):
             outputs = [self.pooler(emb, seq) for emb, seq in zip(outputs, seqs)]
         elif self.method in ['log']: 
             # Logits have shape (batch_size, seq_length, vocab_size), so this output should be a list of vocab_size tensors.
-            outputs = list(outputs.logits.cpu()[:, -1, :])
+            # outputs = list(outputs.logits.cpu()[:, -1, :])
+            outputs = [emb[len(seq)] for emb, seq in zip(outputs, seqs)]
         return outputs        
 
 
