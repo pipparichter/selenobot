@@ -159,6 +159,8 @@ class PLMEmbedder():
                 if outputs is not None:
                     embs += self._postprocess(outputs, seqs=batch_seqs)
                     ids += batch_ids
+                else:
+                    errors += 1
                 batch_ids, batch_seqs, aa_count = [], [], 0
 
         # Handles the case in which the minimum batch size is not reached.
@@ -192,8 +194,9 @@ class ProtT5Embedder(PLMEmbedder):
     def _postprocess(self, outputs, seqs:List[str]=None) -> List[torch.FloatTensor]:
         ''''''
         seqs = [''.join(seq.split()) for seq in seqs] # Remove the added whitespace so length is correct. 
+
+        outputs = outputs.last_hidden_state.cpu()
         outputs = [emb[:len(seq)] for emb, seq in zip(outputs, seqs)]
-        print(outputs)
         outputs = [emb.mean(dim=0) for emb in outputs] # Take the average over the sequence length. 
         return outputs 
 
