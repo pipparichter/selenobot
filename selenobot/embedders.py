@@ -217,7 +217,8 @@ class ESMEmbedder(PLMEmbedder):
     # # checkpoint = 'facebook/esm2_t33_650M_UR50D'
 
     def __init__(self, method:str='gap'):
-        checkpoint = 'facebook/esm2_t33_650M_UR50D'
+        # checkpoint = 'facebook/esm2_t33_650M_UR50D'
+        checkpoint = 'facebook/esm2_t36_3B_UR50D'
         models = {'gap':EsmModel, 'log':EsmForMaskedLM, 'cls':EsmModel}
         poolers = {'gap':ESMEmbedder._pooler_gap, 'cls':ESMEmbedder._pooler_cls} 
 
