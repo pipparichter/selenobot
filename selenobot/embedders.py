@@ -202,6 +202,7 @@ class ProtT5Embedder(PLMEmbedder):
 
 
 class ESMEmbedder(PLMEmbedder):
+    # tokens = list('<eos><unk>LAGVSERTIDPKQNFYMHWCXBUZO')
 
     @staticmethod
     def _pooler_gap(emb:torch.FloatTensor, seq:str) -> torch.FloatTensor:
