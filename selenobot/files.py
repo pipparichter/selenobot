@@ -549,27 +549,5 @@ class GBFFFile(File):
 
         return df.dropna(axis=1, how='all')
 
-    def gaps(self) -> Dict[int, List[tuple]]:
-        '''Figure out the regions of the genome which do not have any annotations in the GBFF file.''' 
-        gaps, n = dict(), 0
-        for contig_number, contig_df in self.df.groupby('contig_number'):
-            contig_df = contig_df.sort_values('start')
-
-            curr_start, curr_stop = contig_df.iloc[0].start, contig_df.iloc[0].start  
-            contig_gaps = list()
-            
-            for row in contig_df.iloc[1:].itertuples():
-                if row.start < curr_stop:
-                    curr_stop = row.stop 
-                else:
-                    contig_gaps.append((curr_stop, row.start))
-                    n += (row.start - curr_stop)
-                    curr_start = row.start 
-                    curr_stop = row.stop 
-
-            gaps[contig_number] = contig_gaps
-
-        print(f'gaps: Found {n} total unannotated base pairs in the GBFF file.')
-        return gaps 
 
 

@@ -27,6 +27,8 @@ class Organism():
         self.blast_path = os.path.join(dir_, f'gtdb_{self.code_name}_protein.blast.tsv')
 
         self.proteins_df = FASTAFile(self.gtdb_proteins_path).to_df(parser=fasta_file_parser_gtdb)
+        self.proteins_df.seq = self.proteins_df.seq.str.replace(r'*', '') # Remove the terminal * character. 
+
         self.labels = dict()
         self.label_info = dict()
 
@@ -50,29 +52,6 @@ class Organism():
             gbff_df = self.gbff_file.to_df(pseudo=pseudo)
             return len(gbff_df)
 
-    def get_match_info(self):
-
-        gbff_df = self.gbff_file.to_df(pseudo=False, drop_duplicates=True)
-        match_df = self.label_info['match'].merge(gbff_df, left_on='subject_id', right_on='protein_id', how='left')
-        match_df = match_df.drop(columns=['protein_id'])
-        match_df.index = match_df.query_id
-        match_df['species'] = self.species
-        return match_df
-
-    def get_error_info(self):
-
-        gbff_df = self.gbff_file.to_df(pseudo=False, drop_duplicates=True)
-        error_df = self.label_info['error'].merge(gbff_df, left_on='subject_id', right_on='protein_id', how='left')
-        error_df = error_df.drop(columns=['protein_id'])
-        error_df.index = error_df.query_id
-        error_df['species'] = self.species
-        return error_df
-
-    def get_pseudo_info(self):
-
-        pseudo_df = self.label_info['pseudo']
-        pseudo_df['species'] = self.species
-        return pseudo_df
 
     def __eq__(self, code_name:str):
         return self.code_name == code_name
@@ -114,136 +93,52 @@ class Organism():
         blast.run(self.gtdb_proteins_path, self.ncbi_proteins_path, output_path=self.blast_path, max_high_scoring_pairs=max_high_scoring_pairs, max_subject_sequences=max_subject_sequences, make_database=False)
         return BLASTFile(self.blast_path)
 
-    @staticmethod
-    def is_valid_hit(hit:dict, start:int=None, stop:int=None, strand:int=None):
-        '''Returns whether or not a hit is "valid", i.e. the starts and stops match, or the amount 
-        of overlap with the GBFF file entry is greater than 50 percent.'''
-        if (hit.strand != strand):
-            return False
-        if (hit.start == start) or (hit.stop == stop):
-            return True
-        if hit.percent_overlap > 50:
-            return True
-        return False
-
     def get_top_hit(self, query):
         '''
         '''
-        df = self.gbff_file.to_df(contig_number=int(query.contig_number))
         start, stop, strand = int(query.start), int(query.stop), int(query.strand)
+        
+        df = self.gbff_file.to_df(contig_number=int(query.contig_number))
         if len(df) == 0: # Case where there are no detected genes on a contig in the GBFF file, but Prodigal found one.
-            return {'overlap':None}, None
+            return {'overlap':0, 'n_hits':0, 'n_valid_hits':0}
+
+        # Filter out everything which definitely has no overlap to speed up search.
+        df = df[~(df.start > stop)]
+        df = df[~(df.stop < start)] 
+        if len(df) == 0: # Case where there are no detected genes on a contig in the GBFF file, but Prodigal found one.
+            return {'overlap':0, 'n_hits':0, 'n_valid_hits':0}
 
         overlap = lambda row : len(np.intersect1d(np.arange(start, stop), np.arange(row.start, row.stop)))
         df['overlap'] = df.apply(overlap, axis=1)
-        df['percent_overlap'] = 100 * (df.overlap / (stop - start))
+        df['same_start'] = (df.start == start)
+        df['same_stop'] = (df.stop == stop)
+        df['length_diff'] = (stop - start) - (df.stop - df.start)
         df = df.sort_values('overlap', ascending=False)
-        # Generate a mask to filter the valid hits. 
-        mask = df.apply(lambda hit: Organism.is_valid_hit(hit, start=start, stop=stop, strand=strand), axis=1)
+        df = df[df.overlap > 0].copy() # Filter out all instances of no overlap. 
+        df['valid_hit'] = (df.same_stop | df.same_stop) & (df.strand == strand)
 
+        # Generate a mask to filter the valid hits, which share either a start or stop position. 
         hit = dict()
-        hit['n_hits_same_strand'] = (df[df.strand == strand].overlap > 0).sum().item()
-        hit['n_hits_opposite_strand'] = (df[df.strand != strand].overlap > 0).sum().item()
-        hit['n_valid_hits'] = mask.sum().item()
-        hit['n_hits'] = (df.overlap > 0).sum().item()
+        hit['n_valid_hits'] = df.valid_hit.sum().item()
+        hit['n_hits'] = len(df)
+        
+        if len(df) == 0: # Case where there are no detected genes on a contig in the GBFF file, but Prodigal found one.
+            return {'overlap':0, 'n_hits':0, 'n_valid_hits':0}
 
-        if hit['n_valid_hits'] > 0:
-            hit.update(df[mask].to_dict(orient='records')[0])
-        else: # If there are no valid hits, set the overlap to be None so it is filtered out.
-            hit['overlap'] = None
-
-        search_results_df = df.copy()
-        search_results_df['is_valid_hit'] = mask
-        search_results_df = search_results_df[search_results_df.overlap > 0]
-        search_results_df = search_results_df if (len(search_results_df) > 0) else None
-
-        return hit, search_results_df # Return the top hit, as well as all other valid hits.
+        df = df[df.valid_hit] if (hit['n_valid_hits'] > 0) else df
+        hit.update(df.to_dict(orient='records')[0])
+        return hit  # Return the top hit, as well as all other valid hits.
 
 
-    def search_gbff_file(self, df:pd.DataFrame, **kwargs):
+    def search(self, df:pd.DataFrame, **kwargs):
         '''Look for sequences in the input GBFF file which overlap somewhere in the specified range.'''  
         
-        info_df, mask = list(), list()
-        for query in tqdm(list(df.itertuples()), desc='search_gbff_file'):
-            hit, self.gbff_search_results[query.Index] = self.get_top_hit(query)
+        hits_df, mask = list(), list()
+        for query in tqdm(list(df.itertuples()), desc='search'):
+            hit = self.get_top_hit(query) # Get the hit with the biggest overlap, with a preference for "valid" hits. 
             hit['id'] = query.Index
-            info_df.append(hit)
-        info_df = pd.DataFrame(info_df).set_index('id')
-        mask = ~info_df.overlap.isnull() # This will be null if there are no hits. 
-        return info_df[mask], df[~mask]
-
-    def get_gbff_search_result(self, id_:str) -> pd.DataFrame:
-        return self.gbff_search_results.get(id_, None)
-
-    def find_matches(self, df:pd.DataFrame):
-        blast_df = self.blast_file.to_df()
-
-        def is_match(hit) -> bool:
-            if pd.isnull(hit.subject_id):
-                return False
-            if hit.sequence_identity < 95:
-                return False  
-            if not math.isclose(hit.subject_sequence_length, hit.query_sequence_length, abs_tol=5):
-                return False
-            return True
-        
-        df, blast_df = df.align(blast_df, axis=0, join='left')
-        mask = blast_df.apply(is_match, axis=1)
-        info_df = blast_df.copy()
-
-        return info_df[mask], df[~mask]
-
-
-    def find_errors(self, df:pd.DataFrame, code_name:str='ecol'):
-        ''''''
-        # NOTE: Seems worth distinguishing between left and right-side boundary errors. 
-        blast_df = BLASTFile(self.blast_path).to_df()
-
-        def is_error(hit) -> bool: # Assuming the exact matches have already been filtered out. 
-            if pd.isnull(hit.subject_id):
-                return False
-            if hit.sequence_identity < 95:
-                return False
-            return True
-
-        df, blast_df = df.align(blast_df, axis=0, join='left')
-        mask = blast_df.apply(is_error, axis=1)
-
-        info_df = blast_df.copy()
-        info_df['left_aligned'] = (info_df.query_alignment_start == 1) & (info_df.subject_alignment_start == 1)
-        info_df['right_aligned'] = (info_df.query_alignment_end == info_df.query_sequence_length - 1) & (info_df.subject_alignment_end == info_df.subject_sequence_length)
-
-        return info_df[mask], df[~mask]
-
-
-    # def is_intergenic(self, row):
-    #     overlaps_df = self.gbff_search_results[row.name]
-    #     if overlaps_df is None:
-    #         return True
-    #     overlaps_df = overlaps_df.sort_values(by='overlap', ascending=False)
-    #     biggest_overlap = overlaps_df.iloc[0].overlap
-    #     if biggest_overlap > 30:
-    #         return False 
-    #     else:
-    #         return True
-
-    def find_inter(self, df:pd.DataFrame, allowed_overlap:int=30):
-        gaps = self.gbff_file.gaps()
-        # Sort so that the concatenated contig masks work. 
-        df = df.sort_values(by='contig_number')
-
-        mask = list()
-        for contig_number, contig_df in df.groupby('contig_number'):
-            contig_mask = np.array([False] * len(contig_df))
-            if contig_number in gaps:
-                contig_gaps = gaps[int(contig_number)]
-                for (gap_start, gap_stop) in contig_gaps:
-                    is_in_gap = lambda row : (int(row.start) >= (gap_start - allowed_overlap)) and (int(row.stop) <= (gap_stop + allowed_overlap))
-                    contig_mask = np.logical_or(contig_mask, contig_df.apply(is_in_gap, axis=1))
-            mask += contig_mask.tolist()
-        mask = np.array(mask)
-        
-        return df[mask], df[~mask]
+            hits_df.append(hit)
+        return pd.DataFrame(hits_df).set_index('id')
 
 
     def label(self):
@@ -251,26 +146,19 @@ class Organism():
         misc_features = ['misc_feature', 'mobile_element', 'repeat_region']
 
         label_info = dict()
-        label_info['match'], proteins_df = self.find_matches(self.proteins_df)
-        label_info['error'], proteins_df = self.find_errors(proteins_df)
-        label_info['inter'], proteins_df = self.find_inter(proteins_df)
+        hits_df = self.search(self.proteins_df)
 
-        gbff_search_info_df, proteins_df = self.search_gbff_file(proteins_df)
-        label_info['pseudo'] = gbff_search_info_df[gbff_search_info_df.pseudo].dropna(axis=1, how='all')
-        label_info['rna'] = gbff_search_info_df[gbff_search_info_df.feature.isin(rna_features)].dropna(axis=1, how='all')
-        label_info['misc'] = gbff_search_info_df[gbff_search_info_df.feature.isin(misc_features)].dropna(axis=1, how='all') 
-
-        # label_info['inter'] = proteins_df[proteins_df.apply(self.is_intergenic, axis=1)]
+        label_info['inter'] = hits_df[(hits_df.n_valid_hits == 0) & (hits_df.overlap < 30)]
+        label_info['error'] = hits_df[(hits_df.n_hits > 0) & (hits_df.n_valid_hits == 0)]
+        label_info['pseudo'] = hits_df[hits_df.pseudo == True].dropna(axis=1, how='all')
+        label_info['cds'] = hits_df[hits_df.feature == 'CDS'].dropna(axis=1, how='all')
+        label_info['rna'] = hits_df[hits_df.feature.isin(rna_features)].dropna(axis=1, how='all')
+        label_info['misc'] = hits_df[hits_df.feature.isin(misc_features)].dropna(axis=1, how='all') 
 
         labels = dict()
         for label, info_df in label_info.items():
             labels.update({id_:label for id_ in info_df.index})
             print(f'Organism.label: Found {len(info_df)} sequences in the input genome with the "{label}" label.')
-        print(f'Organism.label: Successfully labeled {len(labels)} of the {len(self.proteins_df)} proteins.')
-
-        unlabeled_ids = [id_ for id_ in proteins_df.index if (id_ not in labels)]
-        labels.update({id_:'none' for id_ in unlabeled_ids}) # Account for the remaining sequences.
-        label_info['none'] = gbff_search_info_df[gbff_search_info_df.index.isin(unlabeled_ids)]
 
         self.labels = labels
         self.label_info = label_info
