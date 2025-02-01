@@ -4,7 +4,7 @@ MAILUSER=prichter@caltech.edu
 MAILTYPE=END
 GRES=gpu:1
 PARTITION=gpu
-MEM=300GB
+MEM=100GB
 TIME=100:00:00
 
 directory="../data/model_organisms/"
