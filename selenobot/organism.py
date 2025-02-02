@@ -24,7 +24,6 @@ class Organism():
         self.gtdb_proteins_path = os.path.join(dir_, f'gtdb_{self.code_name}_protein.faa')
         self.ncbi_proteins_path = os.path.join(dir_,f'ncbi_{self.code_name}_protein.faa')
         self.ncbi_gbff_path = os.path.join(dir_, f'ncbi_{self.code_name}_genomic.gbff')
-        self.blast_path = os.path.join(dir_, f'gtdb_{self.code_name}_protein.blast.tsv')
 
         self.proteins_df = FASTAFile(self.gtdb_proteins_path).to_df(parser=fasta_file_parser_gtdb)
         self.proteins_df.seq = self.proteins_df.seq.str.replace(r'*', '') # Remove the terminal * character. 
@@ -36,11 +35,6 @@ class Organism():
             self.gbff_file = GBFFFile(self.ncbi_gbff_path)
         else:
             self.gbff_file = self.download_ncbi_data()
-
-        if os.path.exists(self.blast_path):
-            self.blast_file = BLASTFile(self.blast_path)
-        else: 
-            self.blast_file = self.blast()
 
         self.gbff_search_results = dict()
     
@@ -56,7 +50,7 @@ class Organism():
     def __eq__(self, code_name:str):
         return self.code_name == code_name
 
-    def to_df(self, max_seq_length:int=None, label:str=None):
+    def to_df(self, max_seq_length:int=None, label:str=None, include_label_info:bool=True):
         df = self.proteins_df 
         df['code_name'] = self.code_name
         df['genome_id'] = self.genome_id 
@@ -68,6 +62,11 @@ class Organism():
             df = df[df.seq.apply(len) < max_seq_length]
         if (label is not None):
             df = df[df.label == label]
+            label_info_df = self.label_info[label]
+            label_info_df = label_info_df.rename(columns={'seq':'ref_seq'})
+            label_info_df = label_info_df.drop(columns=[col for col in label_info_df.columns if (col in df.columns)])
+            df = df.merge(label_info_df, right_index=True, left_index=True, how='left')
+        df.strand = df.strand.apply(pd.to_numeric)
         return df
 
     def download_ncbi_data(self):

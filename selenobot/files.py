@@ -386,7 +386,12 @@ class XMLFile(File):
                 row.update(self.get_annotation(entry))
 
                 if load_seqs:
-                    row['seq'] = self.findall(entry, 'sequence')[-1].text
+                    # Why am I using findall here instead of just find?
+                    seq = self.findall(entry, 'sequence')[-1]
+                    row['seq'] = seq.text
+                    # NOTE: It seems as though not all fragmented sequences are tagged with a fragment attribute.
+                    # row['fragment'] = 'fragment' in seq.attrib
+                row['existence'] = self.find(entry, 'proteinExistence').attrib['type']
                 row['name'] = self.find(entry, 'name').text 
 
                 for accession in accessions:

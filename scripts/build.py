@@ -15,19 +15,17 @@ import warnings
 from selenobot.tools import Clusterer
 from selenobot.utils import digitize, groupby, sample, seed
 
-# Label 0: Full-length proteins (both selenoproteins and non-selenoproteins). 
-# Label 1: Truncated selenoproteins. 
-# Label 2: Truncated non-selenoproteins (mimicking pseudogenes)
 
-TRUNCATED_SYMBOL = '-'
-MAX_LENGTH = 1000
+label_names = dict()
+label_names[0] = 'full-length'
+label_names[1] = 'truncated selenoprotein'
+label_names[2] = 'short full-length'
 
 warnings.simplefilter('ignore')
 seed(42)
 
 
-# NOTE: C terminus is the end terminus. N terminus is where the methionine is. 
-def clean(metadata_df:pd.DataFrame, max_length:int=MAX_LENGTH, **kwargs) -> pd.DataFrame:
+def clean(metadata_df:pd.DataFrame) -> pd.DataFrame:
     '''''' 
     # There are duplicates here, as there were multiple accessions for the same protein. 
     metadata_df = metadata_df.drop_duplicates('name', keep='first')
@@ -35,10 +33,6 @@ def clean(metadata_df:pd.DataFrame, max_length:int=MAX_LENGTH, **kwargs) -> pd.D
     mask = ~(metadata_df.domain == 'Bacteria')
     metadata_df = metadata_df[~mask]
     print(f'clean: Removed {mask.sum()} non-bacterial proteins from the DataFrame. {len(metadata_df)} sequences remaining.') 
-
-    mask = metadata_df.seq.apply(len) > max_length
-    metadata_df = metadata_df[~mask]
-    print(f'clean: Removed {mask.sum()} proteins which exceed {max_length} amino acids in length from the DataFrame. {len(metadata_df)} sequences remaining.') 
 
     # NOTE: Opted to remove all fragmented proteins, not just the C-terminal ones, as I don't trust the annotations of the fragments. 
     mask = ~metadata_df.non_terminal_residue.isnull() # Get a filter for all proteins which have non-terminal residues. 
@@ -49,7 +43,7 @@ def clean(metadata_df:pd.DataFrame, max_length:int=MAX_LENGTH, **kwargs) -> pd.D
 
 
 
-def truncate_sec(metadata_df:pd.DataFrame, **kwargs) -> str:
+def truncate_sec(metadata_df:pd.DataFrame, trunc_symbol:str='-') -> str:
     '''Truncate the selenoproteins stored in the input file.'''
     metadata_df_truncated = []
     for row in tqdm(metadata_df.to_dict(orient='records'), 'truncate_sec: Truncating selenoproteins...'):
@@ -61,16 +55,16 @@ def truncate_sec(metadata_df:pd.DataFrame, **kwargs) -> str:
         row['original_length'] = len(seq)
         row['seq'] = seq[:row['sec_index']] # Get the portion of the sequence prior to the U residue.
         metadata_df_truncated.append(row)
-    metadata_df_truncated = pd.DataFrame(metadata_df_truncated, index=[id_ + TRUNCATED_SYMBOL for id_ in metadata_df.index])
+    metadata_df_truncated = pd.DataFrame(metadata_df_truncated, index=[id_ + trunc_symbol for id_ in metadata_df.index])
     metadata_df_truncated.index.name = 'id'
     return metadata_df_truncated
 
 
 
-def split(metadata_df:pd.DataFrame, data_dir:str=None, overwrite:bool=False) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def split(metadata_df:pd.DataFrame, overwrite:bool=False) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     '''Divide the uniprot data into training, testing, and validation datasets.'''
 
-    clusterer = Clusterer(tool='mmseqs', name='all_labels', cwd=data_dir)
+    clusterer = Clusterer(tool='mmseqs', name=f'{mode}_all', cwd=data_dir)
     metadata_df = clusterer.run(metadata_df, overwrite=overwrite)
     
     n = len(metadata_df) # Get the original number of sequences for checking stuff later. 
@@ -97,16 +91,20 @@ def check(train_metadata_df:pd.DataFrame, test_metadata_df:pd.DataFrame, val_met
     
 
 # NOTE: Should I dereplicate the selenoproteins before or after truncation? Seems like after would be a good idea.
-def process(path:str, data_dir:str=None, label:int=None, overwrite:bool=False, **kwargs):
+def process(path:str=None, label:int=None, overwrite:bool=False, max_seq_length:int=None, min_seq_length:int=None):
 
-    print(f'process: Processing dataset {path}...')
+    print(f'process: Processing data for group "{label_names[label]}"...')
+    metadata_df = clean(pd.read_csv(path, index_col=0))
 
-    metadata_df = clean(pd.read_csv(path, index_col=0), **kwargs)
+    if min_seq_length is not None:
+        metadata_df = metadata_df[metadata_df.seq.apply(len) >= min_seq_length]
+    if max_seq_length is not None:
+        metadata_df = metadata_df[metadata_df.seq.apply(len) < max_seq_length]
 
     if label == 1: # Truncate if the dataset is for category 1 or 2. 
         metadata_df = truncate_sec(metadata_df)
-
-    clusterer = Clusterer(name=f'label_{label}', cwd=data_dir, tool='mmseqs')
+    
+    clusterer = Clusterer(name=f'{mode}_{label}', cwd=data_dir, tool='mmseqs')
     metadata_df = clusterer.dereplicate(metadata_df, overwrite=overwrite) # Don't cluster by homology just yet. 
     metadata_df['label'] = label # Add labels to the data marking the category. 
 
@@ -118,21 +116,32 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data-dir', default='../data', type=str)
     parser.add_argument('--overwrite', action='store_true')
-    parser.add_argument('--binary', action='store_true')
-    parser.add_argument('--ternary', action='store_true')
-    parser.add_argument('--quaternary', action='store_true')
+    parser.add_argument('--n-classes', default=2, type=int)
+    parser.add_argument('--max-seq-length', default=1000, type=int)
     args = parser.parse_args()
+
+    global mode 
+    mode = f'{args.n_classes}c'
+
+    global data_dir
+    data_dir = args.data_dir
 
     uniprot_sprot_path = os.path.join(args.data_dir, 'uniprot_sprot.csv')
     uniprot_sec_path = os.path.join(args.data_dir, 'uniprot_sec.csv')
 
-    label_0_metadata_df = process(uniprot_sprot_path, label=0, data_dir=args.data_dir, overwrite=args.overwrite)
-    label_1_metadata_df = process(uniprot_sec_path, label=1, data_dir=args.data_dir, overwrite=args.overwrite)
-    metadata_df = pd.concat([label_0_metadata_df, label_1_metadata_df])
+    kwargs = dict()
+    kwargs[0] = {'path':uniprot_sprot_path, 'min_seq_length':200 if (args.n_classes == 3) else None, 'max_seq_length':args.max_seq_length}
+    kwargs[1] = {'path':uniprot_sec_path, 'min_seq_length':None, 'max_seq_length':args.max_seq_length}
+    kwargs[2] = {'path':uniprot_sprot_path, 'min_seq_length':None, 'max_seq_length':200}
 
-    train_metadata_df, test_metadata_df, val_metadata_df = split(metadata_df, data_dir=args.data_dir, overwrite=args.overwrite)
+    metadata_df = []
+    for label in range(args.n_classes):
+        metadata_df += [process(label=label, overwrite=args.overwrite, **kwargs.get(label))]
+    metadata_df = pd.concat(metadata_df)
+
+    train_metadata_df, test_metadata_df, val_metadata_df = split(metadata_df, overwrite=args.overwrite)
     
-    metadata = {'train_metadata.csv':train_metadata_df, 'test_metadata.csv':test_metadata_df, 'val_metadata.csv':val_metadata_df}
+    metadata = {f'{mode}_metadata_train.csv':train_metadata_df, f'{mode}_metadata_test.csv':test_metadata_df, f'{mode}_metadata_val.csv':val_metadata_df}
     for file_name, metadata_df in metadata.items():
         path = os.path.join('.', file_name)
         metadata_df.to_csv(path)
