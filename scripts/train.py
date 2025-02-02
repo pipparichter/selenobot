@@ -24,7 +24,6 @@ if __name__ == '__main__':
     parser.add_argument('--weighted-loss', action='store_true')
     parser.add_argument('--add-length-feature', action='store_true')
     parser.add_argument('--aa-tokens-only', action='store_true')
-    parser.add_argument('--weighted-loss', action='store_true')
 
     parser.add_argument('--models-dir', default='../models', type=str)
 
