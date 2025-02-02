@@ -20,7 +20,7 @@ TIME=24:00:00
 
 
 directory="../data/"
-file_names=($(ls "$directory*c_metadata*"))
+file_names=($(ls | grep -E '^[0-9]\+c_metadata_.*\.csv$'))
 
 for file_name in "${file_names[@]}"; do
     output_path=$(echo "$directory$file_name" | sed "s/_metadata\.csv/.h5/")
