@@ -33,7 +33,7 @@ class Dataset(torch.utils.data.Dataset):
 
     @staticmethod
     def remove_non_aa_tokens(df:pd.DataFrame):
-        tokens = list('<eos>ULAGVSERTIDPKQNFYMHWCXBZO')
+        tokens = ['<eos>'] + list('ULAGVSERTIDPKQNFYMHWCXBZO')
         vocab = AutoTokenizer.from_pretrained(ESMEmbedder.checkpoint).get_vocab()
         # vocab = {token:code for token, code in vocab.items() if token in tokens}
         df = df[[vocab[token] for token in tokens]]
