@@ -58,7 +58,7 @@ class Dataset(torch.utils.data.Dataset):
             self.labels_one_hot_encoded = one_hot(self.labels, num_classes=n_classes).to(self.device)
 
         self.embeddings = torch.from_numpy(df[Dataset.get_feature_cols(df)].values).to(self.device)
-        self.n_features = embeddings.shape[-1]
+        self.n_features = self.embeddings.shape[-1]
         self.metadata = df[[col for col in df.columns if type(col) == str]] 
         self.ids = df.index.values
 
