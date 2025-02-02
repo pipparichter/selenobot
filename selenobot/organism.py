@@ -56,13 +56,14 @@ class Organism():
     def __eq__(self, code_name:str):
         return self.code_name == code_name
 
-    def to_df(self, max_seq_length:int=2000, label:str=None):
+    def to_df(self, max_seq_length:int=None, label:str=None):
         df = self.proteins_df 
         df['code_name'] = self.code_name
         df['genome_id'] = self.genome_id 
         df['species'] = self.species
         if len(self.labels) > 0:
-            df = df.merge(pd.DataFrame({'label':self.labels}).fillna('none'), right_index=True, left_index=True, how='left')
+            assert len(self.labels) == len(df), f'Organism: There are {len(self.labels)} labels and {len(df)} entries in the protein DataFrame.'
+            df = df.merge(pd.DataFrame({'label':self.labels}), right_index=True, left_index=True, how='left')
         if (max_seq_length is not None):
             df = df[df.seq.apply(len) < max_seq_length]
         if (label is not None):
@@ -147,11 +148,13 @@ class Organism():
 
         label_info = dict()
         hits_df = self.search(self.proteins_df)
-
+        
         label_info['inter'] = hits_df[(hits_df.n_valid_hits == 0) & (hits_df.overlap < 30)]
         label_info['error'] = hits_df[(hits_df.n_hits > 0) & (hits_df.n_valid_hits == 0)]
+
+        hits_df = hits_df[hits_df.n_valid_hits > 0]
         label_info['pseudo'] = hits_df[hits_df.pseudo == True].dropna(axis=1, how='all')
-        label_info['cds'] = hits_df[hits_df.feature == 'CDS'].dropna(axis=1, how='all')
+        label_info['cds'] = hits_df[(hits_df.feature == 'CDS') & ~(hits_df.pseudo == True)].dropna(axis=1, how='all')
         label_info['rna'] = hits_df[hits_df.feature.isin(rna_features)].dropna(axis=1, how='all')
         label_info['misc'] = hits_df[hits_df.feature.isin(misc_features)].dropna(axis=1, how='all') 
 

@@ -202,7 +202,7 @@ class ProtT5Embedder(PLMEmbedder):
 
 
 class ESMEmbedder(PLMEmbedder):
-    # tokens = list('<eos><unk>LAGVSERTIDPKQNFYMHWCXBUZO')
+    checkpoint = 'facebook/esm2_t36_3B_UR50D'
 
     @staticmethod
     def _pooler_gap(emb:torch.FloatTensor, seq:str) -> torch.FloatTensor:
@@ -219,11 +219,11 @@ class ESMEmbedder(PLMEmbedder):
 
     def __init__(self, method:str='gap'):
         # checkpoint = 'facebook/esm2_t33_650M_UR50D'
-        checkpoint = 'facebook/esm2_t36_3B_UR50D'
+        
         models = {'gap':EsmModel, 'log':EsmForMaskedLM, 'cls':EsmModel}
         poolers = {'gap':ESMEmbedder._pooler_gap, 'cls':ESMEmbedder._pooler_cls} 
 
-        super(ESMEmbedder, self).__init__(model=models[method], tokenizer=AutoTokenizer, checkpoint=checkpoint)
+        super(ESMEmbedder, self).__init__(model=models[method], tokenizer=AutoTokenizer, checkpoint=ESMEmbedder.checkpoint)
         self.method = method 
         self.pooler = poolers.get(method, None)
 

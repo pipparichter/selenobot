@@ -5,13 +5,14 @@ import numpy as np
 import torch
 from torch.utils.data import WeightedRandomSampler
 from typing import List, Dict, NoReturn, Iterator
-# from sklearn.feature_selection import SelectKBest, f_classif
 import re
 import subprocess
 import time
 import copy
 from torch.nn.functional import one_hot
 from torch.utils.data import DataLoader
+from selenobot.embedders import ESMEmbedder
+from transformers import AutoTokenizer 
 
 
 class Dataset(torch.utils.data.Dataset):
@@ -19,7 +20,28 @@ class Dataset(torch.utils.data.Dataset):
     and accessing information about selenoprotein content.'''
     categories = {0:'label_0', 1:'label_1', 2:'label_2'}
 
-    def __init__(self, df:pd.DataFrame, n_features:int=1024, half_precision:bool=False, n_classes:int=2):
+    @staticmethod
+    def get_feature_cols(df:pd.DataFrame):
+        feature_cols = [int(col) for col in df.columns if (not np.isnan(pd.to_numeric(col, errors='coerce')))]
+        return sorted(feature_cols)
+
+    @staticmethod
+    def add_length_feature(df:pd.DataFrame):
+        feature_label = len(Dataset.get_feature_cols(df))
+        df[feature_label] = df.seq.apply(len) 
+        return df
+
+    @staticmethod
+    def remove_non_aa_tokens(df:pd.DataFrame):
+        tokens = list('<eos>ULAGVSERTIDPKQNFYMHWCXBZO')
+        vocab = AutoTokenizer.from_pretrained(ESMEmbedder.checkpoint).get_vocab()
+        # vocab = {token:code for token, code in vocab.items() if token in tokens}
+        df = df[[vocab[token] for token in tokens]]
+        df.columns = np.arange(len(tokens)) # Reset the embedding column names. 
+        return df
+
+
+    def __init__(self, df:pd.DataFrame, n_classes:int=2):
         '''Initializes a Dataset from a pandas DataFrame containing embeddings and labels.
         
         :param df: A pandas DataFrame containing the data to store in the Dataset. 
@@ -28,24 +50,18 @@ class Dataset(torch.utils.data.Dataset):
         :param n_classes: The number of classes in the labels. 
         '''
         self.n_classes = n_classes
-        self.n_features = n_features
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.half_precision = half_precision 
 
-        self.dtype = torch.bfloat16 if half_precision else torch.float32
         self.labels, self.labels_one_hot_encoded = None, None
         if ('label' in df.columns):
-            df = df[df.label.isin(list(range(n_classes)))] # Filter the DataFrame to only include entries for relevant classes. 
             self.labels = torch.from_numpy(df['label'].values).type(torch.LongTensor)
-            self.labels_one_hot_encoded = one_hot(self.labels, num_classes=self.n_classes).to(self.dtype).to(self.device)
+            self.labels_one_hot_encoded = one_hot(self.labels, num_classes=n_classes).to(self.dtype).to(self.device)
 
-        if n_features is not None:
-            self.embeddings = torch.from_numpy(df[list(range(n_features))].values).to(self.device).to(self.dtype)
-        else:
-            self.embeddings = None
-        
+        self.embeddings = torch.from_numpy(df[Dataset.get_feature_cols(df)].values).to(self.device).to(self.dtype)
+        self.n_features = len(feature_cols)
         self.metadata = df[[col for col in df.columns if type(col) == str]] 
         self.ids = df.index.values
+
         self.scaled = False
         self.length = len(df)
         
@@ -70,23 +86,19 @@ class Dataset(torch.utils.data.Dataset):
         dataset = copy.copy(self)
         embeddings = dataset.embeddings.cpu().numpy()
         embeddings = scaler.transform(embeddings)
-        embeddings = torch.Tensor(embeddings).to(dataset.dtype).to(dataset.device)
+        embeddings = torch.FloatTensor(embeddings).to(dataset.device)
         dataset.embeddings = embeddings
         dataset.scaled = True
         return dataset
 
     @classmethod
-    def from_hdf(cls, path:str, feature_type:str=None, n_classes:int=2, half_precision:bool=False):
-        metadata_df = pd.read_hdf(path, 'metadata')
-        if feature_type is None:
-            return cls(metadata_df, n_features=None, n_classes=n_classes, half_precision=half_precision) 
-
+    def from_hdf(cls, path:str, feature_type:str=None, n_classes:int=2, add_length_feature:bool=False, aa_tokens_only:bool=False):
         df = pd.read_hdf(path, key=feature_type)
-        n_features = len(df.columns) # Get the number of features. 
-        if df.index.name is None:
-            df.index.name = 'id' # Forgot to set the index name in some of the files. 
-        df = df.merge(metadata_df, right_index=True, left_index=True, how='inner')
-        return cls(df, n_features=n_features, n_classes=n_classes, half_precision=half_precision)
+        df = Dataset.remove_non_aa_tokens(df) if (aa_tokens_only and (feature_type == 'plm_esm_log')) else df
+        df.index.name = 'id' # Forgot to set the index name in some of the files. 
+        df = df.merge(pd.read_hdf(path, 'metadata'), right_index=True, left_index=True, how='inner')
+        df = Dataset.add_length_feature(df) if add_length_feature else df
+        return cls(df, n_classes=n_classes)
     
     def shape(self):
         return self.embeddings.shape
@@ -127,7 +139,7 @@ class Dataset(torch.utils.data.Dataset):
 
     def subset(self, start_idx:int=0, end_index:int=-1):
         df = self.to_df().iloc[start_idx:end_index].copy()
-        return Dataset(df, n_features=self.n_features, half_precision=self.half_precision, n_classes=self.n_classes)
+        return Dataset(df, n_classes=self.n_classes)
 
     # def sort(self, idxs):
     #     assert len(idxs) == self.__len__(), f'Dataset.sort: List of indices has length {len(idxs)}, which does not match the length of the dataset {self.__len__()}.'
