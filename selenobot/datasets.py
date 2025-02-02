@@ -74,7 +74,7 @@ class Dataset(torch.utils.data.Dataset):
         metadata = self.metadata.copy(deep=True)
         # df = metadata.merge(pd.DataFrame(embeddings, index=self.ids), left_index=True, right_index=True, validate='one_to_one')
         df = pd.concat([metadata, pd.DataFrame(embeddings, index=self.ids)], ignore_index=False, axis=1)
-        dataset = Dataset(df, n_features=self.n_features, n_classes=self.n_classes, half_precision=self.half_precision)
+        dataset = Dataset(df, n_features=self.n_features, n_classes=self.n_classes)
         dataset.scaled = self.scaled 
         return dataset
 
