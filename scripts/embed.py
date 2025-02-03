@@ -15,10 +15,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     if args.output_path is None:
-        output_path = args.input_path.replace('_metadata', '').replace('.csv', 'h5')
+        output_path = args.input_path.replace('_metadata', '').replace('.csv', '.h5')
     else:
         output_path = args.output_path 
-        
+
     # NOTE: Will this throw an error if a partial column isn't present?
     df = pd.read_csv(args.input_path, index_col=0, dtype={'partial':str})
     embed(df, path=output_path, feature_types=args.feature_types, overwrite=args.overwrite)
