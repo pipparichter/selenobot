@@ -8,6 +8,7 @@ from tqdm import tqdm
 
 from selenobot.tools import BLAST
 from selenobot.files import BLASTFile, FASTAFile, GBFFFile, fasta_file_parser_gtdb
+from selenobot.utils import GTDB_DTYPES
 
 class Organism():
 
@@ -26,7 +27,8 @@ class Organism():
         self.ncbi_gbff_path = os.path.join(dir_, f'ncbi_{self.code_name}_genomic.gbff')
 
         self.proteins_df = FASTAFile(self.gtdb_proteins_path).to_df(parser=fasta_file_parser_gtdb)
-        self.proteins_df.seq = self.proteins_df.seq.str.replace(r'*', '') # Remove the terminal * character. 
+        self.proteins_df.seq = self.proteins_df.seq.str.replace(r'*', '') # Remove the terminal * character.
+        self.protein_df = self.proteins_df.astype(GTDB_DTYPES)
 
         self.labels = dict()
         self.label_info = dict()
