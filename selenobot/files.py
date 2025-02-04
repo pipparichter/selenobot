@@ -14,6 +14,7 @@ from Bio.SeqRecord import SeqRecord
 import subprocess
 
 
+
 def count_lines(path:str) -> int:
     cmd = f'cat {path} | wc -l'
     result = subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
@@ -504,7 +505,14 @@ class GBFFFile(File):
 
         return contig_id, df 
 
-    def __init__(self, path:str):
+    @staticmethod
+    def clean_nt_seq(nt_seq:str):
+        nt_seq = re.sub('[\n\s0-9]', '', nt_seq)
+        nt_seq = nt_seq.upper()
+        return nt_seq
+
+
+    def __init__(self, path:str, load_nt_seqs:bool=True):
         
         with open(path, 'r') as f:
             content = f.read()
@@ -513,6 +521,14 @@ class GBFFFile(File):
         # a "contig" feature.
         # NOTE: I used the lookahead match here because it is not treated as a capturing group. 
         contigs = re.findall(r'LOCUS(.*?)(?=LOCUS|$)', content, flags=re.DOTALL) # DOTALL flag means the dot character also matches newlines.
+
+        self.nt_seqs = None
+        if load_nt_seqs:
+            nt_seqs = re.findall(r'ORIGIN(.*?)(?=//)', content, flags=re.DOTALL)
+            nt_seqs = [GBFFFile.clean_nt_seq(nt_seq) for nt_seq in nt_seqs]
+            # Map each nucleotide sequence to a contig number. 
+            self.nt_seqs = {i + 1:nt_seq for i, nt_seq in enumerate(nt_seqs)}
+            assert len(self.nt_seqs) == len(contigs), 'GBFFFile.__init__: Expected there to be one nucleotide sequence per contig. '
 
         self.df, self.contig_ids = [], []
         for i, contig in enumerate(contigs):
@@ -523,6 +539,47 @@ class GBFFFile(File):
                 self.df.append(df)
         self.df = pd.concat(self.df)
         self.n_contigs = len(contigs)
+        
+        if load_nt_seqs:
+            self._add_start_stop_codons()
+
+
+    def get_nt_seq(self, start:int=None, stop:int=None, strand:int=None, contig_number:int=None, error:str='ignore'):
+        nt_seq = self.nt_seqs[contig_number] 
+        nt_seq = str(Seq(nt_seq).reverse_complement()) if (strand == -1) else nt_seq # If on the opposite strand, get the reverse complement. 
+        nt_seq = nt_seq[start - 1:stop] # Pretty sure the stop position is non-inclusive, so need to shift it over.
+
+        if( len(nt_seq) % 3 == 0) and (error == 'raise'):
+            raise Exception(f'GBFFFile.get_nt_seq: Expected the length of the nucleotide sequence to be divisible by three, but sequence is of length {len(nt_seq)}.')
+
+        return nt_seq
+
+    def get_stop_codon(self, start:int=None, stop:int=None, strand:int=None, contig_number:int=None, **kwargs):
+        return self.get_nt_seq(start=start, stop=stop, strand=strand, contig_number=contig_number)[-3:]
+    
+    def get_start_codon(self, start:int=None, stop:int=None, strand:int=None, contig_number:int=None, **kwargs):
+        return self.get_nt_seq(start=start, stop=stop, strand=strand, contig_number=contig_number)[:3]
+
+    def _add_start_stop_codons(self, remove_invalid:bool=True):
+
+        start_codons, stop_codons = list(), list()
+
+        for row in self.df.to_dict(orient='records'):
+            if row['feature'] == 'CDS':
+                stop_codons.append(self.get_stop_codon(**row))
+                start_codons.append(self.get_start_codon(**row))
+            else:
+                stop_codons.append('none')
+                start_codons.append('none')
+
+        self.df['start_codon'] = start_codons
+        self.df['stop_codon'] = stop_codons
+        remove_invalid_stop_codon = lambda c : 'none' if (c not in ['TAA', 'TAG', 'TGA'] ) else c
+        remove_invalid_start_codon = lambda c : 'none' if (c not in ['ATG', 'GTG', 'TTG']) else c
+
+        if remove_invalid:
+            self.df.stop_codon = self.df.stop_codon.apply(remove_invalid_stop_codon)
+            self.df.start_codon = self.df.start_codon.apply(remove_invalid_start_codon)
 
 
     @staticmethod
@@ -546,7 +603,13 @@ class GBFFFile(File):
 
 
     def to_df(self, drop_duplicates:bool=False, **filters):
-        df = self.df[GBFFFile.fields]
+
+        fields = GBFFFile.fields[:]
+        if self.nt_seqs is not None:
+            fields += ['start_codon', 'stop_codon']
+
+        df = self.df.copy()[fields]
+
         if drop_duplicates:
             df = GBFFFile.drop_duplicates(df)
         for col, val in filters.items():

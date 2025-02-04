@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 from selenobot.tools import BLAST
 from selenobot.files import BLASTFile, FASTAFile, GBFFFile, fasta_file_parser_gtdb
-from selenobot.utils import GTDB_DTYPES
+from selenobot.utils import apply_gtdb_dtypes
 
 class Organism():
 
@@ -28,7 +28,7 @@ class Organism():
 
         self.proteins_df = FASTAFile(self.gtdb_proteins_path).to_df(parser=fasta_file_parser_gtdb)
         self.proteins_df.seq = self.proteins_df.seq.str.replace(r'*', '') # Remove the terminal * character.
-        self.protein_df = self.proteins_df.astype(GTDB_DTYPES)
+        self.protein_df = apply_gtdb_dtypes(self.proteins_df)
 
         self.labels = dict()
         self.label_info = dict()
@@ -52,7 +52,7 @@ class Organism():
     def __eq__(self, code_name:str):
         return self.code_name == code_name
 
-    def to_df(self, max_seq_length:int=None, label:str=None, include_label_info:bool=True):
+    def to_df(self, max_seq_length:int=None, label:str=None):
         df = self.proteins_df 
         df['code_name'] = self.code_name
         df['genome_id'] = self.genome_id 
@@ -87,13 +87,6 @@ class Organism():
         shutil.rmtree(os.path.join(self.dir_, 'ncbi_dataset'))
         os.remove(output_path)
         return GBFFFile(self.ncbi_gbff_path)
-
-
-    def blast(self, max_high_scoring_pairs=1, max_subject_sequences=1):
-        '''Run BLAST for the GTDB genome against the corresponding NCBI reference genome.'''
-        blast = BLAST()
-        blast.run(self.gtdb_proteins_path, self.ncbi_proteins_path, output_path=self.blast_path, max_high_scoring_pairs=max_high_scoring_pairs, max_subject_sequences=max_subject_sequences, make_database=False)
-        return BLASTFile(self.blast_path)
 
     def get_top_hit(self, query):
         '''

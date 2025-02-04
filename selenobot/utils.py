@@ -83,9 +83,12 @@ GTDB_DTYPES['domain'] = str
 GTDB_DTYPES['prefix'] = str
 
 
-def gtdb_load_genome_metadata(path:str, reps_only:bool=True):
-    '''Load in a GTDB metadata TSV file and fix the columns to make them more usable.'''
+def apply_gtdb_dtypes(df:pd.DataFrame):
+    dtypes = {col:dtype for col, dtype in GTDB_DTYPES.items() if (col in df.columns)}
+    return df.astype(dtypes)
 
+def load_gtdb_genome_metadata(path:str, reps_only:bool=True):
+    '''Load in a GTDB metadata TSV file and fix the columns to make them more usable.'''
     df = pd.read_csv(path, delimiter='\t', low_memory=False, dtype={'partial':str})
     df = df.rename(columns={'accession':'genome_id'})
     df['prefix'] = [genome_id[:2] for genome_id in df.genome_id] 
@@ -105,6 +108,7 @@ def gtdb_load_genome_metadata(path:str, reps_only:bool=True):
                 df[col] = pd.to_numeric(df[col], errors='coerce')
             if dtype == [str]:
                 df[col] = df[col].astype(str)
+
     return df.set_index('genome_id')
 
 

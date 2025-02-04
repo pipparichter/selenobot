@@ -4,7 +4,7 @@ MAILUSER=prichter@caltech.edu
 MAILTYPE=END
 GRES=gpu:1
 PARTITION=gpu
-MEM=500GB
+MEM=600GB
 TIME=24:00:00
 
 # directory="../data/model_organisms/"
@@ -20,7 +20,7 @@ TIME=24:00:00
 
 
 directory="../data/"
-file_names=($(ls "$directory" | grep '^[0-9]\+c_metadata_.*\.csv$'))
+file_names=($(ls "$directory" | grep '^[0-9]\+c_metadata_train\.csv$'))
 
 for file_name in "${file_names[@]}"; do
     job_name="embed_$file_name"

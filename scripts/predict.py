@@ -6,43 +6,39 @@ import os
 from selenobot.utils import default_output_path
 
 
-def predict(model_type:str, feature_type:str, model_name_format='{model_type}_model_{feature_type}', models_dir:str=None, input_path:str=None) -> pd.DataFrame:
-    '''Load a model and dataset for the specified model type and feature type, and generate predictions for the dataset.'''
-    model_name = model_name_format.format(model_type=model_type, feature_type=feature_type)
-    model = Classifier.load(os.path.join(models_dir, model_name + '.pkl'))
-    dataset = Dataset.from_hdf(input_path, feature_type=feature_type, n_classes=3 if (model_type == 'ternary') else 2)
-    results_df = model.predict(dataset)
-    results_df = results_df.rename(columns={col:f'{model_name}_{col}' for col in results_df.columns})
-    return results_df
-
-
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--feature-types', nargs='+', default=['plm_esm_gap', 'plm_esm_cls', 'plm_esm_log', 'plm_pt5', 'aa_1mer', 'len'])
-    parser.add_argument('--model-types', nargs='+', default=['binary'])
+    parser.add_argument('--feature-type', type=str, default='plm_esm_gap')
+    parser.add_argument('--n-classes', type=int, default=2)
+    parser.add_argument('--model-name', type=str, default=None)
     parser.add_argument('--input-path', type=str, default=None)
     parser.add_argument('--models-dir', default='../models', type=str)
     parser.add_argument('--results-dir', default='../data/results/', type=str)
+    parser.add_argument('--add-length-feature', action='store_true')
+    parser.add_argument('--aa-tokens-only', action='store_true')
+
+    # parser.add_argument('--overwrite', action='store_true')
 
     args = parser.parse_args()
 
     output_path = default_output_path(os.path.basename(args.input_path), op='predict', ext='csv')
     output_path = os.path.join(args.results_dir, output_path)
+  
+    metadata_df = pd.read_csv(output_path, index_col=0) if os.path.exists(output_path) else pd.read_hdf(args.input_path, key='metadata')
 
-    results_df = list()
-    pbar = tqdm(total=len(args.feature_types) * len(args.model_types), desc='predict')
-    for model_type in args.model_types:
-        for feature_type in args.feature_types:
-            pbar.set_description(f'predict: Predicting using {model_type} model trained on {feature_type} features.')
-            results_df.append(predict(model_type, feature_type, models_dir=args.models_dir, input_path=args.input_path))
-            pbar.update(1)
+    model = Classifier.load(os.path.join(args.models_dir, args.model_name + '.pkl'))
+    
+    kwargs = {'add_length_feature':args.add_length_feature, 'aa_tokens_only':args.aa_tokens_only}
+    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type, n_classes=args.n_classes, **kwargs)
 
-    results_df = pd.concat(results_df, axis=1)
-    metadata_df = pd.read_hdf(args.input_path, key='metadata')
-    results_df = results_df.merge(metadata_df, left_index=True, right_index=True) # Add the metadata to the results.
-    results_df.to_csv(output_path)
+    pred_df = model.predict(dataset)
+    pred_df.columns = [f'{args.model_name}_{col}' for col in pred_df.columns] # Rename the columns so that the model is specified. 
+    metadata_df = metadata_df.drop(columns=pred_df.columns, errors='ignore') # Drop existing predictions columns for the model.
 
-    print(f'predict: Predictions written to {output_path}')
+    pred_df = pred_df.merge(metadata_df, left_index=True, right_index=True, how='left') # Add the metadata to the results.
+    pred_df.to_csv(output_path)
+
+    print(f'Predictions for model {args.model_name} written to {output_path}')
 
 
