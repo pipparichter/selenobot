@@ -49,7 +49,6 @@ def fasta_file_parser_gtdb(description:str):
     columns = ['start', 'stop', 'strand', 'ID', 'partial', 'start_type', 'rbs_motif', 'rbs_spacer', 'gc_content']
     match = re.search(pattern, description)
     parsed_header = {col:match.group(i + 1) for i, col in enumerate(columns)}
-    parsed_header['contig_number'] = int(parsed_header['ID'].split('_')[0])
     return parsed_header
 
 
@@ -95,6 +94,8 @@ class FASTAFile(File):
         else:
             self.seqs, self.ids, self.descriptions = seqs, ids, descriptions
 
+        self.seqs = [seq.replace(r'*', '') for seq in self.seqs] # Remove the terminal * character if present.
+
     def __len__(self):
         return len(self.seqs)
 
@@ -102,6 +103,7 @@ class FASTAFile(File):
     def from_df(cls, df:pd.DataFrame, add_description:bool=True):
         ids = df.index.values.tolist() # Expects the index to contain the IDs. 
         seqs = df.seq.values.tolist()
+
         descriptions = [''] * len(seqs)
 
         if add_description:
@@ -416,7 +418,7 @@ class XMLFile(File):
 class GBFFFile(File):
     '''Class for parsing GenBank flat files, obtained from NCBI.'''
 
-    fields = ['feature', 'contig_number', 'strand', 'start', 'stop', 'partial', 'product', 'frameshifted', 'incomplete', 'internal_stop', 'protein_id', 'seq', 'pseudo']
+    fields = ['feature', 'contig_id', 'strand', 'start', 'stop', 'partial', 'product', 'frameshifted', 'incomplete', 'internal_stop', 'protein_id', 'seq', 'pseudo']
     # TODO: I should automatically detect the features...
     features = ['gene', 'CDS', 'tRNA', 'ncRNA', 'rRNA', 'misc_RNA','repeat_region', 'misc_feature', 'mobile_element']
 
@@ -481,15 +483,17 @@ class GBFFFile(File):
 
     @staticmethod
     def parse_contig(contig:str) -> pd.DataFrame:
+        seq = re.search(r'ORIGIN(.*?)(?=//)', contig, flags=re.DOTALL).group(1)
+        id_ = contig.split()[0].strip()
         # Because I use parentheses around the features in the pattern, this is a "capturing group", and the label is contained in the output. 
         contig = re.split(GBFFFile.feature_pattern, contig, flags=re.MULTILINE)
-        contig_metadata, contig = contig[0], contig[1:] # The first entry in the content is contig metadata. 
-        contig_id = re.search(r'VERSION[\s]+([^\n]+)', contig_metadata).group(1)
+        metadata, contig = contig[0], contig[1:] # The first entry in the content is random contig metadata, like the authors. 
+        # id_ = re.search(r'VERSION[\s]+([^\n]+)', metadata).group(1) # Extract the contig ID from the metadata. 
 
-        if len(contig) == 0:
-            return contig_id, None
+        if len(contig) == 0: # Catches the case where the contig is not associated with any gene features. 
+            return id_, seq, None
 
-        entries = [(contig[i], contig[i + 1]) for i in range(0, len(contig), 2)]
+        entries = [(contig[i], contig[i + 1]) for i in range(0, len(contig), 2)] # Tuples of form (feature, data). 
         assert np.all(np.isin([entry[0] for entry in entries], GBFFFile.features)), 'GBFFFile.__init__: Something went wrong while parsing the file.'
         entries = [entry for entry in entries if entry[0] != 'gene'] # Remove the gene entries, which I think are kind of redundant with the products. 
 
@@ -501,18 +505,18 @@ class GBFFFile(File):
         df = df.rename(columns={'translation':'seq'}) 
         df.index = df.locus_tag
         df.index.name = 'locus_tag' # Need to use the locus tag as the index, as not everything has a protein ID. 
-        df['contig_id'] = contig_id
+        df['contig_id'] = id_
 
-        return contig_id, df 
+        return id_, seq, df 
 
     @staticmethod
     def clean_nt_seq(nt_seq:str):
-        nt_seq = re.sub('[\n\s0-9]', '', nt_seq)
+        nt_seq = re.sub(r'[\n\s0-9]', '', nt_seq)
         nt_seq = nt_seq.upper()
         return nt_seq
 
 
-    def __init__(self, path:str, load_nt_seqs:bool=True):
+    def __init__(self, path:str):
         
         with open(path, 'r') as f:
             content = f.read()
@@ -522,100 +526,39 @@ class GBFFFile(File):
         # NOTE: I used the lookahead match here because it is not treated as a capturing group. 
         contigs = re.findall(r'LOCUS(.*?)(?=LOCUS|$)', content, flags=re.DOTALL) # DOTALL flag means the dot character also matches newlines.
 
-        self.nt_seqs = None
-        if load_nt_seqs:
-            nt_seqs = re.findall(r'ORIGIN(.*?)(?=//)', content, flags=re.DOTALL)
-            nt_seqs = [GBFFFile.clean_nt_seq(nt_seq) for nt_seq in nt_seqs]
-            # Map each nucleotide sequence to a contig number. 
-            self.nt_seqs = {i + 1:nt_seq for i, nt_seq in enumerate(nt_seqs)}
-            assert len(self.nt_seqs) == len(contigs), 'GBFFFile.__init__: Expected there to be one nucleotide sequence per contig. '
-
-        self.df, self.contig_ids = [], []
-        for i, contig in enumerate(contigs):
-            contig_id, df = GBFFFile.parse_contig(contig)
-            self.contig_ids.append(contig_id)
-            if (df is not None):
-                df['contig_number'] = i + 1
-                self.df.append(df)
+        self.df = list()
+        self.contigs = dict() # Store the nucleotide sequences for the contigs. 
+        for contig in contigs:
+            contig_id, contig_seq, contig_df = GBFFFile.parse_contig(contig)
+            self.contigs[contig_id] = GBFFFile.clean_nt_seq(contig_seq)
+            if (contig_df is not None):
+                self.df.append(contig_df)
         self.df = pd.concat(self.df)
-        self.n_contigs = len(contigs)
-        
-        if load_nt_seqs:
-            self._add_start_stop_codons()
 
-
-    def get_nt_seq(self, start:int=None, stop:int=None, strand:int=None, contig_number:int=None, error:str='ignore'):
-        nt_seq = self.nt_seqs[contig_number] 
-        nt_seq = str(Seq(nt_seq).reverse_complement()) if (strand == -1) else nt_seq # If on the opposite strand, get the reverse complement. 
-        nt_seq = nt_seq[start - 1:stop] # Pretty sure the stop position is non-inclusive, so need to shift it over.
-
-        if( len(nt_seq) % 3 == 0) and (error == 'raise'):
-            raise Exception(f'GBFFFile.get_nt_seq: Expected the length of the nucleotide sequence to be divisible by three, but sequence is of length {len(nt_seq)}.')
-
-        return nt_seq
-
-    def get_stop_codon(self, start:int=None, stop:int=None, strand:int=None, contig_number:int=None, **kwargs):
-        return self.get_nt_seq(start=start, stop=stop, strand=strand, contig_number=contig_number)[-3:]
-    
-    def get_start_codon(self, start:int=None, stop:int=None, strand:int=None, contig_number:int=None, **kwargs):
-        return self.get_nt_seq(start=start, stop=stop, strand=strand, contig_number=contig_number)[:3]
-
-    def _add_start_stop_codons(self, remove_invalid:bool=True):
-
-        start_codons, stop_codons = list(), list()
-
-        for row in self.df.to_dict(orient='records'):
-            if row['feature'] == 'CDS':
-                stop_codons.append(self.get_stop_codon(**row))
-                start_codons.append(self.get_start_codon(**row))
-            else:
-                stop_codons.append('none')
-                start_codons.append('none')
-
-        self.df['start_codon'] = start_codons
-        self.df['stop_codon'] = stop_codons
-        remove_invalid_stop_codon = lambda c : 'none' if (c not in ['TAA', 'TAG', 'TGA'] ) else c
-        remove_invalid_start_codon = lambda c : 'none' if (c not in ['ATG', 'GTG', 'TTG']) else c
-
-        if remove_invalid:
-            self.df.stop_codon = self.df.stop_codon.apply(remove_invalid_stop_codon)
-            self.df.start_codon = self.df.start_codon.apply(remove_invalid_start_codon)
-
-
-    @staticmethod
-    def drop_duplicates(df:pd.DataFrame):
-        '''Some proteins have duplicate entries, I think because multiple copies of proteins are present in some genomes. This 
-        function removes the duplicates, and flags them as having multiple copies.'''
-        pseudo_df = df.copy()[df.pseudo] # Keep the pseudogenes to add back in later. 
-        df = df.copy()[~df.pseudo] # Remove the pseudogenes, which don't have protein IDs. 
-
-        copy_numbers = df.protein_id.value_counts().rename('copy_number')
-        duplicate_protein_ids = df.protein_id[df.protein_id.duplicated()]
-        # Double check to make sure all sequences are equal before removing. 
-        for protein_id, protein_df in df[df.protein_id.isin(duplicate_protein_ids)].groupby('protein_id'): 
-            assert (protein_df.seq.nunique() == 1), f'GBFFFile.remove_duplicates: Not all sequences with protein ID {protein_id} are equal.'
-        
-        # print(f'GBFFFile.remove_duplicates: Removing duplicate entries for {len(duplicate_protein_ids)} sequences from the GBFF file.')
-        df = df.drop_duplicates(subset='protein_id')
-        df = df.merge(copy_numbers, left_on='protein_id', right_index=True)
-        df = pd.concat([df, pseudo_df]) # Add the pseudogenes back in. 
+    def to_df(self, drop_duplicates:bool=False, **filters):
+        df = self.df.copy()[GBFFFile.fields] 
+        # NOTE: I had to drop a bunch of stuff with null locus tags (repeat regions, etc.) for the sake of avoiding bugs.
+        df = df[~df.index.isnull()]
         return df
 
 
-    def to_df(self, drop_duplicates:bool=False, **filters):
-
-        fields = GBFFFile.fields[:]
-        if self.nt_seqs is not None:
-            fields += ['start_codon', 'stop_codon']
-
-        df = self.df.copy()[fields]
-
-        if drop_duplicates:
-            df = GBFFFile.drop_duplicates(df)
-        for col, val in filters.items():
-            df = df[df[col] == val]
-
-        return df.dropna(axis=1, how='all')
 
 
+    # @staticmethod
+    # def drop_duplicates(df:pd.DataFrame):
+    #     '''Some proteins have duplicate entries, I think because multiple copies of proteins are present in some genomes. This 
+    #     function removes the duplicates, and flags them as having multiple copies.'''
+    #     pseudo_df = df.copy()[df.pseudo] # Keep the pseudogenes to add back in later. 
+    #     df = df.copy()[~df.pseudo] # Remove the pseudogenes, which don't have protein IDs. 
 
+    #     copy_numbers = df.protein_id.value_counts().rename('copy_number')
+    #     duplicate_protein_ids = df.protein_id[df.protein_id.duplicated()]
+    #     # Double check to make sure all sequences are equal before removing. 
+    #     for protein_id, protein_df in df[df.protein_id.isin(duplicate_protein_ids)].groupby('protein_id'): 
+    #         assert (protein_df.seq.nunique() == 1), f'GBFFFile.remove_duplicates: Not all sequences with protein ID {protein_id} are equal.'
+        
+    #     # print(f'GBFFFile.remove_duplicates: Removing duplicate entries for {len(duplicate_protein_ids)} sequences from the GBFF file.')
+    #     df = df.drop_duplicates(subset='protein_id')
+    #     df = df.merge(copy_numbers, left_on='protein_id', right_index=True)
+    #     df = pd.concat([df, pseudo_df]) # Add the pseudogenes back in. 
+    #     return df

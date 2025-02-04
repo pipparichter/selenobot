@@ -29,11 +29,7 @@ class Genome():
     def from_gbff(cls, path:str):
         
         file = GBFFFile(path, load_nt_seqs=True)
-        contigs = dict()
-        for i, contig_id in enumerate(file.contig_ids):
-            contigs[contig_id] = file.nt_seqs[i + 1]
-
-        return cls(contigs)
+        return cls(file.contigs)
 
 
 class Gene():
