@@ -18,7 +18,9 @@ from transformers import AutoTokenizer
 class Dataset(torch.utils.data.Dataset):
     '''A map-style dataset which  Dataset objects which provide extra functionality for producing sequence embeddings
     and accessing information about selenoprotein content.'''
+
     categories = {0:'label_0', 1:'label_1', 2:'label_2'}
+    aa_tokens = ['<eos>'] + list('ULAGVSERTIDPKQNFYMHWCXBZO') # For the ESM model. I think XBZO might be weird codes for other stuff... 
 
     @staticmethod
     def get_feature_cols(df:pd.DataFrame):
@@ -33,11 +35,10 @@ class Dataset(torch.utils.data.Dataset):
 
     @staticmethod
     def remove_non_aa_tokens(df:pd.DataFrame):
-        tokens = ['<eos>'] + list('ULAGVSERTIDPKQNFYMHWCXBZO')
-        vocab = AutoTokenizer.from_pretrained(ESMEmbedder.checkpoint).get_vocab()
-        # vocab = {token:code for token, code in vocab.items() if token in tokens}
-        df = df[[vocab[token] for token in tokens]]
-        df.columns = np.arange(len(tokens)) # Reset the embedding column names. 
+        # Because all features are scaled, it shouldn't matter 
+        vocab = AutoTokenizer.from_pretrained(ESMEmbedder.checkpoint, clean_up_tokenization_spaces=True).get_vocab()
+        df = df[[vocab[token] for token in Dataset.aa_tokens]]
+        df.columns = np.arange(len(Dataset.aa_tokens)) # Reset the embedding column names. 
         return df
 
 
@@ -130,11 +131,12 @@ class Dataset(torch.utils.data.Dataset):
             item['label_one_hot_encoded'] = self.labels_one_hot_encoded[idx]
         return item
 
-    def to_df(self) -> pd.DataFrame:
+    def to_df(self, add_metadata:bool=True) -> pd.DataFrame:
         '''Convert the Dataset back into a DataFrame in the same format as the DataFrame that was used
         to intitialize it.''' 
         df = pd.DataFrame(self.embeddings.cpu().numpy(), index=self.ids)
-        df = pd.concat([df, self.metadata], axis=1, ignore_index=False)
+        if add_metadata:
+            df = pd.concat([df, self.metadata], axis=1, ignore_index=False)
         return df
 
     def subset(self, start_idx:int=0, end_index:int=-1):

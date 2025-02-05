@@ -31,8 +31,8 @@ if __name__ == '__main__':
 
     model_name = f'model_{args.output_dim}c_{args.feature_type}.pkl' if (args.model_name is None) else f'{args.model_name}.pkl'
     
-    train_dataset = Dataset.from_hdf(args.train_data_path, feature_type=args.feature_type, add_length_feature=args.add_length_feature, aa_tokens_only=args.aa_tokens_only)
-    val_dataset = Dataset.from_hdf(args.val_data_path, feature_type=args.feature_type, add_length_feature=args.add_length_feature, aa_tokens_only=args.aa_tokens_only)
+    train_dataset = Dataset.from_hdf(args.train_data_path, n_classes=args.output_dim, feature_type=args.feature_type, add_length_feature=args.add_length_feature, aa_tokens_only=args.aa_tokens_only)
+    val_dataset = Dataset.from_hdf(args.val_data_path, n_classes=args.output_dim, feature_type=args.feature_type, add_length_feature=args.add_length_feature, aa_tokens_only=args.aa_tokens_only)
 
     model = Classifier(n_classes=args.output_dim, input_dim=train_dataset.shape()[-1])
     print('Loaded training and validation datasets.')
