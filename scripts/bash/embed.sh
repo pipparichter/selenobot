@@ -1,7 +1,7 @@
 #!/bin/bash
 
 MAILUSER=prichter@caltech.edu
-MAILTYPE=END
+MAILTYPE=ALL
 GRES=gpu:1
 PARTITION=gpu
 MEM=600GB

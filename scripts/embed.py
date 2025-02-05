@@ -4,6 +4,7 @@ import os
 import pandas as pd 
 import re
 
+FEATURE_TYPES = ['plm_esm_log', 'plm_esm_cls', 'plm_esm_gap', 'plm_esm_gap_last_10', 'plm_pt5', 'plm_pt5_last_10', 'len', 'aa_1mer']
 
 if __name__ == '__main__':
 
@@ -11,7 +12,7 @@ if __name__ == '__main__':
     parser.add_argument('--output-path', type=str, default=None)
     parser.add_argument('--input-path', type=str, default=None)
     parser.add_argument('--overwrite', action='store_true')
-    parser.add_argument('--feature-types', nargs='+', default=['plm_esm_log', 'plm_esm_cls', 'plm_esm_gap', 'plm_pt5','len', 'aa_1mer'])
+    parser.add_argument('--feature-types', nargs='+', default=FEATURE_TYPES)
     args = parser.parse_args()
     
     if args.output_path is None:

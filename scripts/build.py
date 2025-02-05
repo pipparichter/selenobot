@@ -24,11 +24,31 @@ label_names[2] = 'short full-length'
 warnings.simplefilter('ignore')
 seed(42)
 
+# Before, I had been relying on CD-HIT to filter out short sequences, but it seems as though MMSeqs does not have a lower length limit. 
+# Some of the truncated selenoproteins are absurdly short, only one amino acid in length, which I think could mess up the signal. There's
+# no way there's any meaningful information from a PLM in the embedding of a single amino acid.
 
-def clean(metadata_df:pd.DataFrame) -> pd.DataFrame:
+# This makes me a little wary of the idea that there will be a stronger signal in the last few amino acids of the sequence, as compared
+# to the entire mean-pooled sequence... seems to point to the idea that the real signal is downstream of the opal codon. But I will try it anyway. 
+
+# Additionally, Prodigal has a default minimum sequence length of 90 bp (which it seems that GTDB uses). This means that using the GTDB predicted 
+# ORFs might be a bad idea, as it might be missing many truncated selenoproteins altogether. I think the right thing to do is to get all of the
+# GTDB genomes and re-run Prodigal with a different minimum length. 
+
+
+# NOTE: Prodigal's minimum length is not customizable, so will need to use a different tool (Pyrodigal). 
+
+MAX_LENGTH = 1000 # Mostly a limit to make embedding tractable. 
+MIN_LENGTH = 10
+
+def clean(metadata_df:pd.DataFrame, min_length:int=MIN_LENGTH, max_length:int=MAX_LENGTH) -> pd.DataFrame:
     '''''' 
     # There are duplicates here, as there were multiple accessions for the same protein. 
     metadata_df = metadata_df.drop_duplicates('name', keep='first')
+
+    mask = (metadata_df.seq.apply(len) < max_length) & (metadata_df.seq.apply(len) >= min_length) 
+    metadata_df = metadata_df[mask]
+    print(f'clean: Removed {mask.sum()} proteins with lengths out of the range {min_length} to {max_length}.')
 
     mask = ~(metadata_df.domain == 'Bacteria')
     metadata_df = metadata_df[~mask]
@@ -91,17 +111,12 @@ def check(train_metadata_df:pd.DataFrame, test_metadata_df:pd.DataFrame, val_met
     
 
 # NOTE: Should I dereplicate the selenoproteins before or after truncation? Seems like after would be a good idea.
-def process(path:str=None, label:int=None, overwrite:bool=False, max_seq_length:int=None, min_seq_length:int=None):
+def build(path:str=None, label:int=None, overwrite:bool=False, **kwargs):
 
-    print(f'process: Processing data for group "{label_names[label]}"...')
-    metadata_df = clean(pd.read_csv(path, index_col=0))
+    print(f'build: Processing data for group "{label_names[label]}"...')
+    metadata_df = clean(pd.read_csv(path, index_col=0), **kwargs)
 
-    if min_seq_length is not None:
-        metadata_df = metadata_df[metadata_df.seq.apply(len) >= min_seq_length]
-    if max_seq_length is not None:
-        metadata_df = metadata_df[metadata_df.seq.apply(len) < max_seq_length]
-
-    if label == 1: # Truncate if the dataset is for category 1 or 2. 
+    if label == 1: # Truncate if the dataset is for category 1. 
         metadata_df = truncate_sec(metadata_df)
     
     clusterer = Clusterer(name=f'{mode}_{label}', cwd=data_dir, tool='mmseqs')
@@ -117,7 +132,6 @@ if __name__ == '__main__':
     parser.add_argument('--data-dir', default='../data', type=str)
     parser.add_argument('--overwrite', action='store_true')
     parser.add_argument('--n-classes', default=2, type=int)
-    parser.add_argument('--max-seq-length', default=1000, type=int)
     args = parser.parse_args()
 
     global mode 
@@ -130,19 +144,16 @@ if __name__ == '__main__':
     uniprot_sec_path = os.path.join(args.data_dir, 'uniprot_sec.csv')
 
     kwargs = dict()
-    kwargs[0] = {'path':uniprot_sprot_path, 'min_seq_length':200 if (args.n_classes == 3) else None, 'max_seq_length':args.max_seq_length}
-    kwargs[1] = {'path':uniprot_sec_path, 'min_seq_length':None, 'max_seq_length':args.max_seq_length}
-    kwargs[2] = {'path':uniprot_sprot_path, 'min_seq_length':None, 'max_seq_length':200}
+    kwargs[0] = {'path':uniprot_sprot_path, 'min_length':200 if (args.n_classes == 3) else MIN_LENGTH, 'max_length':MAX_LENGTH}
+    kwargs[1] = {'path':uniprot_sec_path, 'min_length':MIN_LENGTH, 'max_length':MAX_LENGTH}
+    kwargs[2] = {'path':uniprot_sprot_path, 'min_length':MIN_LENGTH, 'max_length':200}
 
-    metadata_df = []
-    for label in range(args.n_classes):
-        metadata_df += [process(label=label, overwrite=args.overwrite, **kwargs.get(label))]
-    metadata_df = pd.concat(metadata_df)
+    metadata_df = pd.concat([build(label=label, overwrite=args.overwrite, **kwargs.get(label)) for label in range(args.n_classes)])
 
     train_metadata_df, test_metadata_df, val_metadata_df = split(metadata_df, overwrite=args.overwrite)
     
     metadata = {f'{mode}_metadata_train.csv':train_metadata_df, f'{mode}_metadata_test.csv':test_metadata_df, f'{mode}_metadata_val.csv':val_metadata_df}
     for file_name, metadata_df in metadata.items():
-        path = os.path.join('.', file_name)
+        path = os.path.join(args.data_dir, file_name)
         metadata_df.to_csv(path)
         print(f'Metadata written to {path}')

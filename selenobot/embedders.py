@@ -99,8 +99,9 @@ class KmerEmbedder():
 
 class PLMEmbedder():
 
-    def __init__(self, model=None, tokenizer=None, checkpoint:str=None):
+    def __init__(self, model=None, tokenizer=None, checkpoint:str=None, last_n:int=None):
 
+        self.last_n = last_n
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.model = model.from_pretrained(checkpoint)
         self.model.to(self.device) # Move model to GPU.
@@ -180,9 +181,9 @@ class ProtT5Embedder(PLMEmbedder):
 
     checkpoint = 'Rostlab/prot_t5_xl_half_uniref50-enc'
 
-    def __init__(self):
+    def __init__(self, last_n:int=None):
 
-        super(ProtT5Embedder, self).__init__(model=T5EncoderModel, tokenizer=T5Tokenizer, checkpoint=ProtT5Embedder.checkpoint)
+        super(ProtT5Embedder, self).__init__(model=T5EncoderModel, tokenizer=T5Tokenizer, checkpoint=ProtT5Embedder.checkpoint, last_n=last_n)
 
     def _preprocess(self, seqs:List[str]) -> List[str]:
         ''''''
@@ -191,12 +192,14 @@ class ProtT5Embedder(PLMEmbedder):
         seqs = [' '.join(list(seq)) for seq in seqs] # Characters in the sequence need to be space-separated, apparently. 
         return seqs  
 
-    def _postprocess(self, outputs, seqs:List[str]=None) -> List[torch.FloatTensor]:
+    def _postprocess(self, outputs, seqs:List[str]=None, last_n:int=None) -> List[torch.FloatTensor]:
         ''''''
         seqs = [''.join(seq.split()) for seq in seqs] # Remove the added whitespace so length is correct. 
 
         outputs = outputs.last_hidden_state.cpu()
         outputs = [emb[:len(seq)] for emb, seq in zip(outputs, seqs)]
+        if (last_n is not None): # If specified, only look at the last n amino acids when mean-pooling.
+            outputs = [emb[:-last_n] for emb in outputs]
         outputs = [emb.mean(dim=0) for emb in outputs] # Take the average over the sequence length. 
         return outputs 
 
@@ -205,25 +208,28 @@ class ESMEmbedder(PLMEmbedder):
     checkpoint = 'facebook/esm2_t36_3B_UR50D'
 
     @staticmethod
-    def _pooler_gap(emb:torch.FloatTensor, seq:str) -> torch.FloatTensor:
-        emb = emb[1:len(seq) + 1]
+    def _pooler_gap(emb:torch.FloatTensor, seq:str, last_n:int=None) -> torch.FloatTensor:
+        emb = emb[1:len(s) + 1] # First remove the CLS token from the mean-pool, as well as any padding... 
+        if (last_n is not None):
+            assert len(emb) >= last_n, f'ESMEmbedder._pooler_gap: The sequence is of length {len(emb)}, which is not long enough for last_n={last_n}.'
+            emb = emb[-last_n:] # Grab the last n amino acid embeddings. 
         emb = emb.mean(dim=0)
         return emb 
 
     @staticmethod
-    def _pooler_cls(emb:torch.FloatTensor, *args) -> torch.FloatTensor:
+    def _pooler_cls(emb:torch.FloatTensor, *args, **kwargs) -> torch.FloatTensor:
         return emb[0] # Extract the CLS token, which is the first element of the sequence. 
 
     # # checkpoint = 'facebook/esm2_t36_3B_UR50D'
     # # checkpoint = 'facebook/esm2_t33_650M_UR50D'
 
-    def __init__(self, method:str='gap'):
+    def __init__(self, method:str='gap', last_n:int=None):
         # checkpoint = 'facebook/esm2_t33_650M_UR50D'
         
         models = {'gap':EsmModel, 'log':EsmForMaskedLM, 'cls':EsmModel}
         poolers = {'gap':ESMEmbedder._pooler_gap, 'cls':ESMEmbedder._pooler_cls} 
 
-        super(ESMEmbedder, self).__init__(model=models[method], tokenizer=AutoTokenizer, checkpoint=ESMEmbedder.checkpoint)
+        super(ESMEmbedder, self).__init__(model=models[method], tokenizer=AutoTokenizer, checkpoint=ESMEmbedder.checkpoint, last_n=last_n)
         self.method = method 
         self.pooler = poolers.get(method, None)
 
@@ -241,7 +247,7 @@ class ESMEmbedder(PLMEmbedder):
         # https://discuss.pytorch.org/t/is-the-cuda-operation-performed-in-place/84961/6 
         if self.method in ['cls', 'gap']:
             outputs = outputs.last_hidden_state.cpu() # if (self.model_name == 'pt5') else outputs.pooler_output
-            outputs = [self.pooler(emb, seq) for emb, seq in zip(outputs, seqs)]
+            outputs = [self.pooler(emb, seq, last_n=self.last_n) for emb, seq in zip(outputs, seqs)]
         elif self.method in ['log']: 
             # Logits have shape (batch_size, seq_length, vocab_size), so this output should be a list of vocab_size tensors.
             # outputs = list(outputs.logits.cpu()[:, -1, :])
@@ -256,15 +262,24 @@ def get_embedder(feature_type:str):
         k = int(re.match('aa_([0-9]+)mer', feature_type).group(1))
         return KmerEmbedder(k=k)
 
+    if feature_type == 'len':
+        return LengthEmbedder()
+
+    # Anything remaining is a PLM-based embedding, so see if a last_n is specified... 
+    if re.search('last_([0-9]+)', feature_type) is not None:
+        last_n = int(re.search('last_([0-9]+)', feature_type).group(1))
+        feature_type = feature_type.replace(f'last_{last_n}', '')
+    else:
+        last_n = None
+
     if feature_type == 'plm_pt5':
-        return ProtT5Embedder()
+        return ProtT5Embedder(last_n=last_n)
     
     if re.match('plm_esm_(log|cls|gap)', feature_type) is not None:
         method = re.match('plm_esm_(log|cls|gap)', feature_type).group(1)
-        return ESMEmbedder(method=method)
+        return ESMEmbedder(method=method, last_n=last_n)
 
-    if feature_type == 'len':
-        return LengthEmbedder()
+
 
     return None
 
