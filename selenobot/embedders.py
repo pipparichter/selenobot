@@ -209,7 +209,7 @@ class ESMEmbedder(PLMEmbedder):
 
     @staticmethod
     def _pooler_gap(emb:torch.FloatTensor, seq:str, last_n:int=None) -> torch.FloatTensor:
-        emb = emb[1:len(s) + 1] # First remove the CLS token from the mean-pool, as well as any padding... 
+        emb = emb[1:len(seq) + 1] # First remove the CLS token from the mean-pool, as well as any padding... 
         if (last_n is not None):
             assert len(emb) >= last_n, f'ESMEmbedder._pooler_gap: The sequence is of length {len(emb)}, which is not long enough for last_n={last_n}.'
             emb = emb[-last_n:] # Grab the last n amino acid embeddings. 
