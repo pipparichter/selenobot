@@ -110,14 +110,15 @@ def check(train_metadata_df:pd.DataFrame, test_metadata_df:pd.DataFrame, val_met
     assert len(np.intersect1d(test_metadata_df.index, val_metadata_df.index)) == 0, 'split: There is leakage between the validation and testing datasets.'
     
 
-# NOTE: Should I dereplicate the selenoproteins before or after truncation? Seems like after would be a good idea.
 def build(path:str=None, label:int=None, overwrite:bool=False, **kwargs):
+    metadata_df = pd.read_csv(path, index_col=0)
 
-    print(f'build: Processing data for group "{label_names[label]}"...')
-    metadata_df = clean(pd.read_csv(path, index_col=0), **kwargs)
-
+    # Make sure to truncate BEFORE filtering by length.
     if label == 1: # Truncate if the dataset is for category 1. 
         metadata_df = truncate_sec(metadata_df)
+
+    print(f'build: Processing data for group "{label_names[label]}"...')
+    metadata_df = clean(metadata_df, **kwargs)
     
     clusterer = Clusterer(name=f'{mode}_{label}', cwd=data_dir, tool='mmseqs')
     metadata_df = clusterer.dereplicate(metadata_df, overwrite=overwrite) # Don't cluster by homology just yet. 
