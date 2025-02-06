@@ -11,6 +11,14 @@ import os
 # python train.py --model-name model_2c_plm_esm_log_aa_tokens_only --feature-type plm_esm_log --aa-tokens-only
 # python train.py --model-name model_2c_plm_esm_cls_add_length_feature --feature-type plm_esm_cls --add-length-feature
 
+def check(model:Classifier):
+    '''Check to make sure model training worked correctly, in which case all of these attributes (and some others),
+    should be populated with values.'''
+    attrs = ['epochs', 'best_epoch', 'lr', 'train_accs', 'val_accs']
+    for attr in attrs:
+        assert hasattr(model.model, attr), f'check: Model is missing attribute {attr}, which should have been populated during training.'
+
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
@@ -45,6 +53,8 @@ if __name__ == '__main__':
     kwargs['lr'] = 1e-8 
 
     model.fit(train_dataset, val_dataset, **kwargs)
+    check(model)
+
     model.save(os.path.join(args.models_dir, model_name))
 
     print(f'Model training complete. Model data saved to {os.path.join(args.models_dir, model_name)}')

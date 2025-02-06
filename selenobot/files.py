@@ -44,7 +44,7 @@ def get_converter(dtype):
     return converter
 
 
-def fasta_file_parser_gtdb(description:str):
+def fasta_file_parser_prodigal(description:str):
     pattern = r'# ([\d]+) # ([\d]+) # ([-1]+) # ID=([^;]+);partial=([^;]+);start_type=([^;]+);rbs_motif=([^;]+);rbs_spacer=([^;]+);gc_cont=([\.\w]+)'
     columns = ['start', 'stop', 'strand', 'ID', 'partial', 'start_type', 'rbs_motif', 'rbs_spacer', 'gc_content']
     match = re.search(pattern, description)

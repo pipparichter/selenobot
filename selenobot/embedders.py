@@ -199,7 +199,7 @@ class ProtT5Embedder(PLMEmbedder):
         outputs = outputs.last_hidden_state.cpu()
         outputs = [emb[:len(seq)] for emb, seq in zip(outputs, seqs)]
         if (last_n is not None): # If specified, only look at the last n amino acids when mean-pooling.
-            outputs = [emb[:-last_n] for emb in outputs]
+            outputs = [emb[:-self.last_n] for emb in outputs]
         outputs = [emb.mean(dim=0) for emb in outputs] # Take the average over the sequence length. 
         return outputs 
 

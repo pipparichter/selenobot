@@ -6,27 +6,85 @@ import shutil
 import math
 from tqdm import tqdm
 from Bio.Seq import Seq
+import pickle 
 
 from selenobot.tools import BLAST
-from selenobot.files import BLASTFile, FASTAFile, GBFFFile, fasta_file_parser_gtdb
+from selenobot.files import BLASTFile, FASTAFile, GBFFFile, fasta_file_parser_prodigal
 from selenobot.utils import apply_gtdb_dtypes
+
+
+def get_organisms(species:list, from_gtdb:bool=False, overwrite:bool=False):
+
+    path = '../data/model_organisms/organisms.pkl' if (not from_gtdb) else '../data/model_organisms/organisms_gtdb.pkl'
+    dir_ = '../data/model_organisms/proteins' if (not from_gtdb) else '../data/model_organisms/proteins_gtdb'
+    ref_dir_ = '../data/model_organisms/ref' 
+
+    if (not os.path.exists(path)) or overwrite:
+        organisms = list()
+        for species_ in species:
+            print(f'get_organisms: Creating Organism object for {species_}...')
+            organism = Organism(species_, dir_=dir_, ref_dir=ref_dir_)
+            organism.label()
+            organisms.append(organism)
+        with open(path, 'wb') as f:
+            pickle.dump(organisms, f)
+        print(f'get_organisms: Organism objects saved to {path}.')
+    else:
+        with open(path, 'rb') as f:
+            organisms = pickle.load(f)
+    return organisms
+
+
+def get_code_name(species:str) -> str:
+    return (species.split()[0][0] + species.split()[-1][:3]).lower() 
+
+
+def download_ncbi_data(genome_metadata_df:pd.DataFrame, dir_:str='../data/model_organisms'):
+    '''Dowload genomes and GBFF files for the organisms contained in the input DataFrame from NCBI.'''
+    genomes_dir = os.path.join(dir_, 'genomes')
+    proteins_ref_dir = os.path.join(dir_, 'proteins_ref')
+
+    output_path = 'ncbi.zip'
+    for row in genome_metadata_df.itertuples():
+        print(f'download_ncbi_data: Downloading data for {row.species}.')
+
+        code_name = get_code_name(row.species)
+        protein_ref_path = os.path.join(proteins_ref_dir, f'{code_name}_genomic.gbff')
+        genome_path = os.path.join(genomes_dir, f'{code_name}_genomic.fna')
+        
+        cmd = f'datasets download genome accession {row.Index} --filename {output_path} --include gbff,genome --no-progressbar'
+        subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
+        subprocess.run(f'unzip -o {output_path} -d .', shell=True, check=True, stdout=subprocess.DEVNULL)
+            
+        file_names = ['genomic.gbff', '*genomic.fna']
+        src_paths = [os.path.join('ncbi_dataset/data', row.Index, file_name) for file_name in file_names]
+        dst_paths = [protein_ref_path, genome_path]
+
+        for src_path, dst_path in zip(src_paths, dst_paths):
+            subprocess.run(f'cp {src_path} {dst_path}', shell=True, check=True)
+    # Clean up extra files. 
+    shutil.rmtree(os.path.join('ncbi_dataset'))
+    os.remove('README.md')
+    os.remove('md5sum.txt')
+    os.remove(output_path)
+
+
 
 class Organism():
 
-    def __init__(self, genome_id:str, species:str, dir_:str='../data/model_organisms/'):
+    def __init__(self, species:str, dir_:str='../data/model_organisms/proteins/', ref_dir:str='../data/model_organisms/ref/'):
         '''Initialize an Organism object.'''
 
-        self.code_name = (species.split()[0][0] + species.split()[-1][:3]).lower() 
-        self.dir_ = dir_
-        self.genome_id = genome_id
+        self.code_name = get_code_name(species)
+        self.dir_ = dir_ 
         self.species = species
 
-        self.path = os.path.join(dir_, f'gtdb_{self.code_name}_protein.faa')
-        self.ref_path = os.path.join(dir_, f'ncbi_{self.code_name}_genomic.gbff')
+        self.path = os.path.join(dir_, f'{self.code_name}_protein.faa')
+        self.ref_path = os.path.join(ref_dir, f'{self.code_name}_genomic.gbff')
         
         ref_file = GBFFFile(self.ref_path) 
 
-        self.df = apply_gtdb_dtypes(FASTAFile(self.path).to_df(parser=fasta_file_parser_gtdb))
+        self.df = apply_gtdb_dtypes(FASTAFile(self.path).to_df(parser=fasta_file_parser_prodigal))
         self.df['contig_id'] = [id_.split('.')[0] for id_ in self.df.index]
 
         self.ref_df = apply_gtdb_dtypes(ref_file.to_df()) # Will work to fix the data types in this DataFrame too. 
@@ -39,27 +97,25 @@ class Organism():
 
         self.df = self.add_start_stop_codons(self.df)
         self.ref_df = self.add_start_stop_codons(self.ref_df)
+        self.df = Organism.add_length(self.df)
+        self.ref_df = Organism.add_length(self.ref_df)
 
     def __repr__(self):
         return f'{self.species.split()[0][0]}. {self.species.split()[-1]}'
 
     def __str__(self):
         return self.code_name
+    
+    def __len__(self):
+        return len(self.df)
 
-    def to_df(self, max_seq_length:int=None, label:str=None):
+    def to_df(self):
         df = self.df.copy() 
         df['code_name'] = self.code_name
-        df['genome_id'] = self.genome_id 
         df['species'] = self.species
 
         if len(self.labels) > 0:
-            assert len(self.labels) == len(df), f'Organism: There are {len(self.labels)} labels and {len(df)} entries in the protein DataFrame.'
             df = df.merge(pd.DataFrame({'label':self.labels}), right_index=True, left_index=True, how='left')
-
-        if (max_seq_length is not None):
-            df = df[df.seq.apply(len) < max_seq_length]
-
-        if (self.search_results_df is not None):
             df = df.merge(self.search_results_df, left_index=True, right_index=True)
             ref_df = self.ref_df.copy().rename(columns={col:'ref_' + col for col in self.ref_df.columns})
             df = df.merge(ref_df, left_on='locus_tag', right_index=True, how='left')
@@ -162,20 +218,20 @@ class Organism():
 
         return df
 
+    @staticmethod
+    def add_length(df:pd.DataFrame):
+        '''Add sequence length (in amino acids) to the DataFrame. Can't just use seq.apply(len) because forcing
+        the sequences to be strings causes null sequences (e.g., in the case of non-CDS features) to be 'nan'.'''
+        # This also gets lengths for pseudogenes. 
+        lengths = list()
+        for row in df.itertuples():
+            # The reference DataFrame will have a feature column, but the Prodigal-produced one will not. 
+            # Only try to get sequence lengths for the CDS features from the NCBI reference. 
+            feature = getattr(row, 'feature', None)
+            if (feature == 'CDS') or (feature is None):
+                lengths.append((row.stop - row.start) // 3) # The start and stop indices are in terms of nucleotides. 
+            else:
+                lengths.append(None)
+        df['length'] = lengths 
+        return df
 
-    # def download_ncbi_data(self):
-
-    #     output_path = os.path.join(self.dir_, 'ncbi.zip')
-    #     cmd = f'datasets download genome accession {self.genome_id} --filename {output_path} --include protein,gbff,genome --no-progressbar'
-    #     subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
-    #     subprocess.run(f'unzip -o {output_path} -d {self.dir_}', shell=True, check=True, stdout=subprocess.DEVNULL)
-            
-    #     file_names = ['protein.faa', 'genomic.gbff', '*genomic.fna']
-    #     src_paths = [os.path.join(self.dir_, 'ncbi_dataset/data', self.genome_id, file_name) for file_name in file_names]
-    #     dst_paths = [self.ncbi_proteins_path, self.ncbi_gbff_path, self.genome_path]
-    #     for src_path, dst_path in zip(src_paths, dst_paths):
-    #         subprocess.run(f'cp {src_path} {dst_path}', shell=True, check=True)
-
-    #     shutil.rmtree(os.path.join(self.dir_, 'ncbi_dataset'))
-    #     os.remove(output_path)
-    #     return GBFFFile(self.ref_path)
