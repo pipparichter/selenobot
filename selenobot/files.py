@@ -411,9 +411,6 @@ class XMLFile(File):
     def to_df(self):
         return self.df
 
-    def fasta(self, path:str) -> NoReturn:
-        pass
-
 
 class GBFFFile(File):
     '''Class for parsing GenBank flat files, obtained from NCBI.'''

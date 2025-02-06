@@ -268,7 +268,7 @@ def get_embedder(feature_type:str):
     # Anything remaining is a PLM-based embedding, so see if a last_n is specified... 
     if re.search('last_([0-9]+)', feature_type) is not None:
         last_n = int(re.search('last_([0-9]+)', feature_type).group(1))
-        feature_type = feature_type.replace(f'last_{last_n}', '')
+        feature_type = feature_type.replace(f'_last_{last_n}', '')
     else:
         last_n = None
 
@@ -278,8 +278,6 @@ def get_embedder(feature_type:str):
     if re.match('plm_esm_(log|cls|gap)', feature_type) is not None:
         method = re.match('plm_esm_(log|cls|gap)', feature_type).group(1)
         return ESMEmbedder(method=method, last_n=last_n)
-
-
 
     return None
 

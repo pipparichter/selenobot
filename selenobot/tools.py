@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 from selenobot.utils import default_output_path
 
+# sbatch --cpus-per-task 4 --mem 50GB --time 24:00:00 --mail-type ALL --mail-user prichter@caltech.edu --wrap "~/kofamscan/bin/exec_annotation INPUT --cpu 4 --profile ~/kofamscan/db/profiles/prokaryote.hal -o OUTPUT"
 class Kofamscan():
 
     def __init__(self, cmd_dir:str='/home/prichter/kofamscan/', tmp_dir:str='../data/tmp'):
