@@ -73,6 +73,41 @@ class File():
         self.genome_id = None # This will be populated with the genome ID extracted from the filename for everything but the MetadataFile class.
 
 
+class KofamscanFile(File):
+
+    fields = ['meets_threshold', 'id', 'ko', 'threshold', 'score', 'e_value', 'ko_definition']
+
+    def __init__(self, path:str=None, seqs:List[str]=None, ids:List[str]=None, descriptions:List[str]=None):
+        '''Initialize a KofamscanFile object.'''
+        super().__init__(path) 
+
+        with open(path, 'r') as f:
+            lines = f.readlines()
+        
+        df = {field:[] for field in KofamscanFile.fields}
+        for line in lines:
+            if line[0] == '#':
+                continue
+
+            df['meets_threshold'].append(line[0] == '*') 
+            line = line.replace('*', '', 1) # Remove the * character if present. 
+            df['ko_definition'].append(' '.join(line.split()[5:]))
+            values = line.split()[:5]
+            for field, value in zip(KofamscanFile.fields[1:6], values):
+                df[field].append(value)
+        
+        self.df = pd.DataFrame(df).set_index('id')
+        self.df.e_value = pd.to_numeric(self.df.e_value, errors='coerce')
+        self.df.threshold = pd.to_numeric(self.df.threshold, errors='coerce')
+        self.df.score = pd.to_numeric(self.df.score, errors='coerce')
+
+    def to_df(self, meets_threshold:bool=True):
+        df = self.df.copy()
+        if meets_threshold: # If specified, only return the hits that meet the threshold.
+            df = df[df.meets_threshold]
+        return df
+
+
 # TODO: Do I need to be able to write things back to FASTA files? I think yes. For CD-HIT clustering, will need to 
 # dereplicate first and then group to separate for the train, test, validation split. 
 
