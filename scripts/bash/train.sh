@@ -21,9 +21,9 @@ TIME=100:00:00
 #     sbatch --mem="$MEM" --time="$TIME" --partition="$PARTITION" --job-name "$job_name" -o "$job_name.out" --gres="$GRES" --mail-user="$MAILUSER" --mail-type="$MAILTYPE" --wrap "$cmd"
 # done
 
-feature_types=("plm_pt5" "plm_esm_gap" "aa_1mer" "len")
+feature_types=("plm_esm_cls" "plm_esm_gap_last_10" "plm_cls_log" "plm_pt5_last_10" "plm_pt5" "plm_esm_gap" "aa_1mer" "len")
 epochs=100
-output_dim=3
+output_dim=2
 
 for feature_type in "${feature_types[@]}"; do
     job_name="train_${feature_type}_${output_dim}"

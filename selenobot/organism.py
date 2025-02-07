@@ -109,18 +109,31 @@ class Organism():
     def __len__(self):
         return len(self.df)
 
-    def to_df(self):
+    def to_df(self, add_ref:bool=True):
         df = self.df.copy() 
         df['code_name'] = self.code_name
         df['species'] = self.species
 
         if len(self.labels) > 0:
             df = df.merge(pd.DataFrame({'label':self.labels}), right_index=True, left_index=True, how='left')
-            df = df.merge(self.search_results_df, left_index=True, right_index=True)
-            ref_df = self.ref_df.copy().rename(columns={col:'ref_' + col for col in self.ref_df.columns})
-            df = df.merge(ref_df, left_on='locus_tag', right_index=True, how='left')
-            df = df.dropna(how='all')
+        
+        if add_ref and (self.search_results_df is not None):
+            # NOTE: The locus tags are not unique, so we can't use it to merge, also need to use the features... 
+            # search_results_df maps genes in self.df to features in self.ref_df
+            search_results_df = self.search_results_df[['feature', 'locus_tag']] # Keep only the columns necessary for mapping the search hits.
+            search_results_df = search_results_df[~search_results_df.locus_tag.isnull()] # Drop null results to prevent merging weirdness.
+            df = df.merge(search_results_df, left_index=True, right_index=True, how='left')
 
+            # NOTE: There are some cases where different genes align to the same thing in the reference, in which case we just need to drop 
+            # the duplicates after merging. Or maybe not?
+            ref_df = self.ref_df.copy().assign(locus_tag=self.ref_df.index)
+            ref_df = ref_df.rename(columns={col:'ref_' + col for col in ref_df.columns})
+            df = df.merge(ref_df, right_on=['ref_locus_tag', 'ref_feature'], left_on=['locus_tag', 'feature'], how='left')
+            # df = df[~df.index.duplicated(keep='first')]
+        
+        df.index = self.df.index # Restore the index, which is lost in the merging. 
+        df.index.name = 'id'
+        assert len(df) == len(self.df), f'Organism.to_df: There is a mismatch between the internal DataFrame and the output. Expected {len(self.df)}, but got {len(df)}.'
         return df
 
     def get_hit(self, query):
