@@ -10,7 +10,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--feature-type', type=str, default='plm_esm_gap')
-    parser.add_argument('--n-classes', type=int, default=2)
+    parser.add_argument('--n-classes', type=int, default=3)
     parser.add_argument('--model-name', type=str, default=None)
     parser.add_argument('--input-path', type=str, default=None)
     parser.add_argument('--models-dir', default='../models', type=str)
