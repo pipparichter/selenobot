@@ -1,7 +1,7 @@
 #!/bin/bash
 
-feature_types = ("plm_esm_cls" "plm_esm_gap" "plm_pt5" "len" "aa_1mer")
-n_classes = (2 3)
+feature_types=("plm_esm_cls" "plm_esm_gap" "plm_pt5" "len" "aa_1mer")
+n_classes=("2" "3")
 
 for feature_type in "${feature_types[@]}"; do
     for n_classes in "${n_classes[@]}"; do
