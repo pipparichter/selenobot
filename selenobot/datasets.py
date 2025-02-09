@@ -55,8 +55,12 @@ class Dataset(torch.utils.data.Dataset):
 
         self.labels, self.labels_one_hot_encoded = None, None
         if ('label' in df.columns):
-            self.labels = torch.from_numpy(df['label'].values).type(torch.LongTensor)
-            self.labels_one_hot_encoded = one_hot(self.labels, num_classes=n_classes).to(torch.float32).to(self.device)
+            try:
+                self.labels = torch.from_numpy(df['label'].values).type(torch.LongTensor)
+                self.labels_one_hot_encoded = one_hot(self.labels, num_classes=n_classes).to(torch.float32).to(self.device)
+            except TypeError:
+                self.labels = None
+                self.labels_one_hot_encoded = None
 
         self.embeddings = torch.from_numpy(df[Dataset.get_feature_cols(df)].values).to(self.device)
         self.n_features = self.embeddings.shape[-1]

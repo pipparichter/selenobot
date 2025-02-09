@@ -1,67 +1,13 @@
 #!/bin/bash
 
-# python predict.py --model-name model_2c_plm_esm_log --feature-type plm_esm_log --input-path ../data/2c_val.h5 
-# python predict.py --model-name model_2c_plm_esm_log --feature-type plm_esm_log --input-path ../data/2c_test.h5 
-# python predict.py --model-name model_2c_plm_esm_log --feature-type plm_esm_log --input-path ../data/2c_train.h5 
+feature_types = ("plm_esm_cls" "plm_esm_gap" "plm_pt5" "len" "aa_1mer")
+n_classes = (2 3)
 
-# python predict.py --model-name model_2c_plm_esm_cls --feature-type plm_esm_cls --input-path ../data/2c_val.h5 
-# python predict.py --model-name model_2c_plm_esm_cls --feature-type plm_esm_cls --input-path ../data/2c_test.h5 
-# python predict.py --model-name model_2c_plm_esm_cls --feature-type plm_esm_cls --input-path ../data/2c_train.h5 
+for feature_type in "${feature_types[@]}"; do
+    for n_classes in "${n_classes[@]}"; do
+        python predict.py --model-name "model_${n_classes}c_${feature_type}" --feature-type "$feature_type" --input-path ../data/2c_val.h5 
+        python predict.py --model-name "model_${n_classes}c_${feature_type}" --feature-type "$feature_type" --input-path ../data/2c_train.h5 
+        python predict.py --model-name "model_${n_classes}c_${feature_type}" --feature-type "$feature_type" --input-path ../data/2c_test.h5 
+    done
+done
 
-# python predict.py --model-name model_2c_plm_esm_gap --feature-type plm_esm_gap --input-path ../data/2c_val.h5 
-# python predict.py --model-name model_2c_plm_esm_gap --feature-type plm_esm_gap --input-path ../data/2c_test.h5 
-# python predict.py --model-name model_2c_plm_esm_gap --feature-type plm_esm_gap --input-path ../data/2c_train.h5 
-
-# python predict.py --model-name model_2c_plm_esm_gap_last_10 --feature-type plm_esm_gap_last_10 --input-path ../data/2c_val.h5 
-# python predict.py --model-name model_2c_plm_esm_gap_last_10 --feature-type plm_esm_gap --input-path ../data/2c_test.h5 
-# python predict.py --model-name model_2c_plm_esm_gap_last_10 --feature-type plm_esm_gap --input-path ../data/2c_train.h5 
-
-# python predict.py --model-name model_2c_plm_pt5 --feature-type plm_pt5 --input-path ../data/2c_val.h5 
-# python predict.py --model-name model_2c_plm_pt5 --feature-type plm_pt5 --input-path ../data/2c_test.h5
-# python predict.py --model-name model_2c_plm_pt5 --feature-type plm_pt5 --input-path ../data/2c_train.h5
-
-# python predict.py --model-name model_2c_plm_pt5_last_10 --feature-type plm_pt5_last_10 --input-path ../data/2c_val.h5 
-# python predict.py --model-name model_2c_plm_pt5_last_10 --feature-type plm_pt5_last_10 --input-path ../data/2c_test.h5
-# python predict.py --model-name model_2c_plm_pt5_last_10 --feature-type plm_pt5_last_10 --input-path ../data/2c_train.h5
-
-# python predict.py --model-name model_2c_len --feature-type len --input-path ../data/2c_val.h5 
-# python predict.py --model-name model_2c_len --feature-type len --input-path ../data/2c_test.h5
-# python predict.py --model-name model_2c_len --feature-type len --input-path ../data/2c_train.h5
-
-# python predict.py --model-name model_2c_aa_1mer --feature-type aa_1mer --input-path ../data/2c_val.h5 
-# python predict.py --model-name model_2c_aa_1mer --feature-type aa_1mer --input-path ../data/2c_test.h5 
-# python predict.py --model-name model_2c_aa_1mer --feature-type aa_1mer --input-path ../data/2c_train.h5
-
-
-
-python predict.py --model-name model_3c_plm_esm_log --feature-type plm_esm_log --input-path ../data/3c_val.h5 
-python predict.py --model-name model_3c_plm_esm_log --feature-type plm_esm_log --input-path ../data/3c_test.h5 
-python predict.py --model-name model_3c_plm_esm_log --feature-type plm_esm_log --input-path ../data/3c_train.h5 
-
-python predict.py --model-name model_3c_plm_esm_cls --feature-type plm_esm_cls --input-path ../data/3c_val.h5 
-python predict.py --model-name model_3c_plm_esm_cls --feature-type plm_esm_cls --input-path ../data/3c_test.h5 
-python predict.py --model-name model_3c_plm_esm_cls --feature-type plm_esm_cls --input-path ../data/3c_train.h5 
-
-python predict.py --model-name model_3c_plm_esm_gap --feature-type plm_esm_gap --input-path ../data/3c_val.h5 
-python predict.py --model-name model_3c_plm_esm_gap --feature-type plm_esm_gap --input-path ../data/3c_test.h5 
-python predict.py --model-name model_3c_plm_esm_gap --feature-type plm_esm_gap --input-path ../data/3c_train.h5 
-
-python predict.py --model-name model_3c_plm_esm_gap_last_10 --feature-type plm_esm_gap_last_10 --input-path ../data/3c_val.h5 
-python predict.py --model-name model_3c_plm_esm_gap_last_10 --feature-type plm_esm_gap --input-path ../data/3c_test.h5 
-python predict.py --model-name model_3c_plm_esm_gap_last_10 --feature-type plm_esm_gap --input-path ../data/3c_train.h5 
-
-python predict.py --model-name model_3c_plm_pt5 --feature-type plm_pt5 --input-path ../data/3c_val.h5 
-python predict.py --model-name model_3c_plm_pt5 --feature-type plm_pt5 --input-path ../data/3c_test.h5
-python predict.py --model-name model_3c_plm_pt5 --feature-type plm_pt5 --input-path ../data/3c_train.h5
-
-python predict.py --model-name model_3c_plm_pt5_last_10 --feature-type plm_pt5_last_10 --input-path ../data/3c_val.h5 
-python predict.py --model-name model_3c_plm_pt5_last_10 --feature-type plm_pt5_last_10 --input-path ../data/3c_test.h5
-python predict.py --model-name model_3c_plm_pt5_last_10 --feature-type plm_pt5_last_10 --input-path ../data/3c_train.h5
-
-python predict.py --model-name model_3c_len --feature-type len --input-path ../data/3c_val.h5 
-python predict.py --model-name model_3c_len --feature-type len --input-path ../data/3c_test.h5
-python predict.py --model-name model_3c_len --feature-type len --input-path ../data/3c_train.h5
-
-python predict.py --model-name model_3c_aa_1mer --feature-type aa_1mer --input-path ../data/3c_val.h5 
-python predict.py --model-name model_3c_aa_1mer --feature-type aa_1mer --input-path ../data/3c_test.h5 
-python predict.py --model-name model_3c_aa_1mer --feature-type aa_1mer --input-path ../data/3c_train.h5 

@@ -38,6 +38,9 @@ def get_organisms(species:list, from_gtdb:bool=False, overwrite:bool=False):
 def get_code_name(species:str) -> str:
     return (species.split()[0][0] + species.split()[-1][:3]).lower() 
 
+def get_short_species_name(species:str) -> str:
+    return f'{species.split()[0][0]}. {species.split()[-1]}'
+
 
 def download_ncbi_data(genome_metadata_df:pd.DataFrame, dir_:str='../data/model_organisms'):
     '''Dowload genomes and GBFF files for the organisms contained in the input DataFrame from NCBI.'''
@@ -101,7 +104,7 @@ class Organism():
         self.ref_df = Organism.add_length(self.ref_df)
 
     def __repr__(self):
-        return f'{self.species.split()[0][0]}. {self.species.split()[-1]}'
+        return get_short_species_name(self.species)
 
     def __str__(self):
         return self.code_name

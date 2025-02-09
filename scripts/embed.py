@@ -16,7 +16,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     if args.output_path is None:
-        output_path = args.input_path.replace('_metadata', '').replace('.csv', '.h5')
+        output_path = args.input_path.replace('metadata_', '').replace('.csv', '.h5')
     else:
         output_path = args.output_path 
 

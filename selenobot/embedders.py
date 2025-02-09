@@ -192,13 +192,13 @@ class ProtT5Embedder(PLMEmbedder):
         seqs = [' '.join(list(seq)) for seq in seqs] # Characters in the sequence need to be space-separated, apparently. 
         return seqs  
 
-    def _postprocess(self, outputs, seqs:List[str]=None, last_n:int=None) -> List[torch.FloatTensor]:
+    def _postprocess(self, outputs, seqs:List[str]=None) -> List[torch.FloatTensor]:
         ''''''
         seqs = [''.join(seq.split()) for seq in seqs] # Remove the added whitespace so length is correct. 
 
         outputs = outputs.last_hidden_state.cpu()
         outputs = [emb[:len(seq)] for emb, seq in zip(outputs, seqs)]
-        if (last_n is not None): # If specified, only look at the last n amino acids when mean-pooling.
+        if (self.last_n is not None): # If specified, only look at the last n amino acids when mean-pooling.
             outputs = [emb[:-self.last_n] for emb in outputs]
         outputs = [emb.mean(dim=0) for emb in outputs] # Take the average over the sequence length. 
         return outputs 
@@ -266,11 +266,10 @@ def get_embedder(feature_type:str):
         return LengthEmbedder()
 
     # Anything remaining is a PLM-based embedding, so see if a last_n is specified... 
+    last_n = None
     if re.search('last_([0-9]+)', feature_type) is not None:
         last_n = int(re.search('last_([0-9]+)', feature_type).group(1))
-        feature_type = feature_type.replace(f'_last_{last_n}', '')
-    else:
-        last_n = None
+    feature_type = feature_type.replace(f'_last_{last_n}', '')
 
     if feature_type == 'plm_pt5':
         return ProtT5Embedder(last_n=last_n)
