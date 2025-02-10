@@ -4,7 +4,7 @@ import os
 import pandas as pd 
 import re
 
-FEATURE_TYPES = ['plm_esm_log', 'plm_esm_cls', 'plm_esm_gap', 'plm_esm_gap_last_10', 'plm_pt5', 'plm_pt5_last_10', 'len', 'aa_1mer']
+FEATURE_TYPES = ['plm_esm_cls', 'plm_esm_gap', 'plm_pt5', 'len', 'aa_1mer']
 
 if __name__ == '__main__':
 
