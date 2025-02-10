@@ -12,8 +12,7 @@ TIME=100:00:00
 
 
 
-# feature_types=("plm_esm_cls" "plm_esm_gap_last_10" "plm_esm_log" "plm_pt5_last_10" "plm_pt5" "plm_esm_gap" "aa_1mer" "len")
-feature_types=("plm_esm_log")
+feature_types=("plm_esm_cls" "plm_pt5" "plm_esm_gap" "aa_1mer" "len")
 epochs=100
 output_dim=2
 
@@ -24,8 +23,6 @@ for feature_type in "${feature_types[@]}"; do
 done
 
 
-# feature_types=("plm_esm_cls" "plm_esm_gap_last_10" "plm_esm_log" "plm_pt5_last_10" "plm_pt5" "plm_esm_gap" "aa_1mer" "len")
-feature_types=("plm_esm_log")
 epochs=100
 output_dim=3
 
