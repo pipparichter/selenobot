@@ -112,11 +112,11 @@ def load(paths:list, n_classes:int=2, overwrite:bool=False):
     if n_classes == 3:
         metadata[0] = metadata_df[~metadata_df.seq.apply(is_selenoprotein) & ~metadata_df.seq.apply(is_short)].copy()
         metadata[1] = metadata_df[metadata_df.seq.apply(is_selenoprotein)].copy()
-        metadata[2] = metadata_df[metadata_df.seq.apply(is_selenoprotein) & metadata_df.seq.apply(is_short)].copy()
+        metadata[2] = metadata_df[~metadata_df.seq.apply(is_selenoprotein) & metadata_df.seq.apply(is_short)].copy()
     if n_classes == 4:
         metadata[0] = metadata_df[~metadata_df.seq.apply(is_selenoprotein) & ~metadata_df.seq.apply(is_short)].copy()
         metadata[1] = metadata_df[metadata_df.seq.apply(is_selenoprotein)].copy()
-        metadata[2] = metadata_df[metadata_df.seq.apply(is_selenoprotein) & metadata_df.seq.apply(is_short)].copy()
+        metadata[2] = metadata_df[~metadata_df.seq.apply(is_selenoprotein) & metadata_df.seq.apply(is_short)].copy()
         metadata[3] = metadata_df[metadata_df.seq.apply(is_selenoprotein)].copy()
     
     metadata = {label:df.assign(label=label) for label, df in metadata.items()}

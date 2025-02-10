@@ -20,7 +20,7 @@ file_names=("metadata_ecol.csv" "metadata_bsub.csv" "metadata_mtub.csv" "metadat
 
 directory="../data/"
 # file_names=($(ls "$directory" | grep '^[0-9]\+c_metadata_.*\.csv$'))
-file_names=("2c_metadata_test.csv" "2c_metadata_train.csv" "2c_metadata_val.csv")
+file_names=("3c_metadata_test.csv" "3c_metadata_train.csv" "3c_metadata_val.csv")
 
 for file_name in "${file_names[@]}"; do
     job_name="embed_$file_name"
