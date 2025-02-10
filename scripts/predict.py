@@ -3,7 +3,6 @@ from selenobot.datasets import *
 import subprocess
 import argparse
 import os
-from selenobot.utils import default_output_path
 
 
 if __name__ == '__main__':
@@ -22,8 +21,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    output_path = default_output_path(os.path.basename(args.input_path), op='predict', ext='csv')
-    output_path = os.path.join(args.results_dir, output_path)
+    output_file_name = os.path.basename(args.input_path).replace('.h5', '.predict.csv')
   
     metadata_df = pd.read_csv(output_path, index_col=0) if os.path.exists(output_path) else pd.read_hdf(args.input_path, key='metadata')
 
