@@ -126,24 +126,39 @@ def seed(seed:int=42) -> None:
     # # Set a fixed value for the hash seed (not sure what this does, so got rid of it)
     # os.environ["PYTHONHASHSEED"] = str(seed)
 
-def trunc_n_terminus(seq:str, min_length:int=10, allowed_starts:list=['M', 'V', 'L']):
+
+def trunc_n_terminus(seq:str, min_length:int=10, allowed_starts:list=['M', 'V', 'L'], bias:str='codon'):
     '''Truncate a selenoprotein at the N-terminal end.
     
     :param seq
     :param min_length: The minimum allowed sequence length. 
-    :param allowed_starts: The amino acids which could potentially be a start codon. The list is specified in order
-        of preference, i.e. every potential usage of the first amino acid as a "start" is checked before moving
-        on to the next candidate in the list. 
+    :param allowed_starts:
+    :param bias: Whether or not to prioritize sequence length or the choice of start codon. 
     '''
-    # Default allowed_starts are amino acids coded for by the traditional start and alternative start codons. 
-    # Methionine is coded by AUG, Valine by GUG, and Leucine by UUG. Frequencies here: https://pmc.ncbi.nlm.nih.gov/articles/PMC5397182/ 
-    idx = seq.rindex('U') # Get the index of the rightmost selenocysteine. 
-    seq = seq[idx + 1:]
-    for aa in allowed_starts:
-        idx = seq.find(aa)
-        if (idx >= 0) and (len(seq[idx:]) >= min_length):
-            return seq[idx:]
-    return None
+    if (bias == 'length'):
+        idx = seq.rindex('U') # Get the index of the rightmost selenocysteine. 
+        seq = seq[idx + 1:]
+        for idx, aa in enumerate(seq):
+            if (aa in allowed_starts) and (len(seq[idx:]) >= min_length):
+                return seq[idx:]
+        return None
+
+    elif (bias == 'codon'):
+        # Default allowed_starts are amino acids coded for by the traditional start and alternative start codons. 
+        # Methionine is coded by AUG, Valine by GUG, and Leucine by UUG. Frequencies here: https://pmc.ncbi.nlm.nih.gov/articles/PMC5397182/ 
+        start_codon_frequencies = {'M':0.83, 'V':0.14, 'L':0.02}
+        allowed_starts = sorted(allowed_starts, key=lambda aa : start_codon_frequencies[aa], reverse=True)
+        
+        idx = seq.rindex('U') # Get the index of the rightmost selenocysteine. 
+        seq = seq[idx + 1:]
+        for aa in allowed_starts:
+            idx = seq.find(aa)
+            if (idx >= 0) and (len(seq[idx:]) >= min_length):
+                return seq[idx:]
+        return None
+
+    else:
+        raise Exception('trunc_n_terminus: The specified bias must be one of "length" or "codon."')
 
 
 def trunc_c_terminus(seq:str, min_length:int=10):
