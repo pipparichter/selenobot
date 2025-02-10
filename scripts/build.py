@@ -13,7 +13,7 @@ import argparse
 import logging
 import warnings
 from selenobot.tools import Clusterer
-from selenobot.utils import digitize, groupby, sample, seed
+from selenobot.utils import seed, truncate_sec
 
 
 label_names = dict()
@@ -41,7 +41,35 @@ seed(42)
 MAX_LENGTH = 1000 # Mostly a limit to make embedding tractable. 
 MIN_LENGTH = 10
 
-def clean(metadata_df:pd.DataFrame, min_length:int=MIN_LENGTH, max_length:int=MAX_LENGTH) -> pd.DataFrame:
+
+def is_selenoprotein(seq:str):
+    return 'U' in seq
+
+def is_short(seq:str):
+    return len(seq) < 200
+
+
+# NOTE: Did I initially have a reason for de-replicating everything separately?
+# NOTE: Should I de-replicate before or after truncation? I don't think it should matter much...
+
+def dereplicate(metadata_df:pd.DataFrame, overwrite:bool=False):
+
+    post_derep_path = os.path.join(DATA_DIR, f'{MODE}_metadata.derep.csv')
+    
+    if (not os.path.exists(post_derep_path)) or overwrite:
+        clusterer = Clusterer(name=f'{MODE}', cwd=DATA_DIR)
+        metadata_derep_df = clusterer.dereplicate(metadata_df, sequence_identity=0.95) 
+        clusterer.cleanup() # Remove extraneous output files.  
+        metadata_derep_df.to_csv(post_derep_path)
+    else:
+        metadata_derep_df = pd.read_csv(post_derep_path, index_col=0)
+
+    n_pre_derep, n_post_derep = len(metadata_df), len(metadata_derep_df)
+    print(f'dereplicate: Dereplication at 0.95 sequence identity eliminated {n_pre_derep - n_post_derep} sequences. {n_post_derep} sequences remaining.')
+    return metadata_derep_df
+
+
+def clean(metadata_df:pd.DataFrame, min_length:int=MIN_LENGTH, max_length:int=MAX_LENGTH, overwrite:bool=False) -> pd.DataFrame:
     '''''' 
     # There are duplicates here, as there were multiple accessions for the same protein. 
     metadata_df = metadata_df.drop_duplicates('name', keep='first')
@@ -59,33 +87,55 @@ def clean(metadata_df:pd.DataFrame, min_length:int=MIN_LENGTH, max_length:int=MA
     metadata_df = metadata_df[~mask]
     print(f'clean: Removed {mask.sum()} fragment proteins from the DataFrame. {len(metadata_df)} sequences remaining.') 
 
+    metadata_df = dereplicate(metadata_df, overwrite=overwrite)
+
     return metadata_df
 
 
+def load(paths:list, n_classes:int=2, overwrite:bool=False):
 
-def truncate_sec(metadata_df:pd.DataFrame, trunc_symbol:str='-') -> str:
-    '''Truncate the selenoproteins stored in the input file.'''
-    metadata_df_truncated = []
-    for row in tqdm(metadata_df.to_dict(orient='records'), 'truncate_sec: Truncating selenoproteins...'):
-        seq = row['seq'] # Extract the sequence from the row. 
-        row['sec_index'] = seq.index('U') # This will raise an exception if no U residue is found.
-        row['sec_count'] = seq.count('U') # Store the number of selenoproteins in the original sequence.
-        row['truncation_size'] = len(seq) - row['sec_index'] # Store the number of amino acid residues discarded.
-        row['truncation_ratio'] = row['truncation_size'] / len(row['seq']) # Store the truncation size as a ratio. 
-        row['original_length'] = len(seq)
-        row['seq'] = seq[:row['sec_index']] # Get the portion of the sequence prior to the U residue.
-        metadata_df_truncated.append(row)
-    metadata_df_truncated = pd.DataFrame(metadata_df_truncated, index=[id_ + trunc_symbol for id_ in metadata_df.index])
-    metadata_df_truncated.index.name = 'id'
-    return metadata_df_truncated
+    metadata_df = list()
+    for path, path_parsed in zip(paths, [path.replace('.xml', '.csv') for path in paths]):
+        if not os.path.exists(path_parsed):
+            df = XMLFile(path).to_df() 
+            df.to_csv(path_parsed)
+        else:
+            df = pd.read_csv(path_parsed, index_col=0)
+        metadata_df.append(df)
+    metadata_df = pd.concat(metadata_df)
+    metadata_df = clean(metadata_df, overwrite=overwrite)
 
+    metadata = dict()
+    if n_classes == 2:
+        metadata[0] = metadata_df[~metadata_df.seq.apply(is_selenoprotein)].copy()
+        metadata[1] = metadata_df[metadata_df.seq.apply(is_selenoprotein)].copy()
+    if n_classes == 3:
+        metadata[0] = metadata_df[~metadata_df.seq.apply(is_selenoprotein) & ~metadata_df.seq.apply(is_short)].copy()
+        metadata[1] = metadata_df[metadata_df.seq.apply(is_selenoprotein)].copy()
+        metadata[2] = metadata_df[metadata_df.seq.apply(is_selenoprotein) & metadata_df.seq.apply(is_short)].copy()
+    if n_classes == 4:
+        metadata[0] = metadata_df[~metadata_df.seq.apply(is_selenoprotein) & ~metadata_df.seq.apply(is_short)].copy()
+        metadata[1] = metadata_df[metadata_df.seq.apply(is_selenoprotein)].copy()
+        metadata[2] = metadata_df[metadata_df.seq.apply(is_selenoprotein) & metadata_df.seq.apply(is_short)].copy()
+        metadata[3] = metadata_df[metadata_df.seq.apply(is_selenoprotein)].copy()
+    
+    metadata = {label:df.assign(label=label) for label, df in metadata.items()}
+    return metadata
 
 
 def split(metadata_df:pd.DataFrame, overwrite:bool=False) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     '''Divide the uniprot data into training, testing, and validation datasets.'''
 
-    clusterer = Clusterer(tool='mmseqs', name=f'{mode}_all', cwd=data_dir)
-    metadata_df = clusterer.run(metadata_df, overwrite=overwrite)
+    cluster_path = os.path.join(DATA_DIR, f'{MODE}_metadata.cluster.csv')
+    if (not os.path.exists(cluster_path)) or overwrite:
+        clusterer = Clusterer(name=f'{MODE}', cwd=DATA_DIR)
+        metadata_df = clusterer.cluster(metadata_df)
+        metadata_df[['mmseqs_cluster', 'mmseqs_representative']].to_csv(cluster_path)
+        clusterer.cleanup()
+    else:
+        cluster_df = pd.read_csv(cluster_path, index_col=0)
+        metadata_df = metadata_df.merge(cluster_df, left_index=True, right_index=True)
+
     
     n = len(metadata_df) # Get the original number of sequences for checking stuff later. 
     groups = metadata_df['mmseqs_cluster'].values # Extract cluster labels. 
@@ -100,31 +150,8 @@ def split(metadata_df:pd.DataFrame, overwrite:bool=False) -> Tuple[pd.DataFrame,
     train_metadata_df = metadata_df.iloc[train_idxs].copy()
     val_metadata_df = metadata_df.iloc[val_idxs].copy() 
 
-    return train_metadata_df, test_metadata_df, val_metadata_df
+    return {'train':train_metadata_df, 'test':test_metadata_df, 'val':val_metadata_df}
 
-
-def check(train_metadata_df:pd.DataFrame, test_metadata_df:pd.DataFrame, val_metadata_df:pd.DataFrame):
-    
-    assert len(np.intersect1d(train_metadata_df.index, val_metadata_df.index)) == 0, 'split: There is leakage between the validation and training datasets.'
-    assert len(np.intersect1d(train_metadata_df.index, test_metadata_df.index)) == 0, 'split: There is leakage between the testing and training datasets.'
-    assert len(np.intersect1d(test_metadata_df.index, val_metadata_df.index)) == 0, 'split: There is leakage between the validation and testing datasets.'
-    
-
-def build(path:str=None, label:int=None, overwrite:bool=False, **kwargs):
-    metadata_df = pd.read_csv(path, index_col=0)
-
-    # Make sure to truncate BEFORE filtering by length.
-    if label == 1: # Truncate if the dataset is for category 1. 
-        metadata_df = truncate_sec(metadata_df)
-
-    print(f'build: Processing data for group "{label_names[label]}"...')
-    metadata_df = clean(metadata_df, **kwargs)
-    
-    clusterer = Clusterer(name=f'{mode}_{label}', cwd=data_dir, tool='mmseqs')
-    metadata_df = clusterer.dereplicate(metadata_df, overwrite=overwrite) # Don't cluster by homology just yet. 
-    metadata_df['label'] = label # Add labels to the data marking the category. 
-
-    return metadata_df
 
 
 if __name__ == '__main__':
@@ -133,28 +160,32 @@ if __name__ == '__main__':
     parser.add_argument('--data-dir', default='../data', type=str)
     parser.add_argument('--overwrite', action='store_true')
     parser.add_argument('--n-classes', default=2, type=int)
+    parser.add_argument('--add-trembl-short', action='store_true')
     args = parser.parse_args()
 
-    global mode 
-    mode = f'{args.n_classes}c'
+    global MODE 
+    MODE = f'{args.n_classes}c'
+    MODE = MODE + '_xl' if args.add_trembl_short else MODE
 
-    global data_dir
-    data_dir = args.data_dir
+    global DATA_DIR
+    DATA_DIR = args.data_dir
 
-    uniprot_sprot_path = os.path.join(args.data_dir, 'uniprot_sprot.csv')
-    uniprot_sec_path = os.path.join(args.data_dir, 'uniprot_sec.csv')
-
-    kwargs = dict()
-    kwargs[0] = {'path':uniprot_sprot_path, 'min_length':200 if (args.n_classes == 3) else MIN_LENGTH, 'max_length':MAX_LENGTH}
-    kwargs[1] = {'path':uniprot_sec_path, 'min_length':MIN_LENGTH, 'max_length':MAX_LENGTH}
-    kwargs[2] = {'path':uniprot_sprot_path, 'min_length':MIN_LENGTH, 'max_length':200}
-
-    metadata_df = pd.concat([build(label=label, overwrite=args.overwrite, **kwargs.get(label)) for label in range(args.n_classes)])
-
-    train_metadata_df, test_metadata_df, val_metadata_df = split(metadata_df, overwrite=args.overwrite)
+    file_names = ['uniprot_sprot.xml', 'uniprot_sec.xml'] 
+    file_names = file_names + ['uniprot_trembl_short.xml'] if args.add_trembl_short else file_names
+    paths = [os.path.join(DATA_DIR, file_name) for file_name in file_names]
     
-    metadata = {f'{mode}_metadata_train.csv':train_metadata_df, f'{mode}_metadata_test.csv':test_metadata_df, f'{mode}_metadata_val.csv':val_metadata_df}
-    for file_name, metadata_df in metadata.items():
-        path = os.path.join(args.data_dir, file_name)
-        metadata_df.to_csv(path)
-        print(f'Metadata written to {path}')
+    metadata = load(paths, n_classes=args.n_classes, overwrite=args.overwrite)
+    if 3 in metadata:
+        metadata[3] = truncate_sec(metadata[3], terminus='n', min_length=MIN_LENGTH)
+    if 1 in metadata:
+        metadata[1] = truncate_sec(metadata[1], terminus='c', min_length=MIN_LENGTH)
+    metadata_df = pd.concat(list(metadata.values()))
+   
+    datasets = split(metadata_df, overwrite=args.overwrite)
+    datasets = {dataset:df.assign(dataset=dataset) for dataset, df in datasets.items()}
+
+    # Write everything to a file, in addition to saving invididually. 
+    pd.concat(list(datasets.values())).to_csv(os.path.join(DATA_DIR, f'{MODE}_metadata.csv'))
+    for dataset, df in datasets.items():
+        df.to_csv(os.path.join(DATA_DIR, f'{MODE}_metadata_{dataset}.csv'))
+

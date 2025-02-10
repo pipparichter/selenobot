@@ -114,17 +114,6 @@ def load_gtdb_genome_metadata(path:str, reps_only:bool=True):
     return df.set_index('genome_id')
 
 
-def default_output_path(path:str, op:str=None, ext:str=None):
-    '''Construct a default output path for a program.'''
-    file_name = os.path.basename(path)
-    if ext is not None:
-        file_name, _ = os.path.splitext(file_name)
-        file_name += f'.{op}.{ext}'
-    else:
-        file_name = f'{file_name}.{op}'
-    return os.path.join(os.path.dirname(path), file_name)
-
-
 def seed(seed:int=42) -> None:
     '''Seed all random number generators I can think of for the sake of reproducibility.'''
     np.random.seed(seed)
@@ -136,6 +125,68 @@ def seed(seed:int=42) -> None:
     torch.backends.cudnn.benchmark = False
     # # Set a fixed value for the hash seed (not sure what this does, so got rid of it)
     # os.environ["PYTHONHASHSEED"] = str(seed)
+
+def trunc_n_terminus(seq:str, min_length:int=10, allowed_starts:list=['M', 'V', 'L']):
+    '''Truncate a selenoprotein at the N-terminal end.
+    
+    :param seq
+    :param min_length
+    :param allowed_starts
+    '''
+    # Default allowed_starts are amino acids coded for by the traditional start and alternative start codons. 
+    # Methionine is coded by AUG, Valine by GUG, and Leucine by UUG. Frequencies here: https://pmc.ncbi.nlm.nih.gov/articles/PMC5397182/ 
+    idx = seq.rindex('U') # Get the index of the rightmost selenocysteine. 
+    seq = seq[idx + 1:]
+    for aa in allowed_starts:
+        idx = seq.find(aa)
+        if (idx >= 0) and (len(seq[idx:]) >= min_length):
+            return seq[idx:]
+    return None
+
+
+def trunc_c_terminus(seq:str, min_length:int=10):
+    '''Truncate a selenoprotein at the C-terminal end.'''
+    idx = seq.index('U') # Get the index of the leftmost selenocysteine. 
+    if len(seq[:idx]) >= min_length:
+        return seq[:idx]
+    else:
+        return None
+
+
+def truncate_sec(metadata_df:pd.DataFrame, terminus:str='c', min_length:int=10, drop_failures:bool=True, **kwargs) -> pd.DataFrame:
+    '''Truncate the selenoproteins in the DataFrame.'''
+    metadata_trunc_df = []
+    trunc_func = trunc_c_terminus if (terminus == 'c') else trunc_n_terminus
+
+    n_failures = 0
+
+    ids = list()
+    for row in tqdm(metadata_df.to_dict(orient='records', index=True), 'truncate_sec: Truncating selenoproteins...'):
+         
+        seq = row['seq'] # Extract the sequence from the row.
+        
+        row['sec_index_n'] = seq.index('U') 
+        row['sec_index_c'] = seq.rindex('U') 
+        row['sec_count'] = seq.count('U') # Store the number of selenoproteins in the original sequence.
+
+        seq_trunc = trunc_func(seq, min_length=min_length, **kwargs)
+        if seq_trunc is None:
+            n_failures += 1
+        else:
+            row['trunc_size'] = len(seq) - len(seq_trunc) # Store the number of amino acid residues discarded.
+            row['trunc_ratio'] = row['trunc_size'] / len(seq) # Store the truncation size as a ratio. 
+            row['original_length'] = len(seq)
+            row['seq'] =  seq_trunc
+        metadata_trunc_df.append(row)
+        
+    print(f'truncate_sec: Failed to truncate {n_failures} selenoproteins at the {terminus.upper()}-terminus.')
+
+    ids = pd.Series([i + '-' if (terminus == 'c') else '-' + i for i in metadata_df.index], name='id')
+    metadata_trunc_df = pd.DataFrame(metadata_trunc_df, index=ids)
+    if drop_failures: # If specified, remove the sequences which could not be truncated.
+        metadata_trunc_df = metadata_trunc_df[~metadata_trunc_df.seq.isnull()]
+
+    return metadata_trunc_df
 
 
 def to_numeric(n:str):

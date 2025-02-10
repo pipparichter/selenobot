@@ -205,7 +205,8 @@ class ProtT5Embedder(PLMEmbedder):
 
 
 class ESMEmbedder(PLMEmbedder):
-    checkpoint = 'facebook/esm2_t36_3B_UR50D'
+    # checkpoint = 'facebook/esm2_t36_3B_UR50D'
+    checkpoint = 'facebook/esm2_t33_650M_UR50D'
 
     @staticmethod
     def _pooler_gap(emb:torch.FloatTensor, seq:str, last_n:int=None) -> torch.FloatTensor:
@@ -219,9 +220,6 @@ class ESMEmbedder(PLMEmbedder):
     @staticmethod
     def _pooler_cls(emb:torch.FloatTensor, *args, **kwargs) -> torch.FloatTensor:
         return emb[0] # Extract the CLS token, which is the first element of the sequence. 
-
-    # # checkpoint = 'facebook/esm2_t36_3B_UR50D'
-    # # checkpoint = 'facebook/esm2_t33_650M_UR50D'
 
     def __init__(self, method:str='gap', last_n:int=None):
         # checkpoint = 'facebook/esm2_t33_650M_UR50D'
@@ -265,20 +263,14 @@ def get_embedder(feature_type:str):
     if feature_type == 'len':
         return LengthEmbedder()
 
-    # Anything remaining is a PLM-based embedding, so see if a last_n is specified... 
-    last_n = None
-    if re.search('last_([0-9]+)', feature_type) is not None:
-        last_n = int(re.search('last_([0-9]+)', feature_type).group(1))
-    feature_type = feature_type.replace(f'_last_{last_n}', '')
-
     if feature_type == 'plm_pt5':
-        return ProtT5Embedder(last_n=last_n)
+        return ProtT5Embedder()
     
     if re.match('plm_esm_(log|cls|gap)', feature_type) is not None:
         method = re.match('plm_esm_(log|cls|gap)', feature_type).group(1)
-        return ESMEmbedder(method=method, last_n=last_n)
+        return ESMEmbedder(method=method)
 
-    return None
+    raise Exception(f'The feature type {feature_type} is not recognized.')
 
 
 def embed(df:pd.DataFrame, path:str=None, overwrite:bool=False, feature_types:List[str]=None, format_='table'): 

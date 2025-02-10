@@ -155,11 +155,12 @@ class Organism():
         df['valid_hit'] = ((df.stop == stop) | (df.start == start)) & (df.strand == strand)
         n_hits, n_valid_hits = len(df), df.valid_hit.sum().item() 
 
-        if n_valid_hits > 1:
-            df = df[df.valid_hit]
-            df['length_diff'] = np.abs((df.stop - df.start) - (stop - start))
-            df = df.sort_values(by='length_diff').iloc[[0]]
-        # assert n_valid_hits < 2, f'Organism.get_top_hit: Expected no more than one valid hit, found {n_valid_hits}.'
+        if n_valid_hits > 0:
+            df = df[df.valid_hit] # Filter by the valid hits. 
+            # NOTE: There are some cases with more than one valid hit, in which case we want to grab the hit with the biggest overlap. 
+            # It might be interesting to look into these cases a bit more, but they are very rare. 
+            df['overlap'] = df.apply(lambda row : len(np.intersect1d(np.arange(row.start, row.stop), np.arange(start, stop))), axis=1)
+            df = df.sort_values(by='overlap', ascending=False).iloc[[0]]
 
         if n_valid_hits == 0:
             return {'n_hits':n_hits, 'n_valid_hits':0, 'feature':None, 'locus_tag':None, 'pseudo':None} 

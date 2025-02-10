@@ -280,52 +280,6 @@ class BLASTFile(File):
         return self.df
 
 
-# TODO: Are the amino acids sequences listed in each cluster in any particular order?
-
-class CDHITFile(File):
-
-    def __init__(self, path:str):
-        '''
-        An example cluster entry is given below:
-
-        >Cluster 4
-        0	6aa, >A0A2E7JSV1[1]... at 83.33%
-        1	6aa, >A0A6B1IEQ5[1]... at 83.33%
-        2	6aa, >A0A6L7QK86[1]... at 83.33%
-        3	6aa, >A0A6L7QK86[1]... *
-
-        The asterisk marks the representative sequence of the cluster. As described in the user guide, this is
-        simply the longest sequence in the cluster. 
-        '''
-
-        with open(path, 'r') as f:        
-            content = f.read()
-
-        # The start of each new cluster is marked with a line like ">Cluster [num]"
-        content = re.split(r'^>.*', content, flags=re.MULTILINE)
-
-        self.n_clusters = len(content)
-        self.cluster_sizes = []
-
-        self.ids, self.clusters, self.representative = [], [], []
-
-        for i, cluster in enumerate(content):
-            entries = [entry.strip() for entry in cluster.split('\n') if (entry != '')] # Get all entries in the cluster. 
-            ids = [re.search(r'>([\w\d_\[\]]+)', entry).group(1).strip() for entry in entries]
-            self.ids += ids 
-            self.representative += [True if (entry[-1] == '*') else False for entry in entries] # TODO: Make sure there is one per cluster. 
-            self.clusters += [i] * len(ids) 
-            self.cluster_sizes.append(len(entries))
-
-    def to_df(self, reps_only:bool=False) -> pd.DataFrame:
-        '''Convert a CDHITFile to a pandas DataFrame.'''
-        df = pd.DataFrame({'id':self.ids, 'cdhit_cluster':self.clusters, 'cdhit_representative':self.representative}) 
-        df.cdhit_cluster = df.cdhit_cluster.astype(int) # This will speed up grouping clusters later on. 
-        if reps_only: # If specified, only get the representatives from each cluster. 
-            df = df[df.cdhit_representative]
-        return df.set_index('id')
-
-
 class XMLFile(File):
     # tags = ['taxon', 'accession', 'entry', 'organism', 'sequence']
     # tags = ['accession', 'organism', 'sequence']
@@ -408,7 +362,7 @@ class XMLFile(File):
     def __init__(self, path:str, load_seqs:bool=True, chunk_size:int=100):
         super().__init__(path)
 
-        pbar = tqdm(etree.iterparse(path, events=('start', 'end')), desc='XMLFile.__init__: Parsing NCBI XML file...')
+        pbar = tqdm(etree.iterparse(path, events=('start', 'end')), desc=f'XMLFile.__init__: Parsing XML file {self.file_name}...')
         entry, df = None, []
         for event, elem in pbar: # The file tree gets accumulated in the elem variable as the iterator progresses. 
             namespace, tag = XMLFile.get_tag(elem) # Extract the tag and namespace from the element. 
@@ -444,7 +398,9 @@ class XMLFile(File):
 
 
     def to_df(self):
-        return self.df
+        df = self.df.copy()
+        df['file_name'] = self.file_name
+        return df
 
 
 class GBFFFile(File):
@@ -594,3 +550,50 @@ class GBFFFile(File):
     #     df = df.merge(copy_numbers, left_on='protein_id', right_index=True)
     #     df = pd.concat([df, pseudo_df]) # Add the pseudogenes back in. 
     #     return df
+
+
+
+# # TODO: Are the amino acids sequences listed in each cluster in any particular order?
+
+# class CDHITFile(File):
+
+#     def __init__(self, path:str):
+#         '''
+#         An example cluster entry is given below:
+
+#         >Cluster 4
+#         0	6aa, >A0A2E7JSV1[1]... at 83.33%
+#         1	6aa, >A0A6B1IEQ5[1]... at 83.33%
+#         2	6aa, >A0A6L7QK86[1]... at 83.33%
+#         3	6aa, >A0A6L7QK86[1]... *
+
+#         The asterisk marks the representative sequence of the cluster. As described in the user guide, this is
+#         simply the longest sequence in the cluster. 
+#         '''
+
+#         with open(path, 'r') as f:        
+#             content = f.read()
+
+#         # The start of each new cluster is marked with a line like ">Cluster [num]"
+#         content = re.split(r'^>.*', content, flags=re.MULTILINE)
+
+#         self.n_clusters = len(content)
+#         self.cluster_sizes = []
+
+#         self.ids, self.clusters, self.representative = [], [], []
+
+#         for i, cluster in enumerate(content):
+#             entries = [entry.strip() for entry in cluster.split('\n') if (entry != '')] # Get all entries in the cluster. 
+#             ids = [re.search(r'>([\w\d_\[\]]+)', entry).group(1).strip() for entry in entries]
+#             self.ids += ids 
+#             self.representative += [True if (entry[-1] == '*') else False for entry in entries] # TODO: Make sure there is one per cluster. 
+#             self.clusters += [i] * len(ids) 
+#             self.cluster_sizes.append(len(entries))
+
+#     def to_df(self, reps_only:bool=False) -> pd.DataFrame:
+#         '''Convert a CDHITFile to a pandas DataFrame.'''
+#         df = pd.DataFrame({'id':self.ids, 'cdhit_cluster':self.clusters, 'cdhit_representative':self.representative}) 
+#         df.cdhit_cluster = df.cdhit_cluster.astype(int) # This will speed up grouping clusters later on. 
+#         if reps_only: # If specified, only get the representatives from each cluster. 
+#             df = df[df.cdhit_representative]
+#         return df.set_index('id')
