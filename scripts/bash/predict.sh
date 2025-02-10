@@ -16,10 +16,10 @@ file_names=("afis.h5" "ecol.h5" "paer.h5" "bsub.h5" "mtub.h5")
 
 
 for feature_type in "${feature_types[@]}"; do
-    for n_classes in "${n_classes[@]}"; do
-        python predict.py --model-name "model_${n_classes}c_${feature_type}" --feature-type "$feature_type" --input-path ../data/2c_val.h5 
-        python predict.py --model-name "model_${n_classes}c_${feature_type}" --feature-type "$feature_type" --input-path ../data/2c_train.h5 
-        python predict.py --model-name "model_${n_classes}c_${feature_type}" --feature-type "$feature_type" --input-path ../data/2c_test.h5 
+    for n in "${n_classes[@]}"; do
+        python predict.py --model-name "model_${n}c_${feature_type}" --feature-type "$feature_type" --input-path ../data/${n}c_val.h5 
+        python predict.py --model-name "model_${n}c_${feature_type}" --feature-type "$feature_type" --input-path ../data/${n}c_train.h5 
+        python predict.py --model-name "model_${n}c_${feature_type}" --feature-type "$feature_type" --input-path ../data/${n}c_test.h5 
     done
 done
 

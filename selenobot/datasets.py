@@ -42,23 +42,25 @@ class Dataset(torch.utils.data.Dataset):
         return df
 
 
-    def __init__(self, df:pd.DataFrame, n_classes:int=2):
+    def __init__(self, df:pd.DataFrame, n_classes:int=None):
         '''Initializes a Dataset from a pandas DataFrame containing embeddings and labels.
         
         :param df: A pandas DataFrame containing the data to store in the Dataset. 
         :param n_features: The dimensionality of the stored embeddings. 
         :param half_precision: Whether or not to use half-precision floats. 
-        :param n_classes: The number of classes in the labels. 
+        :param n_classes: The number of classes in the labels. This only needs to be specified if working
+            with labeled data (i.e. during model training).
         '''
         self.n_classes = n_classes
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
         self.labels, self.labels_one_hot_encoded = None, None
-        if ('label' in df.columns):
+        if ('label' in df.columns) and (self.n_classes is not None):
             try:
                 self.labels = torch.from_numpy(df['label'].values).type(torch.LongTensor)
                 self.labels_one_hot_encoded = one_hot(self.labels, num_classes=n_classes).to(torch.float32).to(self.device)
             except TypeError:
+                print('Dataset.__init__: Failed to load label column into a PyTorch LongTensor due to a TypeError.')
                 self.labels = None
                 self.labels_one_hot_encoded = None
 
@@ -97,7 +99,7 @@ class Dataset(torch.utils.data.Dataset):
         return dataset
 
     @classmethod
-    def from_hdf(cls, path:str, feature_type:str=None, n_classes:int=2, add_length_feature:bool=False, aa_tokens_only:bool=False):
+    def from_hdf(cls, path:str, feature_type:str=None, n_classes:int=None, add_length_feature:bool=False, aa_tokens_only:bool=False):
         df = pd.read_hdf(path, key=feature_type)
         df = Dataset.remove_non_aa_tokens(df) if (aa_tokens_only and (feature_type == 'plm_esm_log')) else df
         df.index.name = 'id' # Forgot to set the index name in some of the files. 
