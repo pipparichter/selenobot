@@ -130,8 +130,10 @@ def trunc_n_terminus(seq:str, min_length:int=10, allowed_starts:list=['M', 'V', 
     '''Truncate a selenoprotein at the N-terminal end.
     
     :param seq
-    :param min_length
-    :param allowed_starts
+    :param min_length: The minimum allowed sequence length. 
+    :param allowed_starts: The amino acids which could potentially be a start codon. The list is specified in order
+        of preference, i.e. every potential usage of the first amino acid as a "start" is checked before moving
+        on to the next candidate in the list. 
     '''
     # Default allowed_starts are amino acids coded for by the traditional start and alternative start codons. 
     # Methionine is coded by AUG, Valine by GUG, and Leucine by UUG. Frequencies here: https://pmc.ncbi.nlm.nih.gov/articles/PMC5397182/ 
@@ -176,7 +178,7 @@ def truncate_sec(metadata_df:pd.DataFrame, terminus:str='c', min_length:int=10, 
             row['trunc_size'] = len(seq) - len(seq_trunc) # Store the number of amino acid residues discarded.
             row['trunc_ratio'] = row['trunc_size'] / len(seq) # Store the truncation size as a ratio. 
             row['original_length'] = len(seq)
-            row['seq'] =  seq_trunc
+        row['seq'] =  seq_trunc
         metadata_trunc_df.append(row)
         
     print(f'truncate_sec: Failed to truncate {n_failures} selenoproteins at the {terminus.upper()}-terminus.')

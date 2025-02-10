@@ -11,6 +11,7 @@ import sklearn.neighbors
 import subprocess
 import argparse
 import logging
+import glob
 import warnings
 from selenobot.tools import Clusterer
 from selenobot.utils import seed, truncate_sec
@@ -171,7 +172,8 @@ if __name__ == '__main__':
     DATA_DIR = args.data_dir
 
     file_names = ['uniprot_sprot.xml', 'uniprot_sec.xml'] 
-    file_names = file_names + ['uniprot_trembl_short.xml'] if args.add_trembl_short else file_names
+    if args.add_trembl_short:
+        file_names += [os.path.basename(path) for path in glob.glob(os.path.join(DATA_DIR, 'uniprot_trembl_short*'))] 
     paths = [os.path.join(DATA_DIR, file_name) for file_name in file_names]
     
     metadata = load(paths, n_classes=args.n_classes, overwrite=args.overwrite)
