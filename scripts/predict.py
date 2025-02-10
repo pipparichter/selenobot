@@ -22,7 +22,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     output_file_name = os.path.basename(args.input_path).replace('.h5', '.predict.csv')
-  
+    output_path = os.path.join(args.results_dif, output_file_name)
     metadata_df = pd.read_csv(output_path, index_col=0) if os.path.exists(output_path) else pd.read_hdf(args.input_path, key='metadata')
 
     model = Classifier.load(os.path.join(args.models_dir, args.model_name + '.pkl'))

@@ -22,8 +22,8 @@ import os
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--train-data-path', default='../data/train.h5', type=str)
-    parser.add_argument('--val-data-path', default='../data/val.h5', type=str)
+    parser.add_argument('--train-data-path', default=None, type=str)
+    parser.add_argument('--val-data-path', default=None, type=str)
     parser.add_argument('--model-name', default=None, type=str)
 
     parser.add_argument('--epochs', default=100, type=int)
