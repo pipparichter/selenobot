@@ -25,7 +25,7 @@ if __name__ == '__main__':
     model = Classifier.load(os.path.join(args.models_dir, args.model_name + '.pkl'))
     
     # kwargs = {'add_length_feature':args.add_length_feature}
-    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type,  **kwargs)
+    dataset = Dataset.from_hdf(args.input_path, feature_type=args.feature_type)
 
     pred_df = model.predict(dataset)
     pred_df.columns = [f'{args.model_name}_{col}' for col in pred_df.columns] # Rename the columns so that the model is specified. 
