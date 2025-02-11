@@ -4,6 +4,15 @@ from selenobot.files import FASTAFile, MMseqsFile
 import pandas as pd
 import numpy as np
 
+
+class Pyrodigal():
+
+    def __init__(self):
+        pass 
+
+    
+
+
 # sbatch --cpus-per-task 4 --mem 50GB --time 24:00:00 --mail-type ALL --mail-user prichter@caltech.edu --wrap "~/kofamscan/bin/exec_annotation INPUT --cpu 4 --profile ~/kofamscan/db/profiles/prokaryote.hal -o OUTPUT"
 class Kofamscan():
 
