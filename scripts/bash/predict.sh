@@ -2,7 +2,7 @@
 
 feature_types=("plm_esm_cls" "plm_esm_gap" "plm_pt5" "len" "aa_1mer")
 
-model_types=("2c" "3c_xl", "3c")
+model_types=("2c" "3c_xl" "3c")
 data_dir="../data/model_organisms/"
 file_names=("afis.h5" "ecol.h5" "paer.h5" "bsub.h5" "mtub.h5")
 

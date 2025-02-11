@@ -11,7 +11,7 @@ if __name__ == '__main__':
     parser.add_argument('--feature-type', type=str, default=None)
     parser.add_argument('--model-name', type=str, default=None)
     parser.add_argument('--input-path', type=str, default=None)
-    parser.add_argument('--models-dir', default='../models/', type=str)
+    parser.add_argument('--models-dir', default='../models', type=str)
     parser.add_argument('--results-dir', default='../results/', type=str)
     # parser.add_argument('--add-length-feature', action='store_true')
     # parser.add_argument('--overwrite', action='store_true')
