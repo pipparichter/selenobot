@@ -11,37 +11,44 @@ import subprocess
 import json
 import random
 from collections import OrderedDict
+import shutil
 import torch
 
 def download_ncbi_data(genome_metadata_df:pd.DataFrame, name_col:str=None, dir_:str='../data/model_organisms', include=['gbff', 'genome']):
     '''Dowload genomes and GBFF files for the organisms contained in the input DataFrame from NCBI.'''
     genomes_dir = os.path.join(dir_, 'genomes')
-    proteins_ref_dir = os.path.join(dir_, 'ref')
+    ref_dir = os.path.join(dir_, 'ref')
     include = ','.join(include)
     output_path = 'ncbi.zip'
-    
-    pbar = tqdm(genome_metadata_df.itertuples(), desc='download_ncbi_data: Downloading data...') 
+
+    pbar = tqdm(genome_metadata_df.itertuples(), total=len(genome_metadata_df), desc='download_ncbi_data: Downloading data...') 
     for row in genome_metadata_df.itertuples():
         pbar.set_description(f'download_ncbi_data: Downloading data for {row.species}...')
+        pbar.update(1)
 
         name = row.Index if (name_col is None) else getattr(row, name_col, None)
         assert (name is not None), f'download_ncbi_data: {name_col} is not present in the DataFrame.'
 
-        protein_ref_path = os.path.join(proteins_ref_dir, f'{name}_genomic.gbff')
+        ref_path = os.path.join(ref_dir, f'{name}_genomic.gbff')
         genome_path = os.path.join(genomes_dir, f'{name}_genomic.fna')
-        
-        cmd = f'datasets download genome accession {row.Index} --filename {output_path} --include {include} --no-progressbar'
-        subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
-        subprocess.run(f'unzip -o {output_path} -d .', shell=True, check=True, stdout=subprocess.DEVNULL)
-            
-        file_names = ['genomic.gbff', '*genomic.fna']
-        src_paths = [os.path.join('ncbi_dataset/data', row.Index, file_name) for file_name in file_names]
-        dst_paths = [protein_ref_path, genome_path]
+        if os.path.exists(genome_path) or os.path.exists(ref_path):
+            continue # Skip if already downloaded. 
 
-        for src_path, dst_path in zip(src_paths, dst_paths):
-            subprocess.run(f'cp {src_path} {dst_path}', shell=True, check=True)
+        try:
+            cmd = f'datasets download genome accession {row.Index} --filename {output_path} --include {include} --no-progressbar'
+            subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
+            subprocess.run(f'unzip -o {output_path} -d .', shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                
+            file_names = ['genomic.gbff', '*genomic.fna']
+            src_paths = [os.path.join('ncbi_dataset/data', row.Index, file_name) for file_name in file_names]
+            dst_paths = [ref_path, genome_path]
+
+            for src_path, dst_path in zip(src_paths, dst_paths):
+                subprocess.run(f'cp {src_path} {dst_path}', shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except:
+            print(f'download_ncbi_data: Failed to download data for {row.species}.')
     # Clean up extra files. 
-    shutil.rmtree(os.path.join('ncbi_dataset'))
+    shutil.rmtree('ncbi_dataset')
     os.remove('README.md')
     os.remove('md5sum.txt')
     os.remove(output_path)
