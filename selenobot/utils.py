@@ -13,6 +13,39 @@ import random
 from collections import OrderedDict
 import torch
 
+def download_ncbi_data(genome_metadata_df:pd.DataFrame, name_col:str=None, dir_:str='../data/model_organisms', include=['gbff', 'genome']):
+    '''Dowload genomes and GBFF files for the organisms contained in the input DataFrame from NCBI.'''
+    genomes_dir = os.path.join(dir_, 'genomes')
+    proteins_ref_dir = os.path.join(dir_, 'ref')
+    include = ','.join(include)
+    output_path = 'ncbi.zip'
+    
+    pbar = tqdm(genome_metadata_df.itertuples(), desc='download_ncbi_data: Downloading data...') 
+    for row in genome_metadata_df.itertuples():
+        pbar.set_description(f'download_ncbi_data: Downloading data for {row.species}...')
+
+        name = row.Index if (name_col is None) else getattr(row, name_col, None)
+        assert (name is not None), f'download_ncbi_data: {name_col} is not present in the DataFrame.'
+
+        protein_ref_path = os.path.join(proteins_ref_dir, f'{name}_genomic.gbff')
+        genome_path = os.path.join(genomes_dir, f'{name}_genomic.fna')
+        
+        cmd = f'datasets download genome accession {row.Index} --filename {output_path} --include {include} --no-progressbar'
+        subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
+        subprocess.run(f'unzip -o {output_path} -d .', shell=True, check=True, stdout=subprocess.DEVNULL)
+            
+        file_names = ['genomic.gbff', '*genomic.fna']
+        src_paths = [os.path.join('ncbi_dataset/data', row.Index, file_name) for file_name in file_names]
+        dst_paths = [protein_ref_path, genome_path]
+
+        for src_path, dst_path in zip(src_paths, dst_paths):
+            subprocess.run(f'cp {src_path} {dst_path}', shell=True, check=True)
+    # Clean up extra files. 
+    shutil.rmtree(os.path.join('ncbi_dataset'))
+    os.remove('README.md')
+    os.remove('md5sum.txt')
+    os.remove(output_path)
+
 
 GTDB_DTYPES = dict()
 GTDB_DTYPES['description'] = str
@@ -39,7 +72,7 @@ GTDB_DTYPES['contig_count'] = int
 GTDB_DTYPES['gc_count'] = int
 GTDB_DTYPES['gc_percentage'] = float
 GTDB_DTYPES['genome_size'] = int
-GTDB_DTYPES['gtdb_genome_representative'] = int
+GTDB_DTYPES['gtdb_genome_representative'] = str 
 GTDB_DTYPES['gtdb_representative'] = int
 GTDB_DTYPES['gtdb_taxonomy'] = int
 GTDB_DTYPES['gtdb_type_species_of_genus'] = int
@@ -67,6 +100,7 @@ GTDB_DTYPES['ncbi_translation_table'] = int
 GTDB_DTYPES['ncbi_scaffold_count'] = int
 GTDB_DTYPES['ncbi_species_taxid'] = int
 GTDB_DTYPES['ncbi_taxid'] = int
+GTDB_DTYPES['ncbi_taxonomy_id'] = int
 GTDB_DTYPES['ncbi_taxonomy'] = str
 GTDB_DTYPES['protein_count'] = int
 GTDB_DTYPES['scaffold_count'] = int
@@ -92,7 +126,7 @@ def apply_gtdb_dtypes(df:pd.DataFrame):
 def load_gtdb_genome_metadata(path:str, reps_only:bool=True):
     '''Load in a GTDB metadata TSV file and fix the columns to make them more usable.'''
     df = pd.read_csv(path, delimiter='\t', low_memory=False, dtype={'partial':str})
-    df = df.rename(columns={'accession':'genome_id'})
+    df = df.rename(columns={'accession':'genome_id', 'ncbi_taxid':'ncbi_taxonomy_id'})
     df['prefix'] = [genome_id[:2] for genome_id in df.genome_id] 
     df['genome_id'] = [genome_id.replace('GB_', '').replace('RS_', '') for genome_id in df.genome_id] # Remove the prefixes from the genome IDs.
     df = df[df.gtdb_representative == 't'] # Get the representatives. 
